@@ -15,7 +15,10 @@ const TYPES = [
 ];
 
 const FLOORS = ["B1", "1F", "2F", "3F", "4F", "5F"];
-const ROOMS = ["01", "02", "03", "04", "05"];
+// Single-digit room slot within a floor; the client combines this with the floor to display a
+// realistic-looking room code like "401호" (4F, room 1) or "B03호" (B1, room 3) -- see roomCode()
+// in build_client.py's APP_JS_TEMPLATE.
+const ROOMS = ["1", "2", "3", "4", "5", "6", "7", "8", "9"];
 
 const CELLS = [];
 TYPES.forEach((t, catIdx) => {

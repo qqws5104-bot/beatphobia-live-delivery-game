@@ -214,9 +214,15 @@ HEAD_HTML = """<!doctype html>
   .cell .barcode { position:absolute; z-index:3; right:5px; bottom:5px; width:24px; height:12px; border-radius:1px;
     background: repeating-linear-gradient(90deg, #20180f 0 1px, transparent 1px 2px, #20180f 3px 4px, transparent 4px 6px), #f4f1ea;
     opacity:0.88; }
-  .cell.taken { background:var(--visited) !important; color:#7c8296; cursor:default; }
-  .cell.taken::before, .cell.taken::after { opacity:0.3; }
-  .cell.taken .barcode { opacity:0.35; }
+  /* a secured cell keeps its category color (it reads as "this box's contents"), it just gets a
+     shipping-label sticker slapped on with the invoice's destination room code instead of the
+     plain index number -- the box stays identifiable, not just greyed into a blank "used" tile. */
+  .cell.taken { cursor:default; }
+  .cell.taken::before, .cell.taken::after { opacity:0.4; }
+  .cell.taken .barcode { opacity:0.6; }
+  .cell .invoice-label { position:relative; z-index:3; background:#f4f1ea; color:#20180f;
+    font-family:var(--font-display); font-weight:700; font-size:0.76rem; letter-spacing:0.02em;
+    padding:0.22rem 0.5rem; border-radius:4px; box-shadow:0 3px 8px rgba(0,0,0,0.3); transform:rotate(-2deg); }
   .cell:not(.taken):hover { filter:brightness(1.1); }
 
   .overlay { position:fixed; inset:0; background:rgba(6,10,18,0.92); display:flex; align-items:center; justify-content:center;
@@ -393,6 +399,16 @@ APP_JS_TEMPLATE = r"""
     var m = Math.floor(s / 60); s = s % 60;
     return m + ":" + (s < 10 ? "0" : "") + s;
   }
+  // Combines a floor + room slot into a single realistic-looking building room code, e.g.
+  // "401호" (4F, slot 1) or "B03호" (B1, slot 3) -- floorIdx/room are still tracked separately
+  // server-side (floorIdx drives elevator delivery-matching), this is purely a display format.
+  function floorDigitLabel(floorIdx) {
+    var f = FLOORS[floorIdx];
+    return f === "B1" ? "B" : f.replace("F", "");
+  }
+  function roomCode(floorIdx, room) {
+    return floorDigitLabel(floorIdx) + "0" + room + "호";
+  }
 
   function renderSeatPicker() {
     var taken1 = state && state.seatOwners["1"] && state.seatOwners["1"] !== CLIENT_ID;
@@ -447,14 +463,23 @@ APP_JS_TEMPLATE = r"""
     // each seat has its own independent board -- what I secure has zero effect on the other
     // player's copy of the same cell id, so this is purely my own view, no cross-player state.
     var myBoard = st.boards[seat];
+    var myInvoices = st.players[seat].invoices;
     TYPES.forEach(function (t, catIdx) {
       html += '<div class="board-label" style="background:' + t.color + ';color:' + t.ink + ';">' + esc(t.name) + '</div>';
       for (var num = 0; num < 5; num++) {
         var cell = myBoard[catIdx * 5 + num];
         var taken = !!cell.taken;
-        html += '<button class="cell' + (taken ? ' taken' : '') + '" style="' + (taken ? '' : ('background:' + t.color + ';')) + '"'
+        var faceHtml = '<span class="cell-num">' + (num + 1) + '</span>';
+        if (taken) {
+          // the invoice created at securing time shares this cell's acquiredSeq -- look it up to
+          // show its destination as a shipping-label sticker instead of the plain index number.
+          var inv = null;
+          for (var i = 0; i < myInvoices.length; i++) { if (myInvoices[i].acquiredSeq === cell.acquiredSeq) { inv = myInvoices[i]; break; } }
+          faceHtml = inv ? ('<span class="invoice-label">' + esc(roomCode(inv.floorIdx, inv.room)) + '</span>') : faceHtml;
+        }
+        html += '<button class="cell' + (taken ? ' taken' : '') + '" style="background:' + t.color + ';"'
           + (taken ? '' : (' data-action="open-cell" data-cell="' + cell.id + '"'))
-          + '><span class="cell-num">' + (num + 1) + '</span>'
+          + '>' + faceHtml
           + '<span class="barcode"></span>'
           + '</button>';
       }
@@ -496,7 +521,7 @@ APP_JS_TEMPLATE = r"""
       var delivered = inv.deliveredRound !== null;
       return '<div class="invoice' + (delivered ? ' delivered' : '') + '">'
         + '<span class="swatch" style="background:' + t.color + '"></span>'
-        + '<div class="meta"><div class="t">' + esc(t.name) + '</div><div class="d">' + FLOORS[inv.floorIdx] + ' ' + inv.room + '호</div></div>'
+        + '<div class="meta"><div class="t">' + esc(t.name) + '</div><div class="d">' + roomCode(inv.floorIdx, inv.room) + '</div></div>'
         + '<span class="sticker' + (delivered ? '' : ' pending') + '">' + (delivered ? ('완료 · R' + inv.deliveredRound) : '대기') + '</span>'
         + '</div>';
     }).join("") + '</div>';
@@ -507,7 +532,7 @@ APP_JS_TEMPLATE = r"""
     return '<div class="delivered-callout">' + delivered.map(function (d) {
       var t = TYPES[d.catIdx];
       return '<div class="delivered-item"><span class="swatch" style="background:' + t.color + '"></span>'
-        + FLOORS[d.floorIdx] + ' ' + d.room + '호 ' + esc(t.name)
+        + roomCode(d.floorIdx, d.room) + ' ' + esc(t.name)
         + (d.seat === "1" || d.seat === "2" ? ' (플레이어 ' + d.seat + ')' : '')
         + '</div>';
     }).join('') + '</div>';
@@ -581,7 +606,7 @@ APP_JS_TEMPLATE = r"""
       invs.forEach(function (inv) {
         var t = TYPES[inv.catIdx];
         var pts = scoreInvoice(inv);
-        html += '<tr><td>' + esc(t.name) + '</td><td>' + FLOORS[inv.floorIdx] + ' ' + inv.room + '호</td><td>' + resultLabel(inv) + '</td><td>' + (pts > 0 ? "+" : "") + pts + '</td></tr>';
+        html += '<tr><td>' + esc(t.name) + '</td><td>' + roomCode(inv.floorIdx, inv.room) + '</td><td>' + resultLabel(inv) + '</td><td>' + (pts > 0 ? "+" : "") + pts + '</td></tr>';
       });
       if (!invs.length) html += '<tr><td colspan="4" style="color:var(--muted)">확보한 택배 없음</td></tr>';
       html += '</tbody></table></div>';
