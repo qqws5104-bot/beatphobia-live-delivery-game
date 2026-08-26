@@ -140,14 +140,20 @@ HEAD_HTML = """<!doctype html>
   .conn-banner { position:fixed; top:0; left:0; right:0; z-index:90; text-align:center; padding:0.5rem;
     background:var(--danger); color:#fff; font-family:var(--font-display); font-size:0.85rem; font-weight:600; }
   main.stage { flex:1; padding:clamp(1rem,3vw,2.2rem); display:flex; flex-direction:column; gap:1.2rem; }
-  /* the secure-phase board is the tallest single screen in the app (4 rows of boxes + timer +
-     header), so it gets noticeably tighter top/bottom padding than every other phase -- keeps the
-     whole board, timer and "give up / complete" flow inside one laptop-height viewport, no
-     scrolling needed to reach the bottom row. */
-  main.stage.stage--secure { padding-left:calc(128px + 1.1rem + 1.6rem); padding-top:clamp(0.6rem,1.6vw,1.1rem); padding-bottom:clamp(0.6rem,1.6vw,1.1rem); }
+  /* Secure phase gets a genuine fit-to-viewport layout instead of a guessed pixel budget: the
+     page height is pinned to the viewport (no page scroll) and the board grid is given exactly
+     whatever vertical space is left after the header, with its 4 rows set to fill that space
+     (grid-template-rows: 1fr) and the boxes stretching to match (aspect-ratio:auto below) --
+     so cell size adapts automatically to WHATEVER a given laptop's browser chrome actually
+     leaves, rather than a fixed rem/aspect-ratio guess that can be thrown off by toolbars,
+     bookmark bars, or OS scaling. board-grid keeps a scroll fallback (overflow-y:auto) in case
+     content still can't physically fit (e.g. a very short window) so nothing ever gets clipped. */
+  html:has(main.stage--secure), html:has(main.stage--secure) body { height:100%; overflow:hidden; }
+  html:has(main.stage--secure) #app { height:100vh; }
+  main.stage.stage--secure { padding-left:calc(128px + 1.1rem + 1.6rem); padding-top:clamp(0.5rem,1.6vw,1.1rem); padding-bottom:clamp(0.5rem,1.6vw,1.1rem); min-height:0; }
   @media (max-width:900px) { main.stage.stage--secure { padding-left:clamp(1rem,3vw,2.2rem); } }
   .card { background:var(--panel); border:1px solid var(--panel-line); border-radius:14px; padding:1.2rem 1.4rem; }
-  .stage--secure .card { padding:0.9rem 1.1rem; }
+  .stage--secure .card { padding:0.8rem 1rem; flex:1; min-height:0; display:flex; flex-direction:column; }
   .btn { border:none; border-radius:10px; padding:0.7rem 1.3rem; font-weight:700; font-size:0.95rem;
     font-family:var(--font-display); letter-spacing:0.01em; transition:transform .12s ease, filter .12s ease; }
   .btn:active { transform:scale(0.96); }
@@ -198,18 +204,19 @@ HEAD_HTML = """<!doctype html>
     letter-spacing:0.08em; color:var(--muted); }
   .key-hint { margin-top:0.6rem; color:var(--muted); font-size:0.78rem; }
 
-  .board-grid { display:grid; grid-template-columns:minmax(110px,150px) repeat(5,1fr); gap:0.4rem; }
+  .board-grid { display:grid; grid-template-columns:minmax(110px,150px) repeat(5,1fr); grid-template-rows:auto repeat(4,minmax(0,1fr));
+    gap:0.4rem; flex:1; min-height:0; overflow-y:auto; }
   .board-head, .board-label { display:flex; align-items:center; padding:0.4rem 0.6rem; border-radius:8px;
     font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .board-head { background:transparent; color:var(--muted); justify-content:center; }
   .board-label { font-weight:700; }
   /* each cell is styled to read as a cardboard delivery box: folded top flaps (the two diagonal
      seams meeting at top-center), a vertical packing-tape strip down the middle, a beveled
-     top/bottom edge for depth, and a small barcode tucked in the bottom-right corner. Kept on the
-     flatter side (aspect-ratio) so the whole 4-row board -- plus the timer and ready controls --
-     fits inside one laptop-height viewport without scrolling; see the max-height media query below
-     for an extra compaction pass on genuinely short screens. */
-  .cell { position:relative; aspect-ratio:1/0.62; border-radius:6px; border:none; display:flex; align-items:center; justify-content:center;
+     top/bottom edge for depth, and a small barcode tucked in the bottom-right corner. aspect-ratio
+     is intentionally NOT set -- the cell stretches to fill its grid row/column exactly (see
+     board-grid's grid-template-rows:1fr above), which is what makes the whole board fit any
+     viewport height without scrolling. */
+  .cell { position:relative; min-height:0; border-radius:6px; border:none; display:flex; align-items:center; justify-content:center;
     font-family:var(--font-display); font-weight:700; font-size:1.2rem; color:#fff; overflow:hidden;
     box-shadow: inset 0 -7px 0 rgba(0,0,0,0.16), inset 0 3px 0 rgba(255,255,255,0.16); }
   .cell::before { content:""; position:absolute; top:0; left:0; right:0; height:44%; z-index:1;
@@ -233,15 +240,11 @@ HEAD_HTML = """<!doctype html>
     padding:0.32rem 0.65rem; border-radius:4px; box-shadow:0 3px 8px rgba(0,0,0,0.3); transform:rotate(-2deg); }
   .cell:not(.taken):hover { filter:brightness(1.1); }
 
-  /* extra compaction pass for short-viewport laptops (common 13"-14" screens land around
-     600-760px of usable page height once browser chrome is subtracted) -- flattens the boxes
-     further and shrinks the timer/header so the full board keeps fitting without a scrollbar. */
-  @media (max-height:760px) {
+  /* on genuinely short viewports, shrink the chrome around the board (topbar + side-timer) too --
+     the board itself already fills whatever's left via grid-template-rows:1fr, but a smaller
+     topbar/timer leaves it more room to work with before the overflow-y:auto fallback kicks in. */
+  @media (max-height:700px) {
     .topbar { padding-top:0.5rem; padding-bottom:0.5rem; }
-    main.stage.stage--secure { padding-top:0.5rem; padding-bottom:0.5rem; }
-    .stage--secure .card { padding:0.7rem 0.9rem; }
-    .board-grid { gap:0.3rem; }
-    .cell { aspect-ratio:1/0.5; }
     .side-timer { top:4.6rem; padding:0.6rem 0.6rem; }
     .side-timer .timer-num { font-size:1.3rem; }
   }

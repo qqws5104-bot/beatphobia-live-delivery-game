@@ -20,6 +20,11 @@ const VIEWPORTS = [
   { name: "1366x768", width: 1366, height: 768 },
   { name: "1280x760", width: 1280, height: 760 },
   { name: "1440x818", width: 1440, height: 818 },
+  // more aggressive: realistic real-world usable height after a laptop's OS taskbar + full
+  // browser chrome (tabs, bookmarks bar, extensions) eat into a 768-900px physical panel
+  { name: "1280x650", width: 1280, height: 650 },
+  { name: "1366x600", width: 1366, height: 600 },
+  { name: "1920x550", width: 1920, height: 550 },
 ];
 
 async function main() {
