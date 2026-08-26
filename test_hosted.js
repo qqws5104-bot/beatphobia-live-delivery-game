@@ -2,6 +2,7 @@
 // separate devices via two separate browser contexts (independent sessionStorage/clientId).
 "use strict";
 const { chromium } = require("playwright");
+const { totalScore: serverTotalScore } = require("./game-room.js");
 
 const BASE = "http://localhost:3000";
 
@@ -369,13 +370,25 @@ async function main() {
   }
   log("both players see identical final scores (shared server state confirmed consistent)");
 
-  // ---- opponent's itemized package list must stay hidden on the final results screen too --
-  // only a single score-table (mine) should render, plus the "비공개" note for the opponent ----
+  // ---- unlike mid-game, the ending screen reveals BOTH players' full itemized results -- both
+  // score-tables should render for each viewer, so the two can compare and review the whole run ----
   const scoreTableCountP1 = await countSel(p1, ".score-table");
-  if (scoreTableCountP1 !== 1) throw new Error(`end screen: expected exactly 1 rendered score-table (mine only), found ${scoreTableCountP1}`);
-  const p1SeesPrivacyNote = (await bodyText(p1)).includes("비공개");
-  if (!p1SeesPrivacyNote) throw new Error("end screen: opponent's card should show a 'private' note instead of their itemized list");
-  log("confirmed: opponent's itemized package list stays hidden on the final results screen (total score only)");
+  if (scoreTableCountP1 !== 2) throw new Error(`end screen: expected 2 rendered score-tables (both players' full itemized results), found ${scoreTableCountP1}`);
+  const scoreTableCountP2 = await countSel(p2, ".score-table");
+  if (scoreTableCountP2 !== 2) throw new Error(`end screen: expected 2 rendered score-tables on p2's view too, found ${scoreTableCountP2}`);
+  log("confirmed: both players' full itemized package lists are shown on the final results screen");
+
+  // ---- fresh/frozen scoring rule: sanity-check the DISPLAYED total against the authoritative
+  // scoreInvoice() from game-room.js itself (imported directly, not reimplemented here) run over
+  // the raw invoice data both clients actually received -- this only catches a client/server
+  // drift, not a wrong formula (the formula is trusted at its one source of truth), but that's
+  // exactly the risk introduced by build_client.py keeping its own duplicate copy of it ----
+  const recomputed1 = serverTotalScore("1", { players: lastState.p1.players });
+  const recomputed2 = serverTotalScore("2", { players: lastState.p1.players });
+  if (recomputed1 !== end1.scores["1"] || recomputed2 !== end1.scores["2"]) {
+    throw new Error(`client-displayed totals don't match the authoritative scoreInvoice() calculation -- displayed: ${JSON.stringify(end1.scores)}, recomputed: {"1":${recomputed1},"2":${recomputed2}}`);
+  }
+  log("confirmed: displayed totals match game-room.js's authoritative scoreInvoice() (no client/server drift)");
 
   if (errors.length) {
     log("!! console/page errors captured during run:");

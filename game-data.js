@@ -7,7 +7,7 @@ const TYPES = [
   { key: "normal", name: "일반택배", pieces: 2, reward: 2, penalty: 1,
     color: "#C9A576", ink: "#16233F" },
   { key: "fresh", name: "신선·냉동 택배", pieces: 3, reward: 3,
-    penaltyEarly: 1, penaltyFinal: 2, color: "#6DBBFD", ink: "#16233F" },
+    penaltyEarly: 1, penaltyFinal: 1, color: "#6DBBFD", ink: "#16233F" },
   { key: "fragile", name: "깨지기 쉬운 택배", pieces: 4, reward: 5, penalty: 2,
     color: "#D9773F", ink: "#FFFFFF" },
   { key: "valuable", name: "귀중품", pieces: 3, reward: 4, penalty: 3,

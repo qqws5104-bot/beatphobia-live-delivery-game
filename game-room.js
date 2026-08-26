@@ -23,8 +23,11 @@ function randomInvoice(seat, catIdx, acquiredSeq) {
 function scoreInvoice(inv) {
   const t = TYPES[inv.catIdx];
   if (t.key === "fresh") {
+    // delivered by round 3: full reward. delivered after round 3 (round 4-5): reward minus the
+    // late penalty. never delivered: the late penalty PLUS an additional final-failure penalty
+    // (it "exceeded round 3" and then never arrived at all).
     if (inv.deliveredRound === null) return -(t.penaltyEarly + t.penaltyFinal);
-    if (inv.deliveredRound <= 2) return t.reward;
+    if (inv.deliveredRound <= 3) return t.reward;
     return t.reward - t.penaltyEarly;
   }
   return inv.deliveredRound === null ? -t.penalty : t.reward;
@@ -33,7 +36,7 @@ function resultLabel(inv) {
   const t = TYPES[inv.catIdx];
   if (t.key === "fresh") {
     if (inv.deliveredRound === null) return "미배송 (최종)";
-    if (inv.deliveredRound <= 2) return "성공";
+    if (inv.deliveredRound <= 3) return "성공";
     return "지연성공";
   }
   return inv.deliveredRound === null ? "미배송" : "성공";

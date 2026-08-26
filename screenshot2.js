@@ -86,6 +86,21 @@ async function main() {
   await p1.waitForTimeout(200);
   await p1.screenshot({ path: path.join(OUT, "5_elevator_result_p1_ready_waiting_p2.png") });
 
+  // play out the rest of the rounds so we can screenshot the end screen -- both players' full
+  // itemized lists should be visible there again (per the latest request)
+  await pressSpace(p2);
+  for (let round = 2; round <= 5; round++) {
+    await waitFor(async () => (await p1.locator('[data-action="vote-up"]:not([disabled])').count()) > 0, { label: `round ${round} voting starts` });
+    await clickSel(p1, '[data-action="vote-up"]');
+    await clickSel(p2, '[data-action="vote-up"]');
+    await waitFor(async () => (await bodyText(p1)).includes(`라운드 ${round} 결과`), { label: `round ${round} result`, timeout: 8000 });
+    await pressSpace(p1);
+    await pressSpace(p2);
+  }
+  await waitFor(async () => (await bodyText(p1)).includes("총점"), { label: "end screen", timeout: 10000 });
+  await p1.waitForTimeout(200);
+  await p1.screenshot({ path: path.join(OUT, "6_end_screen_both_lists_visible.png"), fullPage: true });
+
   await browser.close();
   console.log("saved to", OUT);
 }

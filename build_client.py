@@ -321,8 +321,11 @@ APP_JS_TEMPLATE = r"""
   function scoreInvoice(inv) {
     var t = TYPES[inv.catIdx];
     if (t.key === "fresh") {
+      // delivered by round 3: full reward. delivered after round 3 (round 4-5): reward minus the
+      // late penalty. never delivered: the late penalty PLUS an additional final-failure penalty
+      // (it "exceeded round 3" and then never arrived at all).
       if (inv.deliveredRound === null) return -(t.penaltyEarly + t.penaltyFinal);
-      if (inv.deliveredRound <= 2) return t.reward;
+      if (inv.deliveredRound <= 3) return t.reward;
       return t.reward - t.penaltyEarly;
     }
     if (inv.deliveredRound === null) return -t.penalty;
@@ -332,7 +335,7 @@ APP_JS_TEMPLATE = r"""
     var t = TYPES[inv.catIdx];
     if (t.key === "fresh") {
       if (inv.deliveredRound === null) return "미배송 (최종)";
-      if (inv.deliveredRound <= 2) return "성공";
+      if (inv.deliveredRound <= 3) return "성공";
       return "지연성공";
     }
     return inv.deliveredRound === null ? "미배송" : "성공";
@@ -624,27 +627,24 @@ APP_JS_TEMPLATE = r"""
   function renderEnd(st, seat) {
     var s1 = totalScore("1", st), s2 = totalScore("2", st);
     var winner = s1 === s2 ? "무승부" : (s1 > s2 ? "플레이어 1 승리" : "플레이어 2 승리");
-    var otherSeat = seat === "1" ? "2" : "1";
     var html = '<main class="stage">';
     html += '<div class="winner-banner">' + winner + '</div>';
     html += '<div class="split-two">';
-
-    // my own results: full itemized breakdown, as before
-    var myInvs = st.players[seat].invoices.slice().sort(function (a, b) { return a.acquiredSeq - b.acquiredSeq; });
-    html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">플레이어 ' + seat + ' (나) — 총점 ' + totalScore(seat, st) + '</h3>';
-    html += '<table class="score-table"><thead><tr><th>종류</th><th>목적지</th><th>결과</th><th>점수</th></tr></thead><tbody>';
-    myInvs.forEach(function (inv) {
-      var t = TYPES[inv.catIdx];
-      var pts = scoreInvoice(inv);
-      html += '<tr><td>' + esc(t.name) + '</td><td>' + roomCode(inv.floorIdx, inv.room) + '</td><td>' + resultLabel(inv) + '</td><td>' + (pts > 0 ? "+" : "") + pts + '</td></tr>';
+    // Game's over -- unlike the elevator phase (where per-round delivery info stays private so
+    // players can't read each other's moves mid-game), the ending screen reveals both players'
+    // full itemized results so they can compare and review the whole run together.
+    ["1", "2"].forEach(function (s) {
+      var invs = st.players[s].invoices.slice().sort(function (a, b) { return a.acquiredSeq - b.acquiredSeq; });
+      html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">플레이어 ' + s + (s === seat ? ' (나)' : '') + ' — 총점 ' + totalScore(s, st) + '</h3>';
+      html += '<table class="score-table"><thead><tr><th>종류</th><th>목적지</th><th>결과</th><th>점수</th></tr></thead><tbody>';
+      invs.forEach(function (inv) {
+        var t = TYPES[inv.catIdx];
+        var pts = scoreInvoice(inv);
+        html += '<tr><td>' + esc(t.name) + '</td><td>' + roomCode(inv.floorIdx, inv.room) + '</td><td>' + resultLabel(inv) + '</td><td>' + (pts > 0 ? "+" : "") + pts + '</td></tr>';
+      });
+      if (!invs.length) html += '<tr><td colspan="4" style="color:var(--muted)">확보한 택배 없음</td></tr>';
+      html += '</tbody></table></div>';
     });
-    if (!myInvs.length) html += '<tr><td colspan="4" style="color:var(--muted)">확보한 택배 없음</td></tr>';
-    html += '</tbody></table></div>';
-
-    // opponent's results: total score only, for comparison -- never the itemized list of what
-    // they secured/delivered, since who-sent-what is private per player throughout the whole game
-    html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">플레이어 ' + otherSeat + ' — 총점 ' + totalScore(otherSeat, st) + '</h3>'
-      + '<div style="color:var(--muted);font-size:0.85rem;">상대방의 택배 목록은 비공개예요</div></div>';
 
     html += '</div></main>';
     return html;
