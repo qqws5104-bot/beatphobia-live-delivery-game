@@ -155,18 +155,26 @@
   @media (max-width:820px) { .elev-layout { grid-template-columns:1fr; } }
   .shaft { background:var(--bg-deep); border-radius:14px; border:1px solid var(--panel-line); padding:1rem 0.8rem; }
   .shaft-track { display:flex; flex-direction:column-reverse; gap:0.4rem; }
-  .floor-stop { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.6rem; border-radius:8px; font-family:var(--font-display); font-weight:600; color:var(--muted); }
+  .floor-stop { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.6rem; border-radius:8px; font-family:var(--font-display); font-weight:600; color:var(--muted);
+    position:relative; transition:background-color 0.22s ease, color 0.22s ease; }
   .floor-stop.current { background:rgba(240,184,74,0.14); color:var(--gold); }
-  .floor-stop .car { width:10px; height:10px; border-radius:3px; background:transparent; }
+  .floor-stop .car { width:10px; height:10px; border-radius:3px; background:transparent; transition:background-color 0.22s ease, box-shadow 0.22s ease; }
   .floor-stop.current .car { background:var(--gold); box-shadow:0 0 10px var(--gold); }
   /* the actual floor only changes once the 5s vote window resolves (aggregate tally, unchanged),
-     but every single up/down click -- mine or the opponent's -- gives the current-floor row an
-     immediate little tug in that direction, so voting feels responsive rather than silent until
-     the round ends. Purely cosmetic: no numbers are shown, just a nudge. */
-  @keyframes floorNudgeUp { 0% { transform:translateY(0); } 35% { transform:translateY(-9px); } 100% { transform:translateY(0); } }
-  @keyframes floorNudgeDown { 0% { transform:translateY(0); } 35% { transform:translateY(9px); } 100% { transform:translateY(0); } }
-  .floor-stop.nudge-up { animation:floorNudgeUp 0.4s ease; }
-  .floor-stop.nudge-down { animation:floorNudgeDown 0.4s ease; }
+     but every single up/down click -- mine or the opponent's -- makes the car marker visibly hop
+     up or down to the NEIGHBORING floor row and back (not just a small in-place shake), so the
+     up/down motion clearly reads floor-to-floor. The row that actually holds "current" (the real,
+     authoritative floor) never changes here -- only .hop-target's own highlight/glow is toggled,
+     so there's no ambiguity about where the elevator truly is between rounds. */
+  .floor-stop.hop-target { background:rgba(240,184,74,0.22); color:var(--gold); }
+  .floor-stop.hop-target .car { background:var(--gold); box-shadow:0 0 10px var(--gold); }
+  .floor-stop.hop-source { background:rgba(240,184,74,0.04); color:var(--muted); }
+  .floor-stop.hop-source .car { background:transparent; box-shadow:none; }
+  .floor-stop .hop-arrow { position:absolute; right:0.7rem; font-size:0.75rem; color:var(--gold); opacity:0; }
+  .floor-stop.hop-target.hop-up .hop-arrow { animation:hopArrowUp 0.55s ease; }
+  .floor-stop.hop-target.hop-down .hop-arrow { animation:hopArrowDown 0.55s ease; }
+  @keyframes hopArrowUp { 0% { opacity:0; transform:translateY(8px); } 35% { opacity:1; transform:translateY(0); } 100% { opacity:0; transform:translateY(-6px); } }
+  @keyframes hopArrowDown { 0% { opacity:0; transform:translateY(-8px); } 35% { opacity:1; transform:translateY(0); } 100% { opacity:0; transform:translateY(6px); } }
   .round-pill { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.8rem; border-radius:999px;
     background:rgba(109,187,253,0.14); color:var(--sky); font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .vote-buttons { display:flex; flex-direction:column; gap:0.7rem; margin-top:1rem; }
@@ -236,11 +244,14 @@
 
   var state = null; // populated by the first "state" message from the server
 
-  // ---------- elevator car nudge: purely cosmetic per-click feedback (see the .floor-stop.nudge-*
-  // CSS above) -- diffs the previous vote tally against the new one to see whether an up or down
-  // click just landed (from EITHER player -- their exact counts stay hidden, only the fact that
-  // something just moved is used), then gives the current-floor row a quick tug in that direction.
-  // The actual floor still only changes once the round resolves from the full aggregate. ----------
+  // ---------- elevator car hop: purely cosmetic per-click feedback -- diffs the previous vote
+  // tally against the new one to see whether an up or down click just landed (from EITHER player
+  // -- their exact counts stay hidden, only the fact that something just moved is used), then
+  // makes the glowing car marker visibly hop up or down to the NEIGHBORING floor row and back.
+  // The actual current-floor row (the real, authoritative floor) never moves here -- only the
+  // neighbor's own highlight is toggled on and off -- so the true floor position stays
+  // unambiguous, while every single click still reads as real up/down motion, not a small shake.
+  // The floor itself still only changes once the round resolves from the full aggregate. ----------
   function detectVoteBump(prevState, nextState) {
     if (!nextState || nextState.phase !== "elevator" || nextState.elevator.state !== "voting") return null;
     if (!prevState || prevState.phase !== "elevator" || !prevState.elevator) return null;
@@ -255,11 +266,26 @@
     return upDelta >= downDelta ? "up" : "down";
   }
   function bumpCar(dir) {
-    var row = document.querySelector(".floor-stop.current");
-    if (!row) return;
-    row.classList.remove("nudge-up", "nudge-down");
-    void row.offsetWidth; // force reflow so re-adding the same class restarts the animation
-    row.classList.add(dir === "up" ? "nudge-up" : "nudge-down");
+    if (!state || state.phase !== "elevator") return;
+    var floorIdx = state.elevator.floorIdx;
+    var targetIdx = dir === "up" ? floorIdx + 1 : floorIdx - 1;
+    if (targetIdx < 0 || targetIdx >= FLOORS.length) return; // already at the very top/bottom -- nowhere to hop to
+    var rows = document.querySelectorAll(".floor-stop"); // DOM order matches FLOORS order (B1..top),
+    // regardless of the shaft's visual column-reverse layout -- so rows[i] is floor index i.
+    var sourceRow = rows[floorIdx], targetRow = rows[targetIdx];
+    if (!targetRow) return;
+    [sourceRow, targetRow].forEach(function (row) {
+      if (row) { row.classList.remove("hop-source", "hop-target", "hop-up", "hop-down"); }
+    });
+    void targetRow.offsetWidth; // force reflow so a rapid repeat click restarts the animation
+    var arrow = targetRow.querySelector(".hop-arrow");
+    if (arrow) arrow.textContent = dir === "up" ? "▲" : "▼";
+    if (sourceRow) sourceRow.classList.add("hop-source");
+    targetRow.classList.add("hop-target", dir === "up" ? "hop-up" : "hop-down");
+    setTimeout(function () {
+      if (sourceRow) sourceRow.classList.remove("hop-source");
+      targetRow.classList.remove("hop-target", "hop-up", "hop-down");
+    }, 550);
   }
   var local = { openCellId: null, toast: null };
   var wsConnected = false;
@@ -465,7 +491,8 @@
   function renderShaft(floorIdx) {
     var html = '<div class="shaft"><div class="shaft-track">';
     FLOORS.forEach(function (f, i) {
-      html += '<div class="floor-stop' + (i === floorIdx ? ' current' : '') + '"><span class="car"></span>' + f + '</div>';
+      html += '<div class="floor-stop' + (i === floorIdx ? ' current' : '') + '"><span class="car"></span>' + f
+        + '<span class="hop-arrow">▲</span></div>';
     });
     html += '</div></div>';
     return html;
