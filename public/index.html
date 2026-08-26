@@ -92,14 +92,26 @@
     font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .board-head { background:transparent; color:var(--muted); justify-content:center; }
   .board-label { font-weight:700; }
-  .cell { position:relative; aspect-ratio:1/0.72; border-radius:10px; border:none; display:flex; align-items:center; justify-content:center;
-    font-family:var(--font-display); font-weight:700; font-size:1.3rem; color:#fff; overflow:hidden; }
-  .cell .cell-num { position:relative; z-index:2; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
-  .cell::before { content:""; position:absolute; inset:0; background:rgba(0,0,0,0.08); }
+  /* each cell is styled to read as a cardboard delivery box: folded top flaps (the two diagonal
+     seams meeting at top-center), a vertical packing-tape strip down the middle, a beveled
+     top/bottom edge for depth, and a small barcode tucked in the bottom-right corner. */
+  .cell { position:relative; aspect-ratio:1/0.78; border-radius:6px; border:none; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:1.2rem; color:#fff; overflow:hidden;
+    box-shadow: inset 0 -7px 0 rgba(0,0,0,0.16), inset 0 3px 0 rgba(255,255,255,0.16); }
+  .cell::before { content:""; position:absolute; top:0; left:0; right:0; height:44%; z-index:1;
+    background:
+      linear-gradient(115deg, transparent 47%, rgba(0,0,0,0.17) 49%, rgba(0,0,0,0.17) 51%, transparent 53%),
+      linear-gradient(65deg, transparent 47%, rgba(0,0,0,0.17) 49%, rgba(0,0,0,0.17) 51%, transparent 53%); }
+  .cell::after { content:""; position:absolute; top:0; bottom:0; left:50%; width:20%; transform:translateX(-50%); z-index:1;
+    background:rgba(255,255,255,0.2); box-shadow:0 0 0 1px rgba(255,255,255,0.1); }
+  .cell .cell-num { position:relative; z-index:3; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
+  .cell .barcode { position:absolute; z-index:3; right:5px; bottom:5px; width:24px; height:12px; border-radius:1px;
+    background: repeating-linear-gradient(90deg, #20180f 0 1px, transparent 1px 2px, #20180f 3px 4px, transparent 4px 6px), #f4f1ea;
+    opacity:0.88; }
   .cell.taken { background:var(--visited) !important; color:#7c8296; cursor:default; }
-  .cell.taken .owner-tag { position:absolute; bottom:4px; right:6px; font-size:0.62rem; background:rgba(0,0,0,0.4);
-    padding:0.1rem 0.4rem; border-radius:999px; z-index:2; }
-  .cell:not(.taken):hover { filter:brightness(1.12); }
+  .cell.taken::before, .cell.taken::after { opacity:0.3; }
+  .cell.taken .barcode { opacity:0.35; }
+  .cell:not(.taken):hover { filter:brightness(1.1); }
 
   .overlay { position:fixed; inset:0; background:rgba(6,10,18,0.92); display:flex; align-items:center; justify-content:center;
     z-index:50; padding:1.2rem; }
@@ -127,6 +139,10 @@
   .vote-count-col .nums .up { color:var(--ok); }
   .vote-count-col .nums .down { color:var(--danger); margin-left:0.5rem; }
   .round-result { background:rgba(63,174,106,0.1); border:1px solid rgba(63,174,106,0.3); border-radius:10px; padding:0.9rem 1rem; margin-top:0.8rem; }
+  .delivered-callout { margin-top:0.6rem; display:flex; flex-direction:column; gap:0.35rem; }
+  .delivered-callout.empty { color:var(--muted); font-size:0.85rem; }
+  .delivered-item { display:flex; align-items:center; gap:0.5rem; font-size:0.88rem; }
+  .delivered-item .swatch { width:9px; height:18px; border-radius:3px; flex-shrink:0; }
 
   .invoice-list { display:flex; flex-direction:column; gap:0.5rem; margin-top:0.7rem; }
   .invoice { display:flex; align-items:center; gap:0.7rem; padding:0.55rem 0.7rem; border-radius:9px; background:rgba(255,255,255,0.04); border:1px solid var(--panel-line); }
@@ -184,7 +200,6 @@
   var local = { openCellId: null, toast: null };
   var wsConnected = false;
 
-  function cellById(st, id) { for (var i = 0; i < st.board.length; i++) if (st.board[i].id === id) return st.board[i]; return null; }
   function cellMeta(id) { for (var i = 0; i < CELLS.length; i++) if (CELLS[i].id === id) return CELLS[i]; return null; }
 
   // ---------- scoring (pure display functions -- server owns deliveredRound/floorIdx, this
@@ -321,15 +336,18 @@
     html += '<div class="card"><div class="board-grid">';
     html += '<div class="board-head"></div>';
     for (var n = 1; n <= 5; n++) html += '<div class="board-head">' + n + '</div>';
+    // each seat has its own independent board -- what I secure has zero effect on the other
+    // player's copy of the same cell id, so this is purely my own view, no cross-player state.
+    var myBoard = st.boards[seat];
     TYPES.forEach(function (t, catIdx) {
       html += '<div class="board-label" style="background:' + t.color + ';color:' + t.ink + ';">' + esc(t.name) + '</div>';
       for (var num = 0; num < 5; num++) {
-        var cell = st.board[catIdx * 5 + num];
-        var taken = !!cell.ownerSeat;
+        var cell = myBoard[catIdx * 5 + num];
+        var taken = !!cell.taken;
         html += '<button class="cell' + (taken ? ' taken' : '') + '" style="' + (taken ? '' : ('background:' + t.color + ';')) + '"'
           + (taken ? '' : (' data-action="open-cell" data-cell="' + cell.id + '"'))
           + '><span class="cell-num">' + (num + 1) + '</span>'
-          + (taken ? ('<span class="owner-tag">P' + cell.ownerSeat + '</span>') : '')
+          + '<span class="barcode"></span>'
           + '</button>';
       }
     });
@@ -376,6 +394,17 @@
     }).join("") + '</div>';
   }
 
+  function renderDeliveredCallout(delivered) {
+    if (!delivered || !delivered.length) return '<div class="delivered-callout empty">이번 라운드에 배송된 택배가 없어요</div>';
+    return '<div class="delivered-callout">' + delivered.map(function (d) {
+      var t = TYPES[d.catIdx];
+      return '<div class="delivered-item"><span class="swatch" style="background:' + t.color + '"></span>'
+        + FLOORS[d.floorIdx] + ' ' + d.room + '호 ' + esc(t.name)
+        + (d.seat === "1" || d.seat === "2" ? ' (플레이어 ' + d.seat + ')' : '')
+        + '</div>';
+    }).join('') + '</div>';
+  }
+
   function renderElevator(st, seat) {
     var html = '<main class="stage"><div class="elev-layout">';
     html += renderShaft(st.elevator.floorIdx);
@@ -385,26 +414,39 @@
     html += '<span class="round-pill">라운드 ' + st.elevator.round + ' / ' + ELEVATOR_ROUNDS + '</span>';
     html += '<div style="margin-top:0.6rem;font-family:var(--font-display);font-size:1.1rem;">현재 층: <strong style="color:var(--gold)">' + FLOORS[st.elevator.floorIdx] + '</strong></div>';
 
-    var otherSeat = seat === "1" ? "2" : "1";
+    var voting = st.elevator.state === "voting";
     var mine = st.elevator.votes[seat] || { up: 0, down: 0 };
-    var other = st.elevator.votes[otherSeat] || { up: 0, down: 0 };
 
     html += '<div class="vote-buttons">';
-    html += '<button class="btn big primary" data-action="vote-up">▲ 위로</button>';
-    html += '<button class="btn big ghost" data-action="vote-down">▼ 아래로</button>';
+    html += '<button class="btn big primary" data-action="vote-up"' + (voting ? '' : ' disabled') + '>▲ 위로</button>';
+    html += '<button class="btn big ghost" data-action="vote-down"' + (voting ? '' : ' disabled') + '>▼ 아래로</button>';
     html += '</div>';
+    // only my own live count is shown -- the opponent's tally stays hidden until the round
+    // resolves, so nobody can pace their clicking off the other player's running total.
     html += '<div class="vote-count-row">'
       + '<div class="vote-count-col"><span class="who">나 (플레이어 ' + seat + ')</span><span class="nums"><span class="up">▲' + mine.up + '</span><span class="down">▼' + mine.down + '</span></span></div>'
-      + '<div class="vote-count-col"><span class="who">상대 (플레이어 ' + otherSeat + ')</span><span class="nums"><span class="up">▲' + other.up + '</span><span class="down">▼' + other.down + '</span></span></div>'
       + '</div>';
-    html += '<div class="key-hint">실시간으로 서로의 클릭 수가 보여요 · 키보드 ↑ / ↓ 화살표로도 누를 수 있어요</div>';
-    html += '<div style="margin-top:0.5rem;color:var(--muted);font-size:0.85rem;" id="round-clock">남은 시간 계산 중...</div>';
+    html += '<div class="key-hint">' + (voting ? '키보드 ↑ / ↓ 화살표로도 누를 수 있어요' : '이번 라운드 투표가 끝났어요') + '</div>';
 
-    if (st.elevator.log.length) {
+    if (voting) {
+      html += '<div style="margin-top:0.5rem;color:var(--muted);font-size:0.85rem;" id="round-clock">남은 시간 계산 중...</div>';
+    } else if (st.elevator.log.length) {
       var last = st.elevator.log[st.elevator.log.length - 1];
-      html += '<div class="round-result">라운드 ' + last.round + ' 결과 — 위 ' + last.up + ' · 아래 ' + last.down
+      html += '<div class="round-result">'
+        + '<div>라운드 ' + last.round + ' 결과 — 위 ' + last.up + ' · 아래 ' + last.down
         + ' → ' + (last.dir === "tie" ? "동률, 유지" : (last.dir === "up" ? "상승" : "하강"))
-        + ' (현재 ' + FLOORS[last.floorIdx] + ')</div>';
+        + ' (현재 ' + FLOORS[last.floorIdx] + ')</div>'
+        + renderDeliveredCallout(last.delivered)
+        + '</div>';
+      var otherSeat = seat === "1" ? "2" : "1";
+      var myReady = !!st.elevator.readyNext[seat];
+      var otherReady = !!st.elevator.readyNext[otherSeat];
+      var nextLabel = st.elevator.round >= ELEVATOR_ROUNDS ? "최종 결과 보기" : "다음 라운드로";
+      html += '<div class="ready-row">'
+        + '<span class="ready-chip' + (myReady ? ' is-ready' : '') + '">나 · 플레이어 ' + seat + (myReady ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
+        + '<span class="ready-chip' + (otherReady ? ' is-ready' : '') + '">플레이어 ' + otherSeat + (otherReady ? ' · 준비 완료' : ' · 대기 중') + '</span>'
+        + '</div>'
+        + '<div class="space-hint">Space · ' + nextLabel + '</div>';
     }
     html += '</div>';
 
@@ -510,6 +552,9 @@
       if (seat && state && state.phase === "lobby" && !e.repeat && !state.ready[seat]) {
         e.preventDefault();
         send({ type: "set-ready", seat: seat });
+      } else if (seat && state && state.phase === "elevator" && state.elevator.state === "result" && !e.repeat && !state.elevator.readyNext[seat]) {
+        e.preventDefault();
+        send({ type: "elevator-ready", seat: seat });
       }
       return;
     }

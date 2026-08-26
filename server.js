@@ -113,6 +113,10 @@ wss.on("connection", (ws, req) => {
         if (!conn.seat) return;
         entry.room.setReady(conn.seat);
         break;
+      case "elevator-ready":
+        if (!conn.seat) return;
+        entry.room.setElevatorReady(conn.seat);
+        break;
       case "secure-cell":
         if (!conn.seat || typeof msg.cellId !== "string") return;
         entry.room.secureCell(conn.seat, msg.cellId);

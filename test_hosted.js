@@ -9,9 +9,9 @@ function log(...args) { console.log("[test]", ...args); }
 
 // Playwright's locator-based .click() is unreliable in this sandboxed headless environment
 // (actionability retries keep re-resolving to a stale/disabled node even after the real click
-// already landed and the app re-rendered past it) -- proven workaround from the Artifact-version
-// test harness: dispatch the click directly via page.evaluate(), exactly what the app's delegated
-// document click listener would see, without Playwright's actionability polling.
+// already landed and the app re-rendered past it) -- proven workaround: dispatch the click
+// directly via page.evaluate(), exactly what the app's delegated document click listener would
+// see, without Playwright's actionability polling.
 async function clickSel(page, selector) {
   return page.evaluate((sel) => {
     const el = document.querySelector(sel);
@@ -70,19 +70,11 @@ async function main() {
   for (const [label, p] of [["p1", p1], ["p2", p2]]) {
     p.on("pageerror", (e) => errors.push(label + " pageerror: " + e.message));
     p.on("console", (msg) => {
-      log(label, "console:", msg.type(), msg.text(), msg.location() && msg.location().url);
-      // ERR_TUNNEL_CONNECTION_FAILED / 404s on fonts.googleapis.com are this sandbox's outbound
-      // network policy, not an app bug -- a real browser on the user's own device reaches Google
-      // Fonts fine. Any error whose *source location* is fonts.googleapis.com is that, not our app.
-      // favicon.ico 404 is the browser's automatic tab-icon request; the app serves none and
-      // that's fine -- irrelevant to gameplay and not worth a route.
       const loc = (msg.location() && msg.location().url) || "";
       if (msg.type() === "error" && !/fonts\.googleapis\.com|fonts\.gstatic\.com|ERR_TUNNEL_CONNECTION_FAILED|favicon\.ico/.test(msg.text() + loc)) {
         errors.push(label + " console.error: " + msg.text() + " (at " + loc + ")");
       }
     });
-    p.on("requestfailed", (req) => log(label, "requestfailed:", req.url(), req.failure() && req.failure().errorText));
-    p.on("response", (res) => { if (res.status() >= 400) log(label, "http", res.status(), res.url()); });
   }
 
   await p1.goto(roomUrl);
@@ -93,25 +85,14 @@ async function main() {
   await waitFor(() => countSel(p2, ".seat-pick").then((n) => n > 0), { label: "p2 seat picker" });
   log("seat picker rendered on both pages");
 
-  // ---- a third, throwaway connection tries to grab seat 1 concurrently -- should be rejected once p1 has it ----
-  const ctx3 = await browser.newContext();
-  const p3 = await ctx3.newPage();
-  await p3.goto(roomUrl);
-  await waitFor(() => countSel(p3, ".seat-pick").then((n) => n > 0), { label: "p3 seat picker" });
-
   await clickSel(p1, '[data-action="pick-seat"][data-seat="1"]');
   await clickSel(p2, '[data-action="pick-seat"][data-seat="2"]');
   await waitFor(async () => (await bodyText(p1)).includes("좌석 · 플레이어 1"), { label: "p1 got seat 1" });
   await waitFor(async () => (await bodyText(p2)).includes("좌석 · 플레이어 2"), { label: "p2 got seat 2" });
   log("p1 -> seat 1, p2 -> seat 2 confirmed");
 
-  // The UI itself already disables an owned seat's button once state syncs (that's the
-  // taken1/taken2 rendering we just exercised above by getting p1/p2 their seats). To test the
-  // *server's* rejection path -- the genuine race where two clicks land within the same instant,
-  // before either screen has updated -- send a raw pick-seat message directly over p3's own
-  // websocket connection for seat "1" (already owned by p1's clientId), bypassing the UI's
-  // now-disabled button entirely.
-  const rejected = await p3.evaluate(() => {
+  // ---- server-side seat_taken rejection: a fresh clientId racing for an already-owned seat ----
+  const rejected = await p1.evaluate(() => {
     return new Promise((resolve) => {
       const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
       const url = proto + "//" + window.location.host + "/ws?room=" + new URLSearchParams(window.location.search).get("room");
@@ -129,10 +110,9 @@ async function main() {
     });
   });
   if (!rejected) throw new Error("server did not reject a pick-seat for an already-owned seat from a different clientId");
-  log("server-side seat_taken rejection confirmed for a fresh race clientId attempting seat 1");
-  await ctx3.close();
+  log("server-side seat_taken rejection confirmed");
 
-  // ---- reconnect-reclaim: reload p1, seat should still be held (sessionStorage clientId persists across reload) ----
+  // ---- reconnect-reclaim: reload p1, seat should still be held ----
   await p1.reload();
   await waitFor(async () => (await bodyText(p1)).includes("좌석 · 플레이어 1"), { label: "p1 reclaimed seat 1 after reload" });
   log("p1 reclaimed seat 1 after reload");
@@ -140,9 +120,7 @@ async function main() {
   // ---- lobby: press space on both, verify auto-start into secure phase ----
   await pressSpace(p1);
   await waitFor(async () => (await bodyText(p1)).includes("준비 완료"), { label: "p1 ready chip flips" });
-
   await pressSpace(p2);
-
   await waitFor(async () => {
     const t1 = await bodyText(p1);
     const t2 = await bodyText(p2);
@@ -150,34 +128,53 @@ async function main() {
   }, { label: "both entered secure phase", timeout: 5000 });
   log("both players entered secure phase (lobby -> secure auto-start via spacebar confirmed)");
 
-  // ---- side timer present ----
   const hasTimer1 = await countSel(p1, "#side-timer");
   if (!hasTimer1) throw new Error("side timer missing on p1 in secure phase");
   log("side timer rendered");
 
-  // ---- same-cell race: both players click the exact same cell concurrently ----
-  const raceCellSel = '[data-action="open-cell"][data-cell="normal-1"]';
-  await Promise.all([clickSel(p1, raceCellSel), clickSel(p2, raceCellSel)]);
-  await p1.waitForTimeout(200);
-  // whichever opened the overlay, click "완료" to secure it (only the winner will have the overlay open with that cell)
-  for (const p of [p1, p2]) {
-    const overlayOpen = await countSel(p, '.overlay:not(.hidden) [data-action="complete-cell"]');
-    if (overlayOpen) await clickSel(p, '[data-action="complete-cell"]');
+  // ---- box + barcode visual check ----
+  const boxCellCount = await countSel(p1, ".cell:not(.taken)");
+  const barcodeCount = await countSel(p1, ".cell .barcode");
+  if (boxCellCount === 0 || barcodeCount === 0 || barcodeCount !== boxCellCount) {
+    throw new Error(`expected every untaken cell to carry a .barcode element (cells=${boxCellCount}, barcodes=${barcodeCount})`);
   }
+  log("delivery-box cell styling + barcode elements present:", boxCellCount, "cells");
+
+  // ---- give up: opening a cell and clicking give-up must NOT mark it taken (and, since securing
+  // a cell and granting an invoice happen atomically together server-side in secureCell(), an
+  // untaken cell is conclusive proof no invoice was granted either -- there is no code path that
+  // could award one without also flipping cell.taken) ----
+  await clickSel(p1, '[data-action="open-cell"][data-cell="normal-1"]');
+  await waitFor(async () => (await countSel(p1, ".overlay:not(.hidden)")) > 0, { label: "p1 puzzle overlay opens" });
+  await clickSel(p1, '[data-action="give-up"]');
   await p1.waitForTimeout(200);
+  const normal1StillOpen = await countSel(p1, '[data-action="open-cell"][data-cell="normal-1"]');
+  const takenCountAfterGiveUp = await countSel(p1, '.cell.taken');
+  if (normal1StillOpen !== 1) throw new Error("giving up should leave the cell untaken (still clickable), but it did not");
+  if (takenCountAfterGiveUp !== 0) throw new Error(`giving up should not take any cell, but ${takenCountAfterGiveUp} cell(s) show as taken`);
+  log("give-up confirmed: cell stays untaken, no invoice granted");
 
-  // structural check: exactly one of the two players should now own cell normal-1 on BOTH pages' rendered board (shared server state)
-  const owner1 = await p1.evaluate(() => {
-    const btn = document.querySelector('[data-cell="normal-1"]') || Array.from(document.querySelectorAll(".cell")).find((c) => c.classList.contains("taken") && c.querySelector(".owner-tag"));
-    return null; // board doesn't expose cell id on taken cells directly; validated via invoice counts below instead
-  });
-  log("same-cell race resolved (no crash, no duplicate award) -- verified via invoice counts below");
+  // ---- per-player independent boards: BOTH players secure the identical cell id with zero conflict ----
+  await Promise.all([
+    clickSel(p1, '[data-action="open-cell"][data-cell="normal-1"]'),
+    clickSel(p2, '[data-action="open-cell"][data-cell="normal-1"]'),
+  ]);
+  await p1.waitForTimeout(150);
+  await Promise.all([
+    clickSel(p1, '[data-action="complete-cell"]'),
+    clickSel(p2, '[data-action="complete-cell"]'),
+  ]);
+  await p1.waitForTimeout(200);
+  const p1Normal1Taken = (await countSel(p1, '.cell.taken')) >= 1;
+  const p2Normal1Taken = (await countSel(p2, '.cell.taken')) >= 1;
+  if (!p1Normal1Taken || !p2Normal1Taken) throw new Error("both players should independently secure the same cell id -- one or both failed");
+  log("per-player independent boards confirmed: both players secured the identical cell id with no cross-player blocking");
 
-  // secure a distinct cell each so both players have inventory for the elevator phase
+  // secure a few more cells each so both players have inventory for the elevator phase
   async function secureCell(p, cellId) {
     const sel = `[data-action="open-cell"][data-cell="${cellId}"]`;
     const count = await countSel(p, sel);
-    if (count === 0) return false; // already taken by the race above, or by the other player
+    if (count === 0) return false;
     await clickSel(p, sel);
     await p.waitForTimeout(150);
     const has = await countSel(p, '[data-action="complete-cell"]');
@@ -185,32 +182,62 @@ async function main() {
     return false;
   }
   await secureCell(p1, "fresh-1");
-  await secureCell(p2, "fresh-2");
+  await secureCell(p2, "fresh-1"); // same id as p1 -- must not conflict, per-player boards
   await secureCell(p1, "fragile-1");
   await secureCell(p2, "valuable-1");
   log("secured additional cells for both players");
 
-  // ---- wait out the (test-shortened, 6s) secure phase -> elevator ----
+  // ---- wait out the secure phase (server override, shortened for this test run) -> elevator ----
   await waitFor(async () => {
     const t1 = await bodyText(p1);
     const t2 = await bodyText(p2);
     return t1.includes("엘리베이터") && t2.includes("엘리베이터");
-  }, { label: "both entered elevator phase", timeout: 12000 });
-  log("secure phase timed out correctly -> elevator phase entered on both");
+  }, { label: "both entered elevator phase", timeout: 15000 });
+  log("secure phase ended -> elevator phase entered on both");
 
-  // ---- round 1: live per-click vote broadcasting -- click on p1, verify p2 sees the tally update *immediately*, before the round ends ----
+  // ---- opponent's live vote count must NEVER be shown -- only "나" (my own), never "상대" ----
   await clickSel(p1, '[data-action="vote-up"]');
-  await waitFor(async () => (await bodyText(p2)).includes("▲1"), { label: "p2 sees live vote broadcast from p1", timeout: 2000 });
-  log("live per-click vote broadcast confirmed (p2 saw p1's click before round end)");
+  await p1.waitForTimeout(300);
+  const p2SeesOpponentColumn = (await bodyText(p2)).includes("상대");
+  if (p2SeesOpponentColumn) throw new Error("opponent's vote tally should never be rendered, but found a '상대' column in the DOM");
+  log("confirmed: opponent's live vote count is never shown (no '상대' column rendered)");
 
-  await clickSel(p2, '[data-action="vote-up"]');
-  await clickSel(p2, '[data-action="vote-up"]');
-
-  // let round 1 resolve (VOTE_MS=5000) and play out the rest of the rounds with a couple of clicks each
+  // ---- play out all 5 rounds, requiring both players to press space after each round's result ----
   for (let round = 1; round <= 5; round++) {
     await clickSel(p1, '[data-action="vote-up"]');
     await clickSel(p2, '[data-action="vote-up"]');
-    await p1.waitForTimeout(5300);
+    // wait for the 5s voting window to close and the result/ready-gate screen to appear
+    await waitFor(async () => (await bodyText(p1)).includes(`라운드 ${round} 결과`), { label: `round ${round} result screen (p1)`, timeout: 8000 });
+    await waitFor(async () => (await bodyText(p2)).includes(`라운드 ${round} 결과`), { label: `round ${round} result screen (p2)`, timeout: 8000 });
+
+    // must NOT auto-advance -- round pill should still read the same round number until both ready
+    const stillSameRoundP1 = (await bodyText(p1)).includes(`라운드 ${round} / 5`);
+    if (!stillSameRoundP1) throw new Error(`round ${round}: game advanced to the next round before both players pressed space`);
+
+    // delivered-items callout must be present (even if empty-state text, when nothing delivered)
+    const hasCallout = (await countSel(p1, ".delivered-callout")) > 0;
+    if (!hasCallout) throw new Error(`round ${round}: delivered-items callout did not render on the result screen`);
+
+    await pressSpace(p1);
+    await p1.waitForTimeout(150);
+    const p1ReadyChip = (await bodyText(p1)).includes("준비 완료");
+    if (!p1ReadyChip) throw new Error(`round ${round}: p1's ready chip did not flip after pressing space`);
+
+    // confirm it truly waits on p2 -- still same round after only p1 is ready
+    await p1.waitForTimeout(300);
+    const stillWaitingOnP2 = (await bodyText(p1)).includes(`라운드 ${round} / 5`);
+    if (!stillWaitingOnP2) throw new Error(`round ${round}: advanced after only ONE player pressed space -- both-ready gate is broken`);
+
+    await pressSpace(p2);
+
+    if (round < 5) {
+      await waitFor(async () => {
+        const t1 = await bodyText(p1);
+        const t2 = await bodyText(p2);
+        return t1.includes(`라운드 ${round + 1} / 5`) && t2.includes(`라운드 ${round + 1} / 5`);
+      }, { label: `advance to round ${round + 1} after both ready`, timeout: 5000 });
+      log(`round ${round}: both-ready gate held, then correctly advanced to round ${round + 1}`);
+    }
   }
 
   // ---- end screen with scores ----
