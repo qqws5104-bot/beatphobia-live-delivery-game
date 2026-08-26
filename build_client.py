@@ -563,10 +563,10 @@ APP_JS_TEMPLATE = r"""
         + '<div class="space-hint">Space · 엘리베이터 이동 시작</div>';
       html += '</div>';
 
-      html += '<div class="split-two" style="margin-top:1rem;">';
-      ["1", "2"].forEach(function (s) {
-        html += '<div class="player-col' + (s === seat ? ' me' : '') + '"><h3>플레이어 ' + s + (s === seat ? ' (나)' : '') + '</h3>' + renderInvoiceList(st, s) + '</div>';
-      });
+      // opponent's package list is private -- only my own is ever rendered, here or anywhere else
+      // in the elevator phase (and, per the same rule, on the final results screen -- see renderEnd)
+      html += '<div style="margin-top:1rem;max-width:520px;">';
+      html += '<div class="player-col me"><h3>내 택배</h3>' + renderInvoiceList(st, seat) + '</div>';
       html += '</div>';
 
       html += '</div></div></main>';
@@ -613,10 +613,8 @@ APP_JS_TEMPLATE = r"""
     }
     html += '</div>';
 
-    html += '<div class="split-two" style="margin-top:1rem;">';
-    ["1", "2"].forEach(function (s) {
-      html += '<div class="player-col' + (s === seat ? ' me' : '') + '"><h3>플레이어 ' + s + (s === seat ? ' (나)' : '') + '</h3>' + renderInvoiceList(st, s) + '</div>';
-    });
+    html += '<div style="margin-top:1rem;max-width:520px;">';
+    html += '<div class="player-col me"><h3>내 택배</h3>' + renderInvoiceList(st, seat) + '</div>';
     html += '</div>';
 
     html += '</div></div></main>';
@@ -626,21 +624,28 @@ APP_JS_TEMPLATE = r"""
   function renderEnd(st, seat) {
     var s1 = totalScore("1", st), s2 = totalScore("2", st);
     var winner = s1 === s2 ? "무승부" : (s1 > s2 ? "플레이어 1 승리" : "플레이어 2 승리");
+    var otherSeat = seat === "1" ? "2" : "1";
     var html = '<main class="stage">';
     html += '<div class="winner-banner">' + winner + '</div>';
     html += '<div class="split-two">';
-    ["1", "2"].forEach(function (s) {
-      var invs = st.players[s].invoices.slice().sort(function (a, b) { return a.acquiredSeq - b.acquiredSeq; });
-      html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">플레이어 ' + s + ' — 총점 ' + totalScore(s, st) + '</h3>';
-      html += '<table class="score-table"><thead><tr><th>종류</th><th>목적지</th><th>결과</th><th>점수</th></tr></thead><tbody>';
-      invs.forEach(function (inv) {
-        var t = TYPES[inv.catIdx];
-        var pts = scoreInvoice(inv);
-        html += '<tr><td>' + esc(t.name) + '</td><td>' + roomCode(inv.floorIdx, inv.room) + '</td><td>' + resultLabel(inv) + '</td><td>' + (pts > 0 ? "+" : "") + pts + '</td></tr>';
-      });
-      if (!invs.length) html += '<tr><td colspan="4" style="color:var(--muted)">확보한 택배 없음</td></tr>';
-      html += '</tbody></table></div>';
+
+    // my own results: full itemized breakdown, as before
+    var myInvs = st.players[seat].invoices.slice().sort(function (a, b) { return a.acquiredSeq - b.acquiredSeq; });
+    html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">플레이어 ' + seat + ' (나) — 총점 ' + totalScore(seat, st) + '</h3>';
+    html += '<table class="score-table"><thead><tr><th>종류</th><th>목적지</th><th>결과</th><th>점수</th></tr></thead><tbody>';
+    myInvs.forEach(function (inv) {
+      var t = TYPES[inv.catIdx];
+      var pts = scoreInvoice(inv);
+      html += '<tr><td>' + esc(t.name) + '</td><td>' + roomCode(inv.floorIdx, inv.room) + '</td><td>' + resultLabel(inv) + '</td><td>' + (pts > 0 ? "+" : "") + pts + '</td></tr>';
     });
+    if (!myInvs.length) html += '<tr><td colspan="4" style="color:var(--muted)">확보한 택배 없음</td></tr>';
+    html += '</tbody></table></div>';
+
+    // opponent's results: total score only, for comparison -- never the itemized list of what
+    // they secured/delivered, since who-sent-what is private per player throughout the whole game
+    html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">플레이어 ' + otherSeat + ' — 총점 ' + totalScore(otherSeat, st) + '</h3>'
+      + '<div style="color:var(--muted);font-size:0.85rem;">상대방의 택배 목록은 비공개예요</div></div>';
+
     html += '</div></main>';
     return html;
   }

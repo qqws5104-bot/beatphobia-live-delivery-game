@@ -230,6 +230,13 @@ async function main() {
   if (!idleGateTextP1) throw new Error("pre-round-1 ready gate (idle state) did not render on p1");
   log("confirmed: elevator phase does not auto-start voting -- idle ready-gate shown first");
 
+  // ---- opponent's package list must never be rendered, anywhere in the elevator phase -- only
+  // my own invoice-list should be in the DOM (p1 has secured 12 cells by now, so this isn't
+  // vacuously true because the list happens to be empty) ----
+  const myListCountIdle = await countSel(p1, ".invoice-list");
+  if (myListCountIdle !== 1) throw new Error(`expected exactly 1 rendered invoice-list (mine only) during the idle ready-gate, found ${myListCountIdle}`);
+  log("confirmed: opponent's package list is not rendered during the pre-round-1 ready gate");
+
   await pressSpace(p1);
   await p1.waitForTimeout(150);
   const stillIdleAfterOnlyP1 = (await countSel(p1, '[data-action="vote-up"]')) === 0;
@@ -280,6 +287,10 @@ async function main() {
         throw new Error(`round ${round} (${label}): expected ${myCount} own delivered item(s) rendered, got ${renderedItems} (raw state also has ${otherCount} opponent item(s) that must stay hidden)`);
       }
     }
+
+    // opponent's full package list must also never be rendered on the round-result screen
+    const myListCountResult = await countSel(p1, ".invoice-list");
+    if (myListCountResult !== 1) throw new Error(`round ${round}: expected exactly 1 rendered invoice-list (mine only), found ${myListCountResult}`);
 
     await pressSpace(p1);
     await p1.waitForTimeout(150);
@@ -338,14 +349,33 @@ async function main() {
     const t2 = await bodyText(p2);
     return t1.includes("총점") && t2.includes("총점");
   }, { label: "both reached end screen", timeout: 10000 });
-  const endText1 = await bodyText(p1);
-  const endText2 = await bodyText(p2);
-  const summary1 = endText1.split("\n").filter((l) => l.includes("총점") || l.includes("승리") || l.includes("무승부")).join(" | ");
-  const summary2 = endText2.split("\n").filter((l) => l.includes("총점") || l.includes("승리") || l.includes("무승부")).join(" | ");
-  log("p1 end screen:", summary1);
-  log("p2 end screen:", summary2);
-  if (summary1 !== summary2) throw new Error("p1 and p2 disagree on final scores/winner -- shared state diverged!\n  p1: " + summary1 + "\n  p2: " + summary2);
+  // Per-viewer text now legitimately differs (each page labels its OWN card "(나)" and lists its
+  // own seat first), so compare parsed {seat: score} maps and the winner banner instead of raw
+  // text equality.
+  async function endScores(p) {
+    const text = await bodyText(p);
+    const winnerLine = text.split("\n").find((l) => l.includes("승리") || l.includes("무승부")) || "";
+    const scores = {};
+    for (const m of text.matchAll(/플레이어\s*(\d)[^\n]*총점\s*(-?\d+)/g)) scores[m[1]] = Number(m[2]);
+    return { winnerLine, scores };
+  }
+  const end1 = await endScores(p1);
+  const end2 = await endScores(p2);
+  log("p1 end screen:", end1.winnerLine, JSON.stringify(end1.scores));
+  log("p2 end screen:", end2.winnerLine, JSON.stringify(end2.scores));
+  if (end1.winnerLine !== end2.winnerLine) throw new Error("p1 and p2 disagree on the winner banner -- shared state diverged!\n  p1: " + end1.winnerLine + "\n  p2: " + end2.winnerLine);
+  if (end1.scores["1"] !== end2.scores["1"] || end1.scores["2"] !== end2.scores["2"]) {
+    throw new Error("p1 and p2 disagree on final scores -- shared state diverged!\n  p1: " + JSON.stringify(end1.scores) + "\n  p2: " + JSON.stringify(end2.scores));
+  }
   log("both players see identical final scores (shared server state confirmed consistent)");
+
+  // ---- opponent's itemized package list must stay hidden on the final results screen too --
+  // only a single score-table (mine) should render, plus the "비공개" note for the opponent ----
+  const scoreTableCountP1 = await countSel(p1, ".score-table");
+  if (scoreTableCountP1 !== 1) throw new Error(`end screen: expected exactly 1 rendered score-table (mine only), found ${scoreTableCountP1}`);
+  const p1SeesPrivacyNote = (await bodyText(p1)).includes("비공개");
+  if (!p1SeesPrivacyNote) throw new Error("end screen: opponent's card should show a 'private' note instead of their itemized list");
+  log("confirmed: opponent's itemized package list stays hidden on the final results screen (total score only)");
 
   if (errors.length) {
     log("!! console/page errors captured during run:");
