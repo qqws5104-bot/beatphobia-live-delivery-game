@@ -159,6 +159,14 @@
   .floor-stop.current { background:rgba(240,184,74,0.14); color:var(--gold); }
   .floor-stop .car { width:10px; height:10px; border-radius:3px; background:transparent; }
   .floor-stop.current .car { background:var(--gold); box-shadow:0 0 10px var(--gold); }
+  /* the actual floor only changes once the 5s vote window resolves (aggregate tally, unchanged),
+     but every single up/down click -- mine or the opponent's -- gives the current-floor row an
+     immediate little tug in that direction, so voting feels responsive rather than silent until
+     the round ends. Purely cosmetic: no numbers are shown, just a nudge. */
+  @keyframes floorNudgeUp { 0% { transform:translateY(0); } 35% { transform:translateY(-9px); } 100% { transform:translateY(0); } }
+  @keyframes floorNudgeDown { 0% { transform:translateY(0); } 35% { transform:translateY(9px); } 100% { transform:translateY(0); } }
+  .floor-stop.nudge-up { animation:floorNudgeUp 0.4s ease; }
+  .floor-stop.nudge-down { animation:floorNudgeDown 0.4s ease; }
   .round-pill { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.8rem; border-radius:999px;
     background:rgba(109,187,253,0.14); color:var(--sky); font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .vote-buttons { display:flex; flex-direction:column; gap:0.7rem; margin-top:1rem; }
@@ -227,6 +235,32 @@
   function setMySeat(s) { try { sessionStorage.setItem("bp-seat", s); } catch (e) {} }
 
   var state = null; // populated by the first "state" message from the server
+
+  // ---------- elevator car nudge: purely cosmetic per-click feedback (see the .floor-stop.nudge-*
+  // CSS above) -- diffs the previous vote tally against the new one to see whether an up or down
+  // click just landed (from EITHER player -- their exact counts stay hidden, only the fact that
+  // something just moved is used), then gives the current-floor row a quick tug in that direction.
+  // The actual floor still only changes once the round resolves from the full aggregate. ----------
+  function detectVoteBump(prevState, nextState) {
+    if (!nextState || nextState.phase !== "elevator" || nextState.elevator.state !== "voting") return null;
+    if (!prevState || prevState.phase !== "elevator" || !prevState.elevator) return null;
+    if (prevState.elevator.round !== nextState.elevator.round) return null; // new round starting fresh, not a click
+    var pv = prevState.elevator.votes, nv = nextState.elevator.votes;
+    var upDelta = 0, downDelta = 0;
+    ["1", "2"].forEach(function (s) {
+      upDelta += nv[s].up - (pv[s] ? pv[s].up : 0);
+      downDelta += nv[s].down - (pv[s] ? pv[s].down : 0);
+    });
+    if (upDelta <= 0 && downDelta <= 0) return null;
+    return upDelta >= downDelta ? "up" : "down";
+  }
+  function bumpCar(dir) {
+    var row = document.querySelector(".floor-stop.current");
+    if (!row) return;
+    row.classList.remove("nudge-up", "nudge-down");
+    void row.offsetWidth; // force reflow so re-adding the same class restarts the animation
+    row.classList.add(dir === "up" ? "nudge-up" : "nudge-down");
+  }
   var local = { openCellId: null, toast: null };
   var wsConnected = false;
 
@@ -284,7 +318,12 @@
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (!msg) return;
-      if (msg.type === "state") { state = msg.state; render(); }
+      if (msg.type === "state") {
+        var bump = detectVoteBump(state, msg.state);
+        state = msg.state;
+        render();
+        if (bump) bumpCar(bump);
+      }
       else if (msg.type === "error") { handleWsError(msg); }
     };
     ws.onclose = function () { wsConnected = false; renderConnBanner(); setTimeout(connectWS, 1200); };
