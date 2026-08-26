@@ -64,6 +64,14 @@ async function main() {
 
   await waitFor(async () => (await bodyText(p1)).includes("엘리베이터"), { label: "elevator phase", timeout: 15000 });
 
+  // pre-round-1 ready gate: nothing has been voted on yet, so this must show the idle ready-row,
+  // not vote buttons
+  await p1.waitForTimeout(200);
+  await p1.screenshot({ path: path.join(OUT, "0_elevator_idle_ready_gate.png") });
+  await pressSpace(p1);
+  await pressSpace(p2);
+  await waitFor(async () => (await p1.locator('[data-action="vote-up"]').count()) > 0, { label: "round 1 voting starts" });
+
   // round 1: vote, then wait for result screen (which may or may not show a delivered item,
   // depending on random floor assignment -- either way the callout section should render)
   await clickSel(p1, '[data-action="vote-up"]');

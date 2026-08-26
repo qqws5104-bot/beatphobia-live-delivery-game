@@ -527,13 +527,14 @@ APP_JS_TEMPLATE = r"""
     }).join("") + '</div>';
   }
 
+  // Only ever passed MY OWN delivered items (see renderElevator) -- who received what is private
+  // per player, so there is no seat tag here; it's always understood to be "mine".
   function renderDeliveredCallout(delivered) {
     if (!delivered || !delivered.length) return '<div class="delivered-callout empty">이번 라운드에 배송된 택배가 없어요</div>';
     return '<div class="delivered-callout">' + delivered.map(function (d) {
       var t = TYPES[d.catIdx];
       return '<div class="delivered-item"><span class="swatch" style="background:' + t.color + '"></span>'
         + roomCode(d.floorIdx, d.room) + ' ' + esc(t.name)
-        + (d.seat === "1" || d.seat === "2" ? ' (플레이어 ' + d.seat + ')' : '')
         + '</div>';
     }).join('') + '</div>';
   }
@@ -546,6 +547,31 @@ APP_JS_TEMPLATE = r"""
     html += '<div class="card">';
     html += '<span class="round-pill">라운드 ' + st.elevator.round + ' / ' + ELEVATOR_ROUNDS + '</span>';
     html += '<div style="margin-top:0.6rem;font-family:var(--font-display);font-size:1.1rem;">현재 층: <strong style="color:var(--gold)">' + FLOORS[st.elevator.floorIdx] + '</strong></div>';
+
+    // Pre-round-1 gate: mirrors the between-round "result" ready-row, but with no voting UI at
+    // all yet (nothing has been voted on) -- just a moment to review invoices before both players
+    // press space to kick off round 1's 5-second vote.
+    if (st.elevator.state === "idle") {
+      var otherSeat0 = seat === "1" ? "2" : "1";
+      var myReady0 = !!st.elevator.readyNext[seat];
+      var otherReady0 = !!st.elevator.readyNext[otherSeat0];
+      html += '<div style="margin-top:0.75rem;color:var(--muted);font-size:0.9rem;">확보한 택배를 확인하고, 준비가 되면 스페이스바를 눌러주세요.</div>';
+      html += '<div class="ready-row" style="margin-top:0.75rem;">'
+        + '<span class="ready-chip' + (myReady0 ? ' is-ready' : '') + '">나 · 플레이어 ' + seat + (myReady0 ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
+        + '<span class="ready-chip' + (otherReady0 ? ' is-ready' : '') + '">플레이어 ' + otherSeat0 + (otherReady0 ? ' · 준비 완료' : ' · 대기 중') + '</span>'
+        + '</div>'
+        + '<div class="space-hint">Space · 엘리베이터 이동 시작</div>';
+      html += '</div>';
+
+      html += '<div class="split-two" style="margin-top:1rem;">';
+      ["1", "2"].forEach(function (s) {
+        html += '<div class="player-col' + (s === seat ? ' me' : '') + '"><h3>플레이어 ' + s + (s === seat ? ' (나)' : '') + '</h3>' + renderInvoiceList(st, s) + '</div>';
+      });
+      html += '</div>';
+
+      html += '</div></div></main>';
+      return html;
+    }
 
     var voting = st.elevator.state === "voting";
     var mine = st.elevator.votes[seat] || { up: 0, down: 0 };
@@ -565,11 +591,15 @@ APP_JS_TEMPLATE = r"""
       html += '<div style="margin-top:0.5rem;color:var(--muted);font-size:0.85rem;" id="round-clock">남은 시간 계산 중...</div>';
     } else if (st.elevator.log.length) {
       var last = st.elevator.log[st.elevator.log.length - 1];
+      // Only the numeric up/down tally is hidden here -- which direction won, and where the
+      // elevator ended up, are still shown. Delivered items are filtered to MY seat only: who
+      // received what package is private per player (see renderDeliveredCallout).
+      var myDelivered = (last.delivered || []).filter(function (d) { return d.seat === seat; });
       html += '<div class="round-result">'
-        + '<div>라운드 ' + last.round + ' 결과 — 위 ' + last.up + ' · 아래 ' + last.down
-        + ' → ' + (last.dir === "tie" ? "동률, 유지" : (last.dir === "up" ? "상승" : "하강"))
+        + '<div>라운드 ' + last.round + ' 결과 — '
+        + (last.dir === "tie" ? "동률, 유지" : (last.dir === "up" ? "상승" : "하강"))
         + ' (현재 ' + FLOORS[last.floorIdx] + ')</div>'
-        + renderDeliveredCallout(last.delivered)
+        + renderDeliveredCallout(myDelivered)
         + '</div>';
       var otherSeat = seat === "1" ? "2" : "1";
       var myReady = !!st.elevator.readyNext[seat];
@@ -685,7 +715,7 @@ APP_JS_TEMPLATE = r"""
       if (seat && state && state.phase === "lobby" && !e.repeat && !state.ready[seat]) {
         e.preventDefault();
         send({ type: "set-ready", seat: seat });
-      } else if (seat && state && state.phase === "elevator" && state.elevator.state === "result" && !e.repeat && !state.elevator.readyNext[seat]) {
+      } else if (seat && state && state.phase === "elevator" && (state.elevator.state === "result" || state.elevator.state === "idle") && !e.repeat && !state.elevator.readyNext[seat]) {
         e.preventDefault();
         send({ type: "elevator-ready", seat: seat });
       }

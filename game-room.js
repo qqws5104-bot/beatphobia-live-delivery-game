@@ -134,7 +134,10 @@ class GameRoom {
   _endSecurePhase() {
     if (this.state.phase !== "secure") return;
     this.state.phase = "elevator";
-    this._startVotingRound();
+    // don't auto-start round 1 -- wait at "idle" until both players press space, same as the
+    // between-round gate. Gives everyone a moment to look over their invoices first.
+    this.state.elevator.readyNext = { "1": false, "2": false };
+    this.emit();
   }
 
   // ---- elevator phase ----
@@ -157,7 +160,10 @@ class GameRoom {
   }
 
   // Returns the list of {seat, catIdx, floorIdx, room} for invoices delivered just now, so the
-  // "result" pause screen can show exactly what arrived this round (e.g. "4F 01호 신선·냉동 택배").
+  // "result" pause screen can show exactly what arrived this round (e.g. "401호 신선·냉동 택배").
+  // Only ONE package per player is delivered per floor visit -- the earliest-acquired (lowest
+  // acquiredSeq) undelivered invoice bound for this floor -- even if several are waiting here.
+  // Any others bound for the same floor stay pending until the elevator returns to it again.
   _applyDeliveries(round) {
     const floorIdx = this.state.elevator.floorIdx;
     const delivered = [];
@@ -165,10 +171,11 @@ class GameRoom {
       const invs = this.state.players[seat].invoices
         .filter((v) => v.deliveredRound === null && v.floorIdx === floorIdx)
         .sort((a, b) => a.acquiredSeq - b.acquiredSeq);
-      invs.forEach((v) => {
+      if (invs.length) {
+        const v = invs[0];
         v.deliveredRound = round;
         delivered.push({ seat, catIdx: v.catIdx, floorIdx: v.floorIdx, room: v.room });
-      });
+      }
     });
     return delivered;
   }
@@ -195,12 +202,20 @@ class GameRoom {
     this.emit();
   }
 
+  // Used both for the pre-round-1 gate ("idle") and the between-round gate ("result") -- in
+  // either case, once both players have pressed space, either round 1 begins (from "idle") or
+  // the next round begins / the game ends (from "result").
   setElevatorReady(seat) {
-    if (this.state.phase !== "elevator" || this.state.elevator.state !== "result") return;
-    this.touch();
+    if (this.state.phase !== "elevator") return;
     const el = this.state.elevator;
+    if (el.state !== "idle" && el.state !== "result") return;
+    this.touch();
     el.readyNext[seat] = true;
     if (!(el.readyNext["1"] && el.readyNext["2"])) { this.emit(); return; }
+    if (el.state === "idle") {
+      this._startVotingRound(); // begins round 1; also emits
+      return;
+    }
     if (el.round >= ELEVATOR_ROUNDS) {
       el.state = "done";
       this.state.phase = "end";

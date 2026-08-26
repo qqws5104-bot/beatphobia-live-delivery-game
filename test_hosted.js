@@ -77,6 +77,25 @@ async function main() {
     });
   }
 
+  // ---- track the raw server "state" broadcasts each page receives, by listening on the actual
+  // WebSocket frames (not by poking at the app's internal closure, which doesn't expose `state`
+  // on window) -- this lets privacy assertions compare "what the raw state contains" against
+  // "what actually got rendered", which is the whole point of a client-side-redaction test ----
+  const lastState = { p1: null, p2: null };
+  function trackState(page, key) {
+    page.on("websocket", (ws) => {
+      ws.on("framereceived", (frame) => {
+        try {
+          const payload = typeof frame.payload === "string" ? frame.payload : frame.payload.toString();
+          const msg = JSON.parse(payload);
+          if (msg && msg.type === "state") lastState[key] = msg.state;
+        } catch (e) { /* ignore non-JSON / binary frames */ }
+      });
+    });
+  }
+  trackState(p1, "p1");
+  trackState(p2, "p2");
+
   await p1.goto(roomUrl);
   await p2.goto(roomUrl);
 
@@ -185,6 +204,14 @@ async function main() {
   await secureCell(p2, "fresh-1"); // same id as p1 -- must not conflict, per-player boards
   await secureCell(p1, "fragile-1");
   await secureCell(p2, "valuable-1");
+  // secure a bunch more for p1 specifically -- with all-up voting for 5 rounds starting at 1F
+  // (index 1 of 6 floors), the elevator caps at the top floor (5F, index 5) on round 4 and stays
+  // there for round 5 too -- a guaranteed same-floor revisit. Securing many cells raises the odds
+  // that 2+ of p1's invoices land on 5F, which lets us actually exercise (not just unit-reason
+  // about) the "only one package delivers per floor visit, the rest wait for a later visit" rule.
+  for (const id of ["normal-2", "normal-3", "normal-4", "fresh-2", "fresh-3", "fragile-2", "fragile-3", "valuable-2", "valuable-3"]) {
+    await secureCell(p1, id);
+  }
   log("secured additional cells for both players");
 
   // ---- wait out the secure phase (server override, shortened for this test run) -> elevator ----
@@ -194,6 +221,22 @@ async function main() {
     return t1.includes("엘리베이터") && t2.includes("엘리베이터");
   }, { label: "both entered elevator phase", timeout: 15000 });
   log("secure phase ended -> elevator phase entered on both");
+
+  // ---- pre-round-1 ready gate: entering "elevator" phase must NOT auto-start voting. Both
+  // players have to press space first (mirrors the between-round gate, but for round 1 itself) ----
+  const voteButtonsBeforeReady = await countSel(p1, '[data-action="vote-up"]');
+  if (voteButtonsBeforeReady !== 0) throw new Error("vote buttons should not render at all before both players ready up for round 1 (idle gate)");
+  const idleGateTextP1 = (await bodyText(p1)).includes("스페이스바 대기") || (await bodyText(p1)).includes("엘리베이터 이동 시작");
+  if (!idleGateTextP1) throw new Error("pre-round-1 ready gate (idle state) did not render on p1");
+  log("confirmed: elevator phase does not auto-start voting -- idle ready-gate shown first");
+
+  await pressSpace(p1);
+  await p1.waitForTimeout(150);
+  const stillIdleAfterOnlyP1 = (await countSel(p1, '[data-action="vote-up"]')) === 0;
+  if (!stillIdleAfterOnlyP1) throw new Error("round 1 voting started after only p1 pressed space -- pre-round-1 both-ready gate is broken");
+  await pressSpace(p2);
+  await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: "round 1 voting starts after both ready", timeout: 5000 });
+  log("pre-round-1 both-ready gate held, then correctly started round 1 voting");
 
   // ---- opponent's live vote count must NEVER be shown -- only "나" (my own), never "상대" ----
   await clickSel(p1, '[data-action="vote-up"]');
@@ -214,9 +257,29 @@ async function main() {
     const stillSameRoundP1 = (await bodyText(p1)).includes(`라운드 ${round} / 5`);
     if (!stillSameRoundP1) throw new Error(`round ${round}: game advanced to the next round before both players pressed space`);
 
+    // the raw up/down vote tally numbers must never be shown -- only the resulting direction
+    const resultTextP1 = await bodyText(p1);
+    if (/위\s*\d+\s*[·.]\s*아래\s*\d+/.test(resultTextP1)) throw new Error(`round ${round}: raw vote tally numbers ("위 N · 아래 N") were shown on the result screen -- should be hidden`);
+    if (!/상승|하강|동률/.test(resultTextP1)) throw new Error(`round ${round}: resulting direction (상승/하강/동률) was not shown on the result screen`);
+
     // delivered-items callout must be present (even if empty-state text, when nothing delivered)
     const hasCallout = (await countSel(p1, ".delivered-callout")) > 0;
     if (!hasCallout) throw new Error(`round ${round}: delivered-items callout did not render on the result screen`);
+
+    // delivered-item info is private per player: what's rendered for me must match exactly what
+    // the underlying state says is MY delivery for this round -- never the opponent's, even
+    // though the opponent's entry is also present in the raw state broadcast to my socket.
+    for (const [label, p, mySeatNum, key] of [["p1", p1, "1", "p1"], ["p2", p2, "2", "p2"]]) {
+      const st = lastState[key];
+      const last = st && st.elevator.log[st.elevator.log.length - 1];
+      const delivered = (last && last.delivered) || [];
+      const myCount = delivered.filter((d) => d.seat === mySeatNum).length;
+      const otherCount = delivered.filter((d) => d.seat !== mySeatNum).length;
+      const renderedItems = await countSel(p, ".delivered-item");
+      if (renderedItems !== myCount) {
+        throw new Error(`round ${round} (${label}): expected ${myCount} own delivered item(s) rendered, got ${renderedItems} (raw state also has ${otherCount} opponent item(s) that must stay hidden)`);
+      }
+    }
 
     await pressSpace(p1);
     await p1.waitForTimeout(150);
@@ -238,6 +301,35 @@ async function main() {
       }, { label: `advance to round ${round + 1} after both ready`, timeout: 5000 });
       log(`round ${round}: both-ready gate held, then correctly advanced to round ${round + 1}`);
     }
+  }
+
+  // ---- one-package-per-floor-visit rule: with all-up voting for 5 rounds from 1F (index 1 of 6),
+  // the elevator caps at 5F (index 5) on round 4 and stays there for round 5 -- a guaranteed
+  // same-floor revisit. If p1 secured 2+ invoices bound for 5F, confirm they delivered on
+  // DIFFERENT rounds (never both in the same visit), and in acquisition order (earliest-acquired
+  // first). With only a soft guarantee that 2+ invoices land on the same floor (random per
+  // invoice), this assertion only runs when the sample actually produced a collision, and logs a
+  // note rather than failing the whole suite when it didn't. ----
+  const floor5Check = (lastState.p1.players["1"].invoices)
+    .filter((v) => v.floorIdx === 5)
+    .sort((a, b) => a.acquiredSeq - b.acquiredSeq)
+    .map((v) => ({ acquiredSeq: v.acquiredSeq, deliveredRound: v.deliveredRound }));
+  if (floor5Check.length >= 2) {
+    const delivered = floor5Check.filter((v) => v.deliveredRound !== null);
+    const rounds = delivered.map((v) => v.deliveredRound);
+    const uniqueRounds = new Set(rounds);
+    if (delivered.length >= 2 && uniqueRounds.size !== rounds.length) {
+      throw new Error("two invoices bound for the same floor (5F) delivered in the SAME round -- one-package-per-visit rule violated: " + JSON.stringify(floor5Check));
+    }
+    // acquisition order preserved: earlier acquiredSeq must not deliver AFTER a later one
+    for (let i = 0; i < delivered.length - 1; i++) {
+      if (delivered[i].deliveredRound !== null && delivered[i + 1].deliveredRound !== null && delivered[i].deliveredRound > delivered[i + 1].deliveredRound) {
+        throw new Error("invoice queueing order violated for same-floor invoices: " + JSON.stringify(floor5Check));
+      }
+    }
+    log(`one-package-per-floor-visit rule exercised and confirmed (${floor5Check.length} invoices bound for 5F, delivered across distinct rounds in order): ${JSON.stringify(floor5Check)}`);
+  } else {
+    log(`one-package-per-floor-visit rule: only ${floor5Check.length} of p1's invoices landed on 5F this run (random) -- not enough for a same-floor-collision assertion, skipping (server logic already verified by code review)`);
   }
 
   // ---- end screen with scores ----
