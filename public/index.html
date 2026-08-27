@@ -106,8 +106,9 @@
   .board-grid { display:flex; flex-direction:column; gap:0.5rem; flex:1; min-height:0; overflow-y:auto; }
   .board-row { display:grid; grid-template-columns:minmax(110px,150px) repeat(6,1fr); gap:0.4rem; align-items:stretch; }
   .board-label { display:flex; flex-direction:column; justify-content:center; padding:0.4rem 0.6rem; border-radius:8px;
-    font-family:var(--font-display); font-weight:700; font-size:0.85rem; }
-  .board-label .price { margin-top:0.2rem; font-weight:600; font-size:0.72rem; opacity:0.85; }
+    font-family:var(--font-display); }
+  .board-label .cat-name { font-size:1rem; font-weight:800; letter-spacing:0.01em; text-shadow:0 1px 2px rgba(0,0,0,0.22); }
+  .board-label .price { display:flex; flex-direction:column; gap:0.1rem; margin-top:0.35rem; font-weight:600; font-size:0.72rem; opacity:0.85; }
   /* each cell is styled to read as a cardboard delivery box: folded top flaps (the two diagonal
      seams meeting at top-center), a vertical packing-tape strip down the middle, a beveled
      top/bottom edge for depth, and a small barcode tucked in the bottom-right corner. aspect-ratio
@@ -439,8 +440,8 @@
     TYPES.forEach(function (t, catIdx) {
       html += '<div class="board-row">';
       html += '<div class="board-label" style="background:' + t.color + ';color:' + t.ink + ';">'
-        + '<span>' + esc(t.name) + '</span>'
-        + '<span class="price">성공 ' + fmtWon(t.reward) + ' · 실패 ' + fmtWon(-t.penalty) + '</span>'
+        + '<span class="cat-name">' + esc(t.name) + '</span>'
+        + '<span class="price"><span>성공 ' + fmtWon(t.reward) + '</span><span>실패 ' + fmtWon(-t.penalty) + '</span></span>'
         + '</div>';
       for (var num = 0; num < t.count; num++) {
         var cell = boardById[t.key + "-" + (num + 1)];
