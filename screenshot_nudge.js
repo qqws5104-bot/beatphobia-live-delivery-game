@@ -37,7 +37,10 @@ async function main() {
   await pressSpace(p1);
   await pressSpace(p2);
   await waitFor(async () => (await bodyText(p1)).includes("택배 확보"), { label: "secure phase" });
-  await waitFor(async () => (await bodyText(p1)).includes("엘리베이터"), { label: "elevator phase", timeout: 15000 });
+  await waitFor(async () => (await bodyText(p1)).includes("우선 택배 지정"), { label: "priority phase", timeout: 15000 });
+  await pressSpace(p1);
+  await pressSpace(p2);
+  await waitFor(async () => (await bodyText(p1)).includes("엘리베이터"), { label: "elevator phase", timeout: 5000 });
   await pressSpace(p1);
   await pressSpace(p2);
   await waitFor(async () => (await p1.locator('[data-action="vote-up"]').count()) > 0, { label: "round 1 voting starts" });

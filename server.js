@@ -125,6 +125,26 @@ wss.on("connection", (ws, req) => {
         if (!conn.seat || (msg.dir !== "up" && msg.dir !== "down")) return;
         entry.room.vote(conn.seat, msg.dir);
         break;
+      case "set-priority":
+        if (!conn.seat || (msg.invoiceId !== null && typeof msg.invoiceId !== "string")) return;
+        entry.room.setPriority(conn.seat, msg.invoiceId);
+        break;
+      case "priority-ready":
+        if (!conn.seat) return;
+        entry.room.priorityReady(conn.seat);
+        break;
+      case "choose-delivery":
+        if (!conn.seat || typeof msg.invoiceId !== "string") return;
+        entry.room.chooseDelivery(conn.seat, msg.invoiceId);
+        break;
+      case "place-thief":
+        if (!conn.seat || typeof msg.floorIdx !== "number") return;
+        entry.room.placeThief(conn.seat, msg.floorIdx);
+        break;
+      case "halftime-ready":
+        if (!conn.seat) return;
+        entry.room.halftimeReady(conn.seat);
+        break;
       default:
         break;
     }

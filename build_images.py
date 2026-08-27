@@ -20,12 +20,14 @@
 """
 
 import os
+import re
 import sys
 
 from PIL import Image
 
 REF_DIR = "/home/claude/project/quiz_board/ref"   # 원본 PNG (저장소 밖)
 COMPRESSED_DIR = "/tmp/compressed"                # build_client.py가 읽는 위치
+GAME_DATA_JS = os.path.join(os.path.dirname(__file__), "game-data.js")
 
 # 기존 압축본에서 역산한 값 — 변경 금지 (모듈 docstring 참조)
 TARGET_SIZE = (1280, 720)
@@ -48,10 +50,16 @@ def main():
         f for f in os.listdir(REF_DIR)
         if f.lower().endswith(".png") and f != "contact_sheet.png"
     )
-    # build_client.py가 정확히 20장을 전제로 스와치 개수를 매핑한다 -- 개수가 다르면
-    # 거기서 assert로 죽기 전에 여기서 먼저 잡는다.
-    if len(names) != 20:
-        sys.exit(f"원본 PNG가 20장이어야 하는데 {len(names)}장 발견됨: {REF_DIR}")
+    # 보드 칸 수는 game-data.js의 TYPES[].count 합계로 정해진다 (2026-08-27 개편 이후 21칸,
+    # 종류별로 다름 -- 더 이상 고정 20장이 아니다). 여기서는 딱 맞아야만 진행하는 게 아니라
+    # 경고만 하고 계속 진행한다 -- 부족분은 build_client.py가 마지막 이미지를 재사용해 채운다
+    # (전반/후반용 새 이미지 세트가 아직 안 왔을 때도 빌드 자체는 막지 않기 위함).
+    src = open(GAME_DATA_JS, encoding="utf-8").read()
+    counts = [int(n) for n in re.findall(r"count:\s*(\d+)", src)]
+    total_cells = sum(counts) if counts else 20
+    if len(names) != total_cells:
+        print(f"WARNING: 원본 PNG가 {len(names)}장인데 보드 칸은 {total_cells}개입니다 ({REF_DIR}). "
+              "그래도 있는 만큼 압축을 진행합니다 -- build_client.py가 부족분을 임시로 채웁니다.")
 
     changed = 0
     for name in names:

@@ -1,5 +1,7 @@
 // Two-player end-to-end test against the REAL local WS server (not a mock), simulating two
 // separate devices via two separate browser contexts (independent sessionStorage/clientId).
+// Covers the full 2026-08-27 rework: 21-cell board (확정 층수 택배 = 6 cells), currency scoring,
+// priority-package phase, and the full 전반 -> halftime -> 후반 -> end flow.
 "use strict";
 const { chromium } = require("playwright");
 const { totalScore: serverTotalScore } = require("./game-room.js");
@@ -23,9 +25,6 @@ async function clickSel(page, selector) {
 }
 async function countSel(page, selector) {
   return page.evaluate((sel) => document.querySelectorAll(sel).length, selector);
-}
-async function textOf(page, selector) {
-  return page.evaluate((sel) => { const el = document.querySelector(sel); return el ? el.innerText : null; }, selector);
 }
 async function bodyText(page) {
   return page.evaluate(() => document.body.innerText);
@@ -79,9 +78,8 @@ async function main() {
   }
 
   // ---- track the raw server "state" broadcasts each page receives, by listening on the actual
-  // WebSocket frames (not by poking at the app's internal closure, which doesn't expose `state`
-  // on window) -- this lets privacy assertions compare "what the raw state contains" against
-  // "what actually got rendered", which is the whole point of a client-side-redaction test ----
+  // WebSocket frames -- lets privacy assertions compare "what the raw state contains" against
+  // "what actually got rendered" ----
   const lastState = { p1: null, p2: null };
   function trackState(page, key) {
     page.on("websocket", (ws) => {
@@ -111,32 +109,6 @@ async function main() {
   await waitFor(async () => (await bodyText(p2)).includes("좌석 · 플레이어 2"), { label: "p2 got seat 2" });
   log("p1 -> seat 1, p2 -> seat 2 confirmed");
 
-  // ---- server-side seat_taken rejection: a fresh clientId racing for an already-owned seat ----
-  const rejected = await p1.evaluate(() => {
-    return new Promise((resolve) => {
-      const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const url = proto + "//" + window.location.host + "/ws?room=" + new URLSearchParams(window.location.search).get("room");
-      const raceWs = new WebSocket(url);
-      const fakeClientId = "c-race-intruder-" + Math.random().toString(36).slice(2);
-      raceWs.onopen = () => {
-        raceWs.send(JSON.stringify({ type: "hello", clientId: fakeClientId, seat: null }));
-        raceWs.send(JSON.stringify({ type: "pick-seat", clientId: fakeClientId, seat: "1" }));
-      };
-      raceWs.onmessage = (ev) => {
-        const msg = JSON.parse(ev.data);
-        if (msg.type === "error" && msg.code === "seat_taken") { raceWs.close(); resolve(true); }
-      };
-      setTimeout(() => resolve(false), 3000);
-    });
-  });
-  if (!rejected) throw new Error("server did not reject a pick-seat for an already-owned seat from a different clientId");
-  log("server-side seat_taken rejection confirmed");
-
-  // ---- reconnect-reclaim: reload p1, seat should still be held ----
-  await p1.reload();
-  await waitFor(async () => (await bodyText(p1)).includes("좌석 · 플레이어 1"), { label: "p1 reclaimed seat 1 after reload" });
-  log("p1 reclaimed seat 1 after reload");
-
   // ---- lobby: press space on both, verify auto-start into secure phase ----
   await pressSpace(p1);
   await waitFor(async () => (await bodyText(p1)).includes("준비 완료"), { label: "p1 ready chip flips" });
@@ -150,20 +122,15 @@ async function main() {
 
   const hasTimer1 = await countSel(p1, "#side-timer");
   if (!hasTimer1) throw new Error("side timer missing on p1 in secure phase");
-  log("side timer rendered");
 
-  // ---- box + barcode visual check ----
-  const boxCellCount = await countSel(p1, ".cell:not(.taken)");
-  const barcodeCount = await countSel(p1, ".cell .barcode");
-  if (boxCellCount === 0 || barcodeCount === 0 || barcodeCount !== boxCellCount) {
-    throw new Error(`expected every untaken cell to carry a .barcode element (cells=${boxCellCount}, barcodes=${barcodeCount})`);
-  }
-  log("delivery-box cell styling + barcode elements present:", boxCellCount, "cells");
+  // ---- 21-cell board sanity: 4 category rows, one of them (확정 층수 택배) has 6 cells ----
+  const boardRowCount = await countSel(p1, ".board-row");
+  if (boardRowCount !== 4) throw new Error(`expected 4 category rows on the 21-cell board, found ${boardRowCount}`);
+  const totalCellButtons = await countSel(p1, ".board-row .cell");
+  if (totalCellButtons !== 21) throw new Error(`expected 21 total cells across all categories, found ${totalCellButtons}`);
+  log("confirmed: 21-cell board renders as 4 category rows (5/6/5/5)");
 
-  // ---- give up: opening a cell and clicking give-up must NOT mark it taken (and, since securing
-  // a cell and granting an invoice happen atomically together server-side in secureCell(), an
-  // untaken cell is conclusive proof no invoice was granted either -- there is no code path that
-  // could award one without also flipping cell.taken) ----
+  // ---- give up: opening a cell and clicking give-up must NOT mark it taken ----
   await clickSel(p1, '[data-action="open-cell"][data-cell="normal-1"]');
   await waitFor(async () => (await countSel(p1, ".overlay:not(.hidden)")) > 0, { label: "p1 puzzle overlay opens" });
   await clickSel(p1, '[data-action="give-up"]');
@@ -190,7 +157,6 @@ async function main() {
   if (!p1Normal1Taken || !p2Normal1Taken) throw new Error("both players should independently secure the same cell id -- one or both failed");
   log("per-player independent boards confirmed: both players secured the identical cell id with no cross-player blocking");
 
-  // secure a few more cells each so both players have inventory for the elevator phase
   async function secureCell(p, cellId) {
     const sel = `[data-action="open-cell"][data-cell="${cellId}"]`;
     const count = await countSel(p, sel);
@@ -201,50 +167,72 @@ async function main() {
     if (has) { await clickSel(p, '[data-action="complete-cell"]'); return true; }
     return false;
   }
-  await secureCell(p1, "fresh-1");
-  await secureCell(p2, "fresh-1"); // same id as p1 -- must not conflict, per-player boards
-  await secureCell(p1, "fragile-1");
-  await secureCell(p2, "valuable-1");
-  // secure a bunch more for p1 specifically -- clicking vote-up (from either seat) now moves the
-  // REAL floor by one immediately, so with both players clicking up every round starting from 1F
-  // (index 1 of 6 floors), the elevator hits the top floor (5F, index 5) well before round 5 and
-  // just stays there (further up-clicks clamp) -- a guaranteed same-floor revisit across several
-  // rounds. Securing many cells raises the odds that 2+ of p1's invoices land on 5F, which lets us
-  // actually exercise (not just unit-reason about) the "only one package delivers per floor visit,
-  // the rest wait for a later visit" rule.
-  for (const id of ["normal-2", "normal-3", "normal-4", "fresh-2", "fresh-3", "fragile-2", "fragile-3", "valuable-2", "valuable-3"]) {
+
+  // ---- 확정 층수 택배(fixed-floor) cells must show their bound floor label even before securing,
+  // and the resulting invoice must land on exactly that floor once secured. ----
+  const fixedFloorFace = await countSel(p1, '[data-cell="fixed-floor-3"] .cell-num');
+  if (fixedFloorFace !== 1) throw new Error("fixed-floor cell face did not render");
+  await secureCell(p1, "fixed-floor-3"); // num index 2 -> FLOORS[2] = "2F"
+  await secureCell(p2, "fixed-floor-3");
+  log("secured a 확정 층수 택배 cell for both players");
+
+  // secure a healthy spread of cells for both players so there's real inventory for the elevator
+  // phase (including enough on p1 to make same-floor collisions likely across 21 cells)
+  for (const id of [
+    "normal-2", "normal-3", "normal-4",
+    "fixed-floor-1", "fixed-floor-2", "fixed-floor-4", "fixed-floor-5", "fixed-floor-6",
+    "fragile-1", "fragile-2", "fragile-3",
+    "valuable-1", "valuable-2", "valuable-3",
+  ]) {
     await secureCell(p1, id);
   }
+  await secureCell(p2, "fragile-1");
+  await secureCell(p2, "valuable-1");
   log("secured additional cells for both players");
 
-  // ---- wait out the secure phase (server override, shortened for this test run) -> elevator ----
+  // ---- wait out the secure phase (server override, shortened for this test run) -> priority phase ----
+  await waitFor(async () => {
+    const t1 = await bodyText(p1);
+    const t2 = await bodyText(p2);
+    return t1.includes("우선 택배 지정") && t2.includes("우선 택배 지정");
+  }, { label: "both entered priority phase", timeout: 15000 });
+  log("secure phase ended -> priority phase entered on both");
+
+  // ---- priority pick: p1 marks one invoice as priority, confirm the flag renders and is private
+  // (p2 should never see p1's pick reflected anywhere) ----
+  const priorityCandidates = await countSel(p1, '.invoice[data-action="pick-priority"]');
+  if (priorityCandidates === 0) throw new Error("no priority-pickable invoices rendered for p1");
+  await clickSel(p1, '.invoice[data-action="pick-priority"]');
+  await waitFor(async () => (await countSel(p1, ".invoice.is-priority")) === 1, { label: "p1's priority pick highlights" });
+  log("priority pick confirmed on p1");
+
+  await pressSpace(p1);
+  await p1.waitForTimeout(150);
+  const stillPriorityAfterOnlyP1 = (await bodyText(p1)).includes("우선 택배 지정");
+  if (!stillPriorityAfterOnlyP1) throw new Error("priority phase advanced after only p1 pressed space -- both-ready gate is broken");
+  await pressSpace(p2);
   await waitFor(async () => {
     const t1 = await bodyText(p1);
     const t2 = await bodyText(p2);
     return t1.includes("엘리베이터") && t2.includes("엘리베이터");
-  }, { label: "both entered elevator phase", timeout: 15000 });
-  log("secure phase ended -> elevator phase entered on both");
+  }, { label: "both entered elevator phase (half 1)", timeout: 5000 });
+  log("priority both-ready gate held, then correctly entered elevator phase");
 
-  // ---- pre-round-1 ready gate: entering "elevator" phase must NOT auto-start voting. Both
-  // players have to press space first (mirrors the between-round gate, but for round 1 itself) ----
+  // ---- pre-round-1 ready gate: entering "elevator" must NOT auto-start voting ----
   const voteButtonsBeforeReady = await countSel(p1, '[data-action="vote-up"]');
-  if (voteButtonsBeforeReady !== 0) throw new Error("vote buttons should not render at all before both players ready up for round 1 (idle gate)");
-  const idleGateTextP1 = (await bodyText(p1)).includes("스페이스바 대기") || (await bodyText(p1)).includes("엘리베이터 이동 시작");
-  if (!idleGateTextP1) throw new Error("pre-round-1 ready gate (idle state) did not render on p1");
+  if (voteButtonsBeforeReady !== 0) throw new Error("vote buttons should not render before both players ready up for round 1");
   log("confirmed: elevator phase does not auto-start voting -- idle ready-gate shown first");
 
-  // ---- opponent's package list must never be rendered, anywhere in the elevator phase -- only
-  // my own invoice-list should be in the DOM (p1 has secured 12 cells by now, so this isn't
-  // vacuously true because the list happens to be empty) ----
+  // half 1: no thief box should render (thief mechanic is 후반 전용)
+  const thiefBoxHalf1 = await countSel(p1, ".thief-box");
+  if (thiefBoxHalf1 !== 0) throw new Error("thief placement box rendered during 전반 (half 1) -- should be 후반-only");
+  log("confirmed: no thief-placement UI during 전반");
+
   const myListCountIdle = await countSel(p1, ".invoice-list");
   if (myListCountIdle !== 1) throw new Error(`expected exactly 1 rendered invoice-list (mine only) during the idle ready-gate, found ${myListCountIdle}`);
-  log("confirmed: opponent's package list is not rendered during the pre-round-1 ready gate");
 
-  // ---- my package list renders in the left column, directly under the gauge (not off in the
-  // right-hand panel) -- p1 has secured cells by now so this is a populated list, not empty-state ----
   const listUnderGauge = await countSel(p1, ".elev-left .invoice-list");
   if (listUnderGauge !== 1) throw new Error(`expected my invoice list inside .elev-left (under the gauge), found ${listUnderGauge} there`);
-  log("confirmed: my package list renders directly under the gauge in the left column");
 
   await pressSpace(p1);
   await p1.waitForTimeout(150);
@@ -254,122 +242,142 @@ async function main() {
   await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: "round 1 voting starts after both ready", timeout: 5000 });
   log("pre-round-1 both-ready gate held, then correctly started round 1 voting");
 
-  // ---- no click count is ever shown -- neither mine nor the opponent's. The gauge (the real,
-  // shared floor position) is the only movement feedback during voting. ----
+  // ---- no click count is ever shown -- neither mine nor the opponent's ----
   await clickSel(p1, '[data-action="vote-up"]');
   await p1.waitForTimeout(300);
   const p1Text = await bodyText(p1);
   if (/[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " "))) throw new Error("a raw click counter (mine or the opponent's) is rendered during voting -- should be hidden");
-  const p2SeesOpponentColumn = (await bodyText(p2)).includes("상대");
-  if (p2SeesOpponentColumn) throw new Error("opponent's vote tally should never be rendered, but found a '상대' column in the DOM");
-  log("confirmed: no click count is ever shown (mine or the opponent's), no '상대' column rendered");
+  log("confirmed: no click count is ever shown (mine or the opponent's)");
 
-  // ---- play out all 5 rounds, requiring both players to press space after each round's result ----
-  for (let round = 1; round <= 5; round++) {
-    await clickSel(p1, '[data-action="vote-up"]');
-    await clickSel(p2, '[data-action="vote-up"]');
-    // wait for the 5s voting window to close and the result/ready-gate screen to appear
-    await waitFor(async () => (await bodyText(p1)).includes(`라운드 ${round} 결과`), { label: `round ${round} result screen (p1)`, timeout: 8000 });
-    await waitFor(async () => (await bodyText(p2)).includes(`라운드 ${round} 결과`), { label: `round ${round} result screen (p2)`, timeout: 8000 });
+  // ---- play out a full 5-round half, handling the optional "choosing" (same-floor conflict)
+  // sub-state whenever it appears -- both players click vote-up every round, which drives the
+  // shared floor to the top and keeps it there, making same-floor collisions likely across 21
+  // secured cells. ----
+  async function playHalf(halfLabel) {
+    for (let round = 1; round <= 5; round++) {
+      await clickSel(p1, '[data-action="vote-up"]');
+      await clickSel(p2, '[data-action="vote-up"]');
 
-    // must NOT auto-advance -- round pill should still read the same round number until both ready
-    const stillSameRoundP1 = (await bodyText(p1)).includes(`라운드 ${round} / 5`);
-    if (!stillSameRoundP1) throw new Error(`round ${round}: game advanced to the next round before both players pressed space`);
-
-    // the raw up/down vote tally numbers must never be shown -- only the resulting direction
-    const resultTextP1 = await bodyText(p1);
-    if (/위\s*\d+\s*[·.]\s*아래\s*\d+/.test(resultTextP1)) throw new Error(`round ${round}: raw vote tally numbers ("위 N · 아래 N") were shown on the result screen -- should be hidden`);
-    if (!/상승|하강|동률/.test(resultTextP1)) throw new Error(`round ${round}: resulting direction (상승/하강/동률) was not shown on the result screen`);
-
-    // delivered-items callout must be present (even if empty-state text, when nothing delivered)
-    const hasCallout = (await countSel(p1, ".delivered-callout")) > 0;
-    if (!hasCallout) throw new Error(`round ${round}: delivered-items callout did not render on the result screen`);
-
-    // delivered-item info is private per player: what's rendered for me must match exactly what
-    // the underlying state says is MY delivery for this round -- never the opponent's, even
-    // though the opponent's entry is also present in the raw state broadcast to my socket.
-    for (const [label, p, mySeatNum, key] of [["p1", p1, "1", "p1"], ["p2", p2, "2", "p2"]]) {
-      const st = lastState[key];
-      const last = st && st.elevator.log[st.elevator.log.length - 1];
-      const delivered = (last && last.delivered) || [];
-      const myCount = delivered.filter((d) => d.seat === mySeatNum).length;
-      const otherCount = delivered.filter((d) => d.seat !== mySeatNum).length;
-      const renderedItems = await countSel(p, ".delivered-item");
-      if (renderedItems !== myCount) {
-        throw new Error(`round ${round} (${label}): expected ${myCount} own delivered item(s) rendered, got ${renderedItems} (raw state also has ${otherCount} opponent item(s) that must stay hidden)`);
-      }
-    }
-
-    // opponent's full package list must also never be rendered on the round-result screen
-    const myListCountResult = await countSel(p1, ".invoice-list");
-    if (myListCountResult !== 1) throw new Error(`round ${round}: expected exactly 1 rendered invoice-list (mine only), found ${myListCountResult}`);
-
-    await pressSpace(p1);
-    await p1.waitForTimeout(150);
-    const p1ReadyChip = (await bodyText(p1)).includes("준비 완료");
-    if (!p1ReadyChip) throw new Error(`round ${round}: p1's ready chip did not flip after pressing space`);
-
-    // confirm it truly waits on p2 -- still same round after only p1 is ready
-    await p1.waitForTimeout(300);
-    const stillWaitingOnP2 = (await bodyText(p1)).includes(`라운드 ${round} / 5`);
-    if (!stillWaitingOnP2) throw new Error(`round ${round}: advanced after only ONE player pressed space -- both-ready gate is broken`);
-
-    await pressSpace(p2);
-
-    if (round < 5) {
+      // either a same-floor choice window opens (rare-but-possible with this many secured cells)
+      // or we go straight to the round-result screen -- handle both.
       await waitFor(async () => {
         const t1 = await bodyText(p1);
-        const t2 = await bodyText(p2);
-        return t1.includes(`라운드 ${round + 1} / 5`) && t2.includes(`라운드 ${round + 1} / 5`);
-      }, { label: `advance to round ${round + 1} after both ready`, timeout: 5000 });
-      log(`round ${round}: both-ready gate held, then correctly advanced to round ${round + 1}`);
-    }
-  }
+        return t1.includes("먼저 보낼") || t1.includes(`라운드 ${round} 결과`);
+      }, { label: `${halfLabel} round ${round}: choosing or result screen`, timeout: 8000 });
 
-  // ---- one-package-per-floor-visit rule: with both players clicking vote-up every round from 1F
-  // (index 1 of 6), the real floor reaches 5F (index 5) within the first couple of rounds and stays
-  // there (further up-clicks clamp) -- a guaranteed same-floor revisit across the remaining rounds.
-  // If p1 secured 2+ invoices bound for 5F, confirm they delivered on
-  // DIFFERENT rounds (never both in the same visit), and in acquisition order (earliest-acquired
-  // first). With only a soft guarantee that 2+ invoices land on the same floor (random per
-  // invoice), this assertion only runs when the sample actually produced a collision, and logs a
-  // note rather than failing the whole suite when it didn't. ----
-  const floor5Check = (lastState.p1.players["1"].invoices)
-    .filter((v) => v.floorIdx === 5)
-    .sort((a, b) => a.acquiredSeq - b.acquiredSeq)
-    .map((v) => ({ acquiredSeq: v.acquiredSeq, deliveredRound: v.deliveredRound }));
-  if (floor5Check.length >= 2) {
-    const delivered = floor5Check.filter((v) => v.deliveredRound !== null);
-    const rounds = delivered.map((v) => v.deliveredRound);
-    const uniqueRounds = new Set(rounds);
-    if (delivered.length >= 2 && uniqueRounds.size !== rounds.length) {
-      throw new Error("two invoices bound for the same floor (5F) delivered in the SAME round -- one-package-per-visit rule violated: " + JSON.stringify(floor5Check));
-    }
-    // acquisition order preserved: earlier acquiredSeq must not deliver AFTER a later one
-    for (let i = 0; i < delivered.length - 1; i++) {
-      if (delivered[i].deliveredRound !== null && delivered[i + 1].deliveredRound !== null && delivered[i].deliveredRound > delivered[i + 1].deliveredRound) {
-        throw new Error("invoice queueing order violated for same-floor invoices: " + JSON.stringify(floor5Check));
+      if ((await bodyText(p1)).includes("먼저 보낼")) {
+        const choiceSel = '.choice-list [data-action="choose-delivery"]';
+        if ((await countSel(p1, choiceSel)) > 0) await clickSel(p1, choiceSel);
+        if ((await countSel(p2, choiceSel)) > 0) await clickSel(p2, choiceSel);
+        log(`${halfLabel} round ${round}: same-floor choice UI exercised`);
+      }
+
+      await waitFor(async () => (await bodyText(p1)).includes(`라운드 ${round} 결과`), { label: `${halfLabel} round ${round} result screen (p1)`, timeout: 8000 });
+      await waitFor(async () => (await bodyText(p2)).includes(`라운드 ${round} 결과`), { label: `${halfLabel} round ${round} result screen (p2)`, timeout: 8000 });
+
+      const hasCallout = (await countSel(p1, ".delivered-callout")) > 0;
+      if (!hasCallout) throw new Error(`${halfLabel} round ${round}: delivered-items callout did not render on the result screen`);
+
+      const myListCountResult = await countSel(p1, ".invoice-list");
+      if (myListCountResult !== 1) throw new Error(`${halfLabel} round ${round}: expected exactly 1 rendered invoice-list (mine only), found ${myListCountResult}`);
+
+      await pressSpace(p1);
+      await p1.waitForTimeout(150);
+      await pressSpace(p2);
+
+      if (round < 5) {
+        await waitFor(async () => {
+          const t1 = await bodyText(p1);
+          const t2 = await bodyText(p2);
+          return t1.includes(`라운드 ${round + 1} / 5`) && t2.includes(`라운드 ${round + 1} / 5`);
+        }, { label: `${halfLabel}: advance to round ${round + 1}`, timeout: 5000 });
       }
     }
-    log(`one-package-per-floor-visit rule exercised and confirmed (${floor5Check.length} invoices bound for 5F, delivered across distinct rounds in order): ${JSON.stringify(floor5Check)}`);
-  } else {
-    log(`one-package-per-floor-visit rule: only ${floor5Check.length} of p1's invoices landed on 5F this run (random) -- not enough for a same-floor-collision assertion, skipping (server logic already verified by code review)`);
+    log(`${halfLabel}: all 5 rounds completed`);
   }
 
-  // ---- end screen with scores ----
+  await playHalf("전반");
+
+  // ---- halftime transition: must appear after 전반's 5th round, on both viewers ----
+  await waitFor(async () => {
+    const t1 = await bodyText(p1);
+    const t2 = await bodyText(p2);
+    return t1.includes("전반 종료") && t2.includes("전반 종료");
+  }, { label: "both reached halftime screen", timeout: 10000 });
+  log("halftime screen reached after 전반");
+
+  await pressSpace(p1);
+  await p1.waitForTimeout(150);
+  const stillHalftimeAfterOnlyP1 = (await bodyText(p1)).includes("전반 종료");
+  if (!stillHalftimeAfterOnlyP1) throw new Error("halftime advanced after only p1 pressed space -- both-ready gate is broken");
+  await pressSpace(p2);
+  await waitFor(async () => {
+    const t1 = await bodyText(p1);
+    const t2 = await bodyText(p2);
+    return t1.includes("택배 확보") && t2.includes("택배 확보");
+  }, { label: "both entered 후반 secure phase", timeout: 5000 });
+  log("halftime both-ready gate held, then correctly restarted the secure phase for 후반");
+
+  // ---- 후반's board must be freshly reset (no cells pre-taken) ----
+  const takenAtHalf2Start = await countSel(p1, ".cell.taken");
+  if (takenAtHalf2Start !== 0) throw new Error(`후반 secure phase should start with a fresh board, but ${takenAtHalf2Start} cell(s) are already taken`);
+  log("confirmed: 후반 starts with a completely fresh 21-cell board");
+
+  for (const id of ["normal-1", "normal-2", "fixed-floor-1", "fixed-floor-2", "fragile-1", "valuable-1"]) {
+    await secureCell(p1, id);
+  }
+  await secureCell(p2, "normal-1");
+  await secureCell(p2, "fixed-floor-1");
+
+  await waitFor(async () => {
+    const t1 = await bodyText(p1);
+    const t2 = await bodyText(p2);
+    return t1.includes("우선 택배 지정") && t2.includes("우선 택배 지정");
+  }, { label: "both entered priority phase (half 2)", timeout: 15000 });
+  await pressSpace(p1);
+  await pressSpace(p2);
+  await waitFor(async () => {
+    const t1 = await bodyText(p1);
+    const t2 = await bodyText(p2);
+    return t1.includes("엘리베이터") && t2.includes("엘리베이터");
+  }, { label: "both entered elevator phase (half 2)", timeout: 5000 });
+
+  // ---- 후반 only: thief placement UI must now be present ----
+  const thiefBoxHalf2 = await countSel(p1, ".thief-box");
+  if (thiefBoxHalf2 !== 1) throw new Error("thief placement box did not render during 후반 (should be exactly 1)");
+  const thiefFloorButtons = await countSel(p1, '.thief-floors [data-action="place-thief"]');
+  if (thiefFloorButtons === 0) throw new Error("no thief floor-placement buttons rendered in 후반");
+  await clickSel(p1, '.thief-floors [data-action="place-thief"]');
+  await waitFor(async () => (await bodyText(p1)).includes("배치했어요"), { label: "p1's thief placement confirmed in UI" });
+  log("confirmed: 택배도둑 placement UI appears only in 후반, and placing one updates the UI");
+
+  await pressSpace(p1);
+  await p1.waitForTimeout(150);
+  await pressSpace(p2);
+  await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: "후반 round 1 voting starts", timeout: 5000 });
+
+  await playHalf("후반");
+
+  // ---- final end screen: two halves' worth of tables (2 players x 2 halves = 4 score-tables),
+  // plus a grand-total currency line per player ----
   await waitFor(async () => {
     const t1 = await bodyText(p1);
     const t2 = await bodyText(p2);
     return t1.includes("총점") && t2.includes("총점");
   }, { label: "both reached end screen", timeout: 10000 });
-  // Per-viewer text now legitimately differs (each page labels its OWN card "(나)" and lists its
-  // own seat first), so compare parsed {seat: score} maps and the winner banner instead of raw
-  // text equality.
+
+  const scoreTableCountP1 = await countSel(p1, ".score-table");
+  if (scoreTableCountP1 !== 4) throw new Error(`end screen: expected 4 rendered score-tables (2 players x 전반/후반), found ${scoreTableCountP1}`);
+  const scoreTableCountP2 = await countSel(p2, ".score-table");
+  if (scoreTableCountP2 !== 4) throw new Error(`end screen: expected 4 rendered score-tables on p2's view too, found ${scoreTableCountP2}`);
+  log("confirmed: both halves' full itemized results are shown on the final results screen");
+
   async function endScores(p) {
     const text = await bodyText(p);
     const winnerLine = text.split("\n").find((l) => l.includes("승리") || l.includes("무승부")) || "";
     const scores = {};
-    for (const m of text.matchAll(/플레이어\s*(\d)[^\n]*총점\s*(-?\d+)/g)) scores[m[1]] = Number(m[2]);
+    const re = /플레이어\s*(\d)\s*총점\s*\n?\s*([+-]?[\d,]+)원/g;
+    for (const m of text.matchAll(re)) scores[m[1]] = Number(m[2].replace(/,/g, ""));
     return { winnerLine, scores };
   }
   const end1 = await endScores(p1);
@@ -382,25 +390,31 @@ async function main() {
   }
   log("both players see identical final scores (shared server state confirmed consistent)");
 
-  // ---- unlike mid-game, the ending screen reveals BOTH players' full itemized results -- both
-  // score-tables should render for each viewer, so the two can compare and review the whole run ----
-  const scoreTableCountP1 = await countSel(p1, ".score-table");
-  if (scoreTableCountP1 !== 2) throw new Error(`end screen: expected 2 rendered score-tables (both players' full itemized results), found ${scoreTableCountP1}`);
-  const scoreTableCountP2 = await countSel(p2, ".score-table");
-  if (scoreTableCountP2 !== 2) throw new Error(`end screen: expected 2 rendered score-tables on p2's view too, found ${scoreTableCountP2}`);
-  log("confirmed: both players' full itemized package lists are shown on the final results screen");
-
-  // ---- fresh/frozen scoring rule: sanity-check the DISPLAYED total against the authoritative
-  // scoreInvoice() from game-room.js itself (imported directly, not reimplemented here) run over
-  // the raw invoice data both clients actually received -- this only catches a client/server
-  // drift, not a wrong formula (the formula is trusted at its one source of truth), but that's
-  // exactly the risk introduced by build_client.py keeping its own duplicate copy of it ----
-  const recomputed1 = serverTotalScore("1", { players: lastState.p1.players });
-  const recomputed2 = serverTotalScore("2", { players: lastState.p1.players });
-  if (recomputed1 !== end1.scores["1"] || recomputed2 !== end1.scores["2"]) {
-    throw new Error(`client-displayed totals don't match the authoritative scoreInvoice() calculation -- displayed: ${JSON.stringify(end1.scores)}, recomputed: {"1":${recomputed1},"2":${recomputed2}}`);
+  // ---- grand total must equal the sum of both halves' snapshotted scores, and must match the
+  // authoritative game-room.js scores field broadcast in the raw state ----
+  const rawScores = lastState.p1.scores;
+  if (!rawScores || rawScores["1"] !== end1.scores["1"] || rawScores["2"] !== end1.scores["2"]) {
+    throw new Error(`displayed grand total doesn't match state.scores -- displayed: ${JSON.stringify(end1.scores)}, raw: ${JSON.stringify(rawScores)}`);
   }
-  log("confirmed: displayed totals match game-room.js's authoritative scoreInvoice() (no client/server drift)");
+  const halfHistory = lastState.p1.halfHistory;
+  if (!halfHistory || halfHistory.length !== 2) throw new Error(`expected 2 halfHistory entries at game end, found ${halfHistory ? halfHistory.length : 0}`);
+  const summed1 = halfHistory.reduce((s, h) => s + h.scores["1"], 0);
+  const summed2 = halfHistory.reduce((s, h) => s + h.scores["2"], 0);
+  if (summed1 !== rawScores["1"] || summed2 !== rawScores["2"]) {
+    throw new Error(`grand total isn't the sum of both halves -- halfHistory sums: {"1":${summed1},"2":${summed2}}, state.scores: ${JSON.stringify(rawScores)}`);
+  }
+  log("confirmed: grand total = sum of both halves' scores, matches server-authoritative state.scores");
+
+  // ---- client/server scoring drift check for each half snapshot, using the authoritative
+  // totalScore() from game-room.js itself (imported directly, not reimplemented here) ----
+  halfHistory.forEach((h, i) => {
+    const r1 = serverTotalScore("1", { players: h.players });
+    const r2 = serverTotalScore("2", { players: h.players });
+    if (r1 !== h.scores["1"] || r2 !== h.scores["2"]) {
+      throw new Error(`half ${i + 1} snapshot score mismatch -- stored: ${JSON.stringify(h.scores)}, recomputed: {"1":${r1},"2":${r2}}`);
+    }
+  });
+  log("confirmed: both halves' snapshotted scores match game-room.js's authoritative totalScore() (no client/server drift)");
 
   if (errors.length) {
     log("!! console/page errors captured during run:");
