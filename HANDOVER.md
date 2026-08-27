@@ -1,8 +1,9 @@
 # 프로젝트 인수인계 문서 — 택배 배송 게임 (라이브)
 
 > 이 문서는 이 프로젝트를 처음 보는 작업자(Claude Code 포함)가 아무 사전 맥락 없이
-> 바로 작업에 들어갈 수 있도록 쓴 것이다. 작업 지시는 `WORKORDER-gauge-bar.md`에 따로 있다.
-> **작업 시작 전 이 문서를 끝까지 읽을 것.** 특히 "절대 건드리면 안 되는 것" 절.
+> 바로 작업에 들어갈 수 있도록 쓴 것이다.
+> **작업 시작 전 이 문서를 끝까지 읽을 것.** 특히 6절("절대 건드리면 안 되는 것")과
+> 2.1절(퍼즐 이미지 파이프라인 — 실패해도 에러가 안 나는 곳).
 
 ---
 
@@ -32,12 +33,52 @@
 game-data.js       공유 상수(경제/보드/타이머). 서버와 빌드 스크립트가 같이 읽는 단일 소스.
 game-room.js       방 하나의 권위 있는 상태 + 모든 리듀서. 게임 규칙의 실체가 전부 여기 있다.
 server.js          HTTP + WebSocket. 방 코드 발급, 정적 서빙, 소켓 메시지 → GameRoom 메서드 호출.
+build_images.py    퍼즐 이미지 압축 단계. 원본 PNG → /tmp/compressed/*.jpg. 아래 2.1절 참조.
 build_client.py    public/index.html을 생성하는 빌드 스크립트. CSS와 클라이언트 JS가 전부 여기 문자열로 들어있다.
 public/index.html  빌드 결과물. **커밋에 포함되어 그대로 배포된다.** 직접 수정 금지 (다음 빌드에 덮어써짐).
 test_hosted.js     Playwright E2E. 두 플레이어를 띄워 로비→확보→엘리베이터 5라운드→결과까지 전부 검증.
-test_nudge.js      엘리베이터 실시간 이동 전용 테스트.
+test_nudge.js      엘리베이터 실시간 이동 + 게이지 채움 검증 테스트.
 screenshot*.js     화면 검수용 스크린샷 스크립트들.
 render.yaml        Render Blueprint 설정.
+```
+
+### 2.1 퍼즐 이미지 파이프라인 (조용히 틀리기 쉬운 곳 — 반드시 읽을 것)
+
+이미지는 **2단계**를 거친다:
+
+```
+원본 PNG (저장소 밖)  ──build_images.py──▶  /tmp/compressed/*.jpg  ──build_client.py──▶  public/index.html
+   장당 ~835KB                                    장당 ~70KB              base64 인라인, 전체 1.9MB
+   1920x1081                                      1280x720 q78
+```
+
+- **원본 PNG는 이 저장소에 없다.** `/home/claude/project/quiz_board/ref/` (20장 + contact_sheet).
+  이미지를 바꿀 일이 없으면 신경 쓸 필요 없다 — 배포에 필요한 것은 이미 `public/index.html`에 들어 있다.
+- 원본 파일명이 깨져 보인다(`#Ub300#Uc9c0 1_10.png`). 예전에 `unzip`이 한글 파일명을 잘못 디코딩한 흔적인데,
+  `build_client.py`는 **정렬 순서와 개수(20장)만** 보므로 기능상 무해하다. 굳이 고치지 말 것 —
+  이름을 바꾸면 정렬 순서가 달라져 스와치 개수 매핑이 어긋난다.
+
+> **⚠️ 함정**: 원본 PNG만 교체하고 `build_client.py`를 돌리면 **빌드는 성공하지만 옛 이미지가 그대로 배포된다.**
+> `/tmp/compressed`에 남아 있는 예전 JPG를 읽기 때문이다. 에러가 나지 않아서 알아채기 어렵다.
+> **이미지를 바꿨다면 반드시 `python3 build_images.py`를 먼저 실행할 것.**
+> (실제로 이 함정 때문에 한 번 옛 이미지가 배포된 적이 있다.)
+
+> **⚠️ `/tmp/compressed`는 휘발성이다.** 컨테이너/머신이 바뀌면 사라지고, 그 상태에서
+> `build_client.py`는 `FileNotFoundError`로 죽는다. 그때 `build_images.py`를 돌리면 복구된다
+> (단 원본 PNG에 접근할 수 있어야 한다).
+
+압축 설정(1280x720 LANCZOS, JPEG q78, optimize)은 **바꾸지 말 것.** 기존 압축본과 바이트 단위로
+일치하도록 역산한 값이라, 바꾸면 20장 전부 재생성되어 `public/index.html` diff가 통째로 뒤집힌다.
+
+이미지 교체 절차:
+
+```bash
+# 1. 원본 PNG를 ref 디렉터리에 덮어쓴다 (파일명 유지!)
+# 2. 압축본 재생성  ← 빠뜨리기 쉬움
+python3 build_images.py
+# 3. 클라이언트 재빌드
+python3 build_client.py
+# 4. 검증: 원본 20장이 전부 빌드에 들어갔는지 확인 (5.4절)
 ```
 
 ### `build_client.py` 내부 구조 (중요)
@@ -197,6 +238,7 @@ node server.js          # 포트 3000
 |---|---|
 | `build_client.py` (CSS/JS) | `python3 build_client.py` → 서버 재시작 |
 | `game-data.js` (상수) | `python3 build_client.py` → 서버 재시작 (**양쪽이 읽으므로 둘 다 영향**) |
+| **퍼즐 이미지 원본 PNG** | **`python3 build_images.py` → `python3 build_client.py`** → 서버 재시작 (2.1절 함정 주의) |
 | `game-room.js`, `server.js` | 서버 재시작만 |
 
 > `public/index.html`을 **직접 편집하지 말 것.** 다음 빌드에 통째로 덮어써진다.
@@ -239,7 +281,31 @@ python3 build_client.py && 서버 재시작
 Playwright 클릭이 가끔 산발적으로 실패한다(환경 특성). 같은 스크립트를 한 번 더 돌리면 통과한다 —
 코드 버그로 오해하지 말 것. 단, **연속 2회 이상 깨끗하게 통과하는 것을 기준**으로 삼는다.
 
-### 5.4 커밋 / 배포
+### 5.4 이미지가 실제로 빌드에 들어갔는지 검증
+
+이미지 교체는 실패해도 에러가 안 나므로(2.1절), 바꿨다면 이걸로 확인할 것:
+
+```bash
+python3 - <<'EOF'
+import re, base64, hashlib, os, io
+from PIL import Image
+html = open('public/index.html', encoding='utf-8').read()
+embedded = set(hashlib.md5(base64.b64decode(b)).hexdigest()
+               for b in re.findall(r'data:image/jpeg;base64,([A-Za-z0-9+/=]+)', html))
+REF = '/home/claude/project/quiz_board/ref'
+names = sorted(f for f in os.listdir(REF) if f.lower().endswith('.png') and f != 'contact_sheet.png')
+stale = []
+for n in names:
+    buf = io.BytesIO()
+    Image.open(os.path.join(REF, n)).convert('RGB').resize((1280, 720), Image.LANCZOS) \
+         .save(buf, 'JPEG', quality=78, optimize=True)
+    if hashlib.md5(buf.getvalue()).hexdigest() not in embedded:
+        stale.append(n)
+print('전부 반영됨:', not stale, '| 누락:', stale or '없음')
+EOF
+```
+
+### 5.5 커밋 / 배포
 
 ```bash
 git add <바뀐 소스> public/index.html    # 빌드 결과물도 반드시 함께 커밋
