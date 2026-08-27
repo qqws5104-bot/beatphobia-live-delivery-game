@@ -233,13 +233,17 @@
      click.) */
   .shaft { background:var(--bg-deep); border-radius:14px; border:1px solid var(--panel-line); padding:1rem 0.8rem; }
   .shaft-track { display:flex; flex-direction:column-reverse; gap:0.4rem; }
-  .floor-stop { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.6rem; border-radius:8px;
-    font-family:var(--font-display); font-weight:600; color:var(--muted);
-    transition:background-color 160ms ease, color 160ms ease; }
-  .floor-stop.current { background:rgba(226,105,26,0.14); color:var(--gold); font-weight:700; }
-  .floor-stop .car { width:10px; height:10px; border-radius:3px; background:transparent;
+  /* 2026-08-27 수정: 층수 숫자가 --muted(연한 갈색)라 --bg-deep(연한 탠) 위에서 잘 안 보인다는
+     피드백 -- 비활성 층은 더 짙은 잉크색으로 대비를 올리고, 현재 층은 옅은 틴트 배경 대신 꽉 찬
+     골드 배경 + 크림 글씨(버튼과 같은 언어)로 확실히 튀게 만들었다. */
+  .floor-stop { display:flex; align-items:center; gap:0.5rem; padding:0.55rem 0.6rem; border-radius:8px;
+    font-family:var(--font-display); font-weight:700; color:rgba(43,29,18,0.62); font-size:1.02rem;
+    transition:background-color 160ms ease, color 160ms ease, transform 160ms ease; }
+  .floor-stop.current { background:var(--gold); color:var(--gold-ink); font-weight:800;
+    font-size:1.12rem; box-shadow:0 6px 16px rgba(226,105,26,0.45); transform:scale(1.03); }
+  .floor-stop .car { width:11px; height:11px; border-radius:50%; background:transparent; flex-shrink:0;
     transition:background-color 160ms ease, box-shadow 160ms ease; }
-  .floor-stop.current .car { background:var(--gold); box-shadow:0 0 10px var(--gold); }
+  .floor-stop.current .car { background:var(--gold-ink); box-shadow:0 0 0 4px rgba(255,248,239,0.35); }
   .round-pill { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.8rem; border-radius:999px;
     background:rgba(37,105,168,0.12); color:var(--sky); font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .vote-buttons { display:flex; flex-direction:column; gap:0.7rem; margin-top:1rem; }
