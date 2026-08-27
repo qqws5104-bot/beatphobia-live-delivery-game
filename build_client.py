@@ -144,10 +144,16 @@ HEAD_HTML = """<!doctype html>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Noto+Sans+KR:wght@400;500;700;900&display=swap" rel="stylesheet">
 <style>
+  /* 2026-08-27 전면 리스킨: 어두운 남색 테마 -> 사용자가 준 "택배 요금표" 참고 포스터(크림/베이지
+     바탕 + 주황 포인트)에 맞춘 따뜻한 톤. 게임 전체(로비/보드/엘리베이터/하프타임/종료 화면 전부)에
+     적용 -- 사용자가 명시적으로 "게임 전체" 범위를 확인했다. 토큰만 바꾸면 대부분의 컴포넌트가
+     자동으로 따라오지만, 특정 hex 값을 직접 박아넣은 rgba(...) 리터럴들과, 어두운 배경을 전제로 한
+     "옅은 흰색 틴트" 오버레이들은 토큰이 아니라서 이 블록만 바꿔선 안 바뀐다 -- 아래 각 규칙에서
+     개별적으로 손봤다 (검색: 2026-08-27 리스킨). */
   :root {
-    --bg: #101a2c; --bg-deep: #0a1220; --panel: #1b2a45; --panel-line: rgba(255,255,255,0.09);
-    --ink: #f5f4f0; --muted: #93a0be; --gold: #f0b84a; --gold-ink: #16233f;
-    --sky: #6dbbfd; --danger: #d9483a; --ok: #3fae6a; --visited: #3a4256;
+    --bg: #f7ecd9; --bg-deep: #efdcb2; --panel: #fffcf4; --panel-line: rgba(43,29,18,0.14);
+    --ink: #2b1d12; --muted: #8a7256; --gold: #e2691a; --gold-ink: #fff8ef;
+    --sky: #2569a8; --danger: #c7402d; --ok: #2f8f52; --visited: #d8c7a1;
     --font-display: 'Oswald','Noto Sans KR',sans-serif; --font-body: 'Noto Sans KR',system-ui,-apple-system,sans-serif;
   }
   * { box-sizing: border-box; }
@@ -157,16 +163,16 @@ HEAD_HTML = """<!doctype html>
   button { font-family:inherit; cursor:pointer; }
   .topbar { display:flex; align-items:center; justify-content:space-between; gap:1rem;
     padding:0.9rem clamp(1rem,3vw,2.2rem); border-bottom:1px solid var(--panel-line);
-    background:linear-gradient(180deg,var(--bg-deep),rgba(10,18,32,0.4)); flex-wrap:wrap; }
+    background:linear-gradient(180deg,var(--bg-deep),rgba(239,220,178,0)); flex-wrap:wrap; }
   .topbar .brand { display:flex; flex-direction:column; gap:0.3rem; }
   .topbar .eyebrow { font-family:var(--font-display); font-size:0.7rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--gold); font-weight:600; }
   .topbar h1 { margin:0; font-size:clamp(1.1rem,2vw,1.5rem); font-weight:700; }
   .topbar .right { display:flex; align-items:center; gap:0.6rem; flex-wrap:wrap; }
   .seat-badge { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.7rem; border-radius:999px;
-    border:1px solid rgba(240,184,74,0.4); background:rgba(240,184,74,0.1); color:var(--gold);
+    border:1px solid rgba(226,105,26,0.4); background:rgba(226,105,26,0.08); color:var(--gold);
     font-family:var(--font-display); font-size:0.82rem; font-weight:600; }
   .room-chip { display:inline-flex; align-items:center; gap:0.35rem; padding:0.3rem 0.7rem; border-radius:999px;
-    border:1px solid rgba(109,187,253,0.4); background:rgba(109,187,253,0.1); color:var(--sky);
+    border:1px solid rgba(37,105,168,0.35); background:rgba(37,105,168,0.1); color:var(--sky);
     font-family:var(--font-display); font-size:0.82rem; font-weight:600; letter-spacing:0.05em; }
   .conn-banner { position:fixed; top:0; left:0; right:0; z-index:90; text-align:center; padding:0.5rem;
     background:var(--danger); color:#fff; font-family:var(--font-display); font-size:0.85rem; font-weight:600; }
@@ -214,8 +220,10 @@ HEAD_HTML = """<!doctype html>
   .timer-row { display:flex; align-items:center; justify-content:space-between; gap:1rem; }
   .timer-label { font-family:var(--font-display); font-size:0.85rem; color:var(--muted); letter-spacing:0.05em; }
   .timer-num { font-family:var(--font-display); font-size:1.9rem; font-weight:700; font-variant-numeric:tabular-nums; color:var(--gold); }
-  .timer-bar { height:8px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden; margin-top:0.5rem; }
+  .timer-bar { height:8px; border-radius:999px; background:rgba(43,29,18,0.1); overflow:hidden; margin-top:0.5rem; }
   .timer-bar > i { display:block; height:100%; background:var(--gold); transition:width 0.3s linear; }
+  .time-left-big { margin-top:0.6rem; font-family:var(--font-display); font-weight:700; font-size:1.5rem;
+    color:var(--gold); font-variant-numeric:tabular-nums; letter-spacing:0.02em; }
 
   .side-timer { position:fixed; left:1.1rem; top:6.5rem; width:128px; z-index:30; text-align:center;
     background:var(--panel); border:1px solid var(--panel-line); border-radius:14px; padding:0.9rem 0.8rem;
@@ -229,9 +237,9 @@ HEAD_HTML = """<!doctype html>
   .ready-row { display:flex; gap:0.7rem; justify-content:center; margin-top:1.2rem; flex-wrap:wrap; }
   .ready-chip { font-family:var(--font-display); font-size:0.85rem; font-weight:600; padding:0.5rem 0.9rem;
     border-radius:999px; border:1px solid var(--panel-line); color:var(--muted); }
-  .ready-chip.is-ready { color:var(--ok); border-color:rgba(63,174,106,0.5); background:rgba(63,174,106,0.1); }
+  .ready-chip.is-ready { color:var(--ok); border-color:rgba(47,143,82,0.45); background:rgba(47,143,82,0.1); }
   .space-hint { margin:1.4rem auto 0; width:min(220px,80%); padding:0.9rem; text-align:center; border-radius:10px;
-    border:1px solid var(--panel-line); background:rgba(255,255,255,0.03); font-family:var(--font-display);
+    border:1px solid var(--panel-line); background:rgba(43,29,18,0.035); font-family:var(--font-display);
     letter-spacing:0.08em; color:var(--muted); }
   .key-hint { margin-top:0.6rem; color:var(--muted); font-size:0.78rem; }
 
@@ -242,10 +250,28 @@ HEAD_HTML = """<!doctype html>
      5 of them) stacked in a flex column. */
   .board-grid { display:flex; flex-direction:column; gap:0.5rem; flex:1; min-height:0; overflow-y:auto; }
   .board-row { display:grid; grid-template-columns:minmax(110px,150px) repeat(6,1fr); gap:0.4rem; align-items:stretch; }
-  .board-label { display:flex; flex-direction:column; justify-content:center; padding:0.4rem 0.6rem; border-radius:8px;
-    font-family:var(--font-display); }
-  .board-label .cat-name { font-size:1rem; font-weight:800; letter-spacing:0.01em; text-shadow:0 1px 2px rgba(0,0,0,0.22); }
-  .board-label .price { display:flex; flex-direction:column; gap:0.1rem; margin-top:0.35rem; font-weight:600; font-size:0.72rem; opacity:0.85; }
+  /* 2026-08-27 리스킨: 참고 포스터("택배 요금표")의 카드 스타일을 그대로 옮겨왔다 -- 크림색 카드,
+     종류별 색을 두른 테두리, 위에 플랫 라인 아이콘 + 이름, 아래에 오렌지 헤더가 달린 "구분/요금"
+     미니 표. 실제 <table> 대신 grid로 짠 것은 이 칸(110~150px 폭, 보드 4행 높이에 맞춰야 함)이 너무
+     좁고 낮아서 표 레이아웃 엔진의 기본 여백을 이길 필요가 있었기 때문 -- 시각적으로는 표와 동일하게
+     읽힌다. 카드 자체는 var(--panel)(크림)에 앉고 카테고리 색은 테두리 + 아이콘 틴트로만 쓴다 (이전
+     버전처럼 배경 전체를 칠하지 않음 -- 그건 남색 테마에서의 방식이었고, 지금은 포스터의 "흰 카드 +
+     색 테두리" 언어를 따른다). */
+  .board-label { display:flex; flex-direction:column; gap:0.3rem; padding:0.45rem 0.55rem; border-radius:10px;
+    background:var(--panel); border:2px solid var(--panel-line); box-shadow:0 2px 7px rgba(43,29,18,0.1); }
+  .board-label .cat-head { display:flex; align-items:center; gap:0.32rem; }
+  .board-label .cat-icon { width:17px; height:17px; flex-shrink:0; }
+  .board-label .cat-icon svg { width:100%; height:100%; display:block; }
+  .board-label .cat-name { font-family:var(--font-display); font-size:0.76rem; font-weight:800; letter-spacing:0.005em;
+    line-height:1.15; color:var(--ink); }
+  .board-label .price-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px 3px; margin-top:0.05rem; }
+  .board-label .price-grid .ph { font-family:var(--font-display); font-size:0.56rem; font-weight:700;
+    color:var(--gold-ink); background:var(--gold); text-align:center; padding:0.1rem 0; letter-spacing:0.02em; }
+  .board-label .price-grid .ph:first-child { border-radius:4px 0 0 4px; }
+  .board-label .price-grid .ph:last-child { border-radius:0 4px 4px 0; }
+  .board-label .price-grid .pk { font-family:var(--font-display); font-size:0.6rem; color:var(--muted); font-weight:600; }
+  .board-label .price-grid .pv { font-family:var(--font-display); font-size:0.6rem; color:var(--ink); font-weight:700;
+    text-align:right; font-variant-numeric:tabular-nums; }
   /* each cell reads as a soft, rounded 3D delivery box. Base layer is still the category's flat
      color (set inline per-cell, see renderBoard) -- on top of that (2026-08-27) sits the user-
      supplied box illustration (.cell-art, one image per category, shared by all cells of that
@@ -335,21 +361,21 @@ HEAD_HTML = """<!doctype html>
   .floor-stop { display:flex; align-items:center; gap:0.5rem; padding:0.5rem 0.6rem; border-radius:8px;
     font-family:var(--font-display); font-weight:600; color:var(--muted);
     transition:background-color 160ms ease, color 160ms ease; }
-  .floor-stop.current { background:rgba(240,184,74,0.16); color:var(--gold); font-weight:700; }
+  .floor-stop.current { background:rgba(226,105,26,0.14); color:var(--gold); font-weight:700; }
   .floor-stop .car { width:10px; height:10px; border-radius:3px; background:transparent;
     transition:background-color 160ms ease, box-shadow 160ms ease; }
   .floor-stop.current .car { background:var(--gold); box-shadow:0 0 10px var(--gold); }
   .round-pill { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.8rem; border-radius:999px;
-    background:rgba(109,187,253,0.14); color:var(--sky); font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
+    background:rgba(37,105,168,0.12); color:var(--sky); font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .vote-buttons { display:flex; flex-direction:column; gap:0.7rem; margin-top:1rem; }
-  .round-result { background:rgba(63,174,106,0.1); border:1px solid rgba(63,174,106,0.3); border-radius:10px; padding:0.9rem 1rem; margin-top:0.8rem; }
+  .round-result { background:rgba(47,143,82,0.1); border:1px solid rgba(47,143,82,0.28); border-radius:10px; padding:0.9rem 1rem; margin-top:0.8rem; }
   .delivered-callout { margin-top:0.6rem; display:flex; flex-direction:column; gap:0.35rem; }
   .delivered-callout.empty { color:var(--muted); font-size:0.85rem; }
   .delivered-item { display:flex; align-items:center; gap:0.5rem; font-size:0.88rem; }
   .delivered-item .swatch { width:9px; height:18px; border-radius:3px; flex-shrink:0; }
 
   .invoice-list { display:flex; flex-direction:column; gap:0.5rem; margin-top:0.7rem; }
-  .invoice { display:flex; align-items:center; gap:0.7rem; padding:0.55rem 0.7rem; border-radius:9px; background:rgba(255,255,255,0.04); border:1px solid var(--panel-line); }
+  .invoice { display:flex; align-items:center; gap:0.7rem; padding:0.55rem 0.7rem; border-radius:9px; background:rgba(43,29,18,0.04); border:1px solid var(--panel-line); }
   .invoice.delivered { opacity:0.65; }
   .invoice .swatch { width:10px; height:34px; border-radius:4px; flex-shrink:0; }
   .invoice .meta { flex:1; }
@@ -366,22 +392,22 @@ HEAD_HTML = """<!doctype html>
 
   /* 우선 택배 지정 (엘리베이터 라운드 게이트 "idle"/"result"에 내장, 매 라운드 다시 고름) */
   .invoice.pickable { cursor:pointer; transition:background-color 120ms ease, border-color 120ms ease; }
-  .invoice.pickable:hover { background:rgba(255,255,255,0.08); }
-  .invoice.is-priority { border-color:var(--gold); background:rgba(240,184,74,0.12); }
+  .invoice.pickable:hover { background:rgba(43,29,18,0.08); }
+  .invoice.is-priority { border-color:var(--gold); background:rgba(226,105,26,0.1); }
   .invoice .priority-flag { font-family:var(--font-display); font-size:0.68rem; font-weight:700; color:var(--gold);
-    border:1px solid rgba(240,184,74,0.5); border-radius:999px; padding:0.15rem 0.45rem; white-space:nowrap; }
+    border:1px solid rgba(226,105,26,0.5); border-radius:999px; padding:0.15rem 0.45rem; white-space:nowrap; }
   .priority-picker { margin-top:0.75rem; padding-top:0.75rem; border-top:1px dashed var(--panel-line); }
   .priority-picker h4 { margin:0 0 0.5rem; font-family:var(--font-display); font-size:0.9rem; color:var(--gold); }
 
   /* same-floor 선택 (같은 층에 배송 대기 중인 내 택배가 2개 이상일 때, SAME_FLOOR_CHOICE_MS 동안) */
-  .choice-box { background:rgba(240,184,74,0.08); border:1px solid rgba(240,184,74,0.35); border-radius:12px;
+  .choice-box { background:rgba(226,105,26,0.08); border:1px solid rgba(226,105,26,0.3); border-radius:12px;
     padding:0.9rem 1rem; margin-top:0.75rem; }
   .choice-box h4 { margin:0 0 0.5rem; font-family:var(--font-display); font-size:0.95rem; color:var(--gold); }
   .choice-list { display:flex; flex-direction:column; gap:0.5rem; }
-  .choice-list .invoice.chosen { border-color:var(--ok); background:rgba(63,174,106,0.14); }
+  .choice-list .invoice.chosen { border-color:var(--ok); background:rgba(47,143,82,0.14); }
 
   /* 택배도둑 배치 전용 시간 (후반 전용, "thief" 상태 -- 라운드 이동 전 독립된 전체 화면) */
-  .thief-window { background:rgba(217,72,58,0.08); border:1px solid rgba(217,72,58,0.35); border-radius:12px;
+  .thief-window { background:rgba(199,64,45,0.08); border:1px solid rgba(199,64,45,0.3); border-radius:12px;
     padding:0.9rem 1rem; margin-top:0.75rem; }
   .thief-window h4 { margin:0 0 0.5rem; font-family:var(--font-display); font-size:0.95rem; color:var(--danger); }
   .thief-floors { display:flex; flex-wrap:wrap; gap:0.4rem; }
@@ -417,6 +443,16 @@ APP_JS_TEMPLATE = r"""
   // catIdx로 인덱싱하는 종류별 보드-칸 배경 일러스트 (위 BOX_ART_DIR 참고). CELLS[].src(칸마다 다른
   // 퍼즐 이미지, 오버레이 전용)와는 별개 -- 이건 보드 위 21칸 자체의 배경으로 쓴다.
   var BOX_ART = @@BOX_ART_JSON@@;
+  // 2026-08-27 리스킨: board-label 카드용 평평한 라인 아이콘 (TYPES 순서와 동일 -- 트럭/깨진 유리잔/
+  // 보석/체크마크 건물). box_art/의 3D 박스 일러스트와는 다른, 손으로 그린 별도의 단순한 SVG -- 그
+  // 일러스트는 라벨 카드 안에 아이콘 크기로 넣기엔 스타일이 안 맞아서(입체 박스 그림 vs 평면 라인
+  // 아이콘), 참고 포스터의 "구분/요금" 카드가 쓰는 플랫 아이콘 언어에 맞춰 새로 그렸다.
+  var CAT_ICONS = [
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="7" width="13" height="9"></rect><path d="M14 10h4l3 3v3h-7z"></path><circle cx="6" cy="18" r="1.6"></circle><circle cx="17" cy="18" r="1.6"></circle></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h10l-1 8a4 4 0 0 1-8 0z"></path><path d="M12 11v6"></path><path d="M9 20h6"></path><path d="M9 5l2 3-2 2 3 2"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l4.5-6h9L21 9"></path><path d="M3 9l9 12 9-12"></path><path d="M3 9h18"></path><path d="M9 3l3 6 3-6"></path></svg>',
+    '<svg viewBox="0 0 26 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="10" height="18"></rect><line x1="5" y1="6" x2="5" y2="6.01"></line><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="5" y1="10" x2="5" y2="10.01"></line><line x1="9" y1="10" x2="9" y2="10.01"></line><line x1="5" y1="14" x2="5" y2="14.01"></line><line x1="9" y1="14" x2="9" y2="14.01"></line><path d="M16 12l3 3 6-6"></path></svg>'
+  ];
   var ELEVATOR_ROUNDS = @@ELEVATOR_ROUNDS@@;
   var SECURE_PHASE_MS = @@SECURE_PHASE_MS@@;
   var PRIORITY_MULTIPLIER = @@PRIORITY_MULTIPLIER@@;
@@ -460,7 +496,10 @@ APP_JS_TEMPLATE = r"""
     return inv.deliveredWasPriority ? base * PRIORITY_MULTIPLIER : base;
   }
   function resultLabel(inv) {
-    if (inv.stolen) return "도난";
+    // 2026-08-27: 도난당한 송장도 "미배송"으로 통합 표기 (사용자 요청 -- 배송이 안 됐으니까).
+    // 페널티/소진 로직(scoreInvoice, deliveredRound 처리)은 그대로, 영구 라벨만 통일했다. 그 라운드의
+    // 실시간 안내(renderDeliveredCallout의 "택배도둑에게 도난당했어요!")는 별개로 남겨둠.
+    if (inv.stolen) return "미배송";
     return inv.deliveredRound === null ? "미배송" : "성공";
   }
   function totalScore(seat, st) {
@@ -608,10 +647,14 @@ APP_JS_TEMPLATE = r"""
     myBoard.forEach(function (c) { boardById[c.id] = c; });
     TYPES.forEach(function (t, catIdx) {
       html += '<div class="board-row">';
-      html += '<div class="board-label" style="background:' + t.color + ';color:' + t.ink + ';">'
-        + '<span class="cat-name">' + esc(t.name) + '</span>'
-        + '<span class="price"><span>성공 ' + fmtWon(t.reward) + '</span><span>실패 ' + fmtWon(-t.penalty) + '</span></span>'
-        + '</div>';
+      html += '<div class="board-label" style="border-color:' + t.color + ';">'
+        + '<div class="cat-head"><span class="cat-icon" style="color:' + t.color + '">' + CAT_ICONS[catIdx] + '</span>'
+        + '<span class="cat-name">' + esc(t.name) + '</span></div>'
+        + '<div class="price-grid">'
+        + '<span class="ph">구분</span><span class="ph">요금</span>'
+        + '<span class="pk">성공</span><span class="pv">' + fmtWon(t.reward) + '</span>'
+        + '<span class="pk">실패</span><span class="pv">' + fmtWon(-t.penalty) + '</span>'
+        + '</div></div>';
       for (var num = 0; num < t.count; num++) {
         var cell = boardById[t.key + "-" + (num + 1)];
         var taken = !!cell.taken;
@@ -680,7 +723,7 @@ APP_JS_TEMPLATE = r"""
     return '<div class="invoice-list">' + invs.map(function (inv) {
       var t = TYPES[inv.catIdx];
       var delivered = inv.deliveredRound !== null;
-      var stickerText = inv.stolen ? "도난" : (delivered ? ("완료 · R" + inv.deliveredRound) : "대기");
+      var stickerText = inv.stolen ? "미배송" : (delivered ? ("완료 · R" + inv.deliveredRound) : "대기");
       var isPendingPriority = !delivered && inv.id === pickedId;
       var isPriority = isPendingPriority || inv.deliveredWasPriority;
       var flagText = inv.deliveredWasPriority ? ('우선 x' + PRIORITY_MULTIPLIER + ' 성공') : (isPendingPriority ? ('이번 라운드 우선 x' + PRIORITY_MULTIPLIER) : '');
@@ -767,25 +810,29 @@ APP_JS_TEMPLATE = r"""
     // 아무 때나 놓을 수 있던 예전 방식 대신, 이제는 독립된 상태 화면이다). 배치는 선택사항(건너뛰기
     // 가능)이고, 배치 직후엔 아무 효과 없이 다음 라운드부터 실제로 작동한다 (game-room.js의 el.thieves
     // 참고). 둘 다 배치/건너뛰기를 마치면 타이머를 기다리지 않고 곧장 voting으로 넘어간다.
+    // 2026-08-27: 1인당 이 후반 전체(5라운드)를 통틀어 배치는 딱 1번만 허용 -- usedThisHalf가 true면
+    // 서버가 이미 매 라운드 자동으로 스킵 처리해두므로(placeThief 호출 없이도 doneMine이 true), 여기서는
+    // "이미 다 썼다"는 걸 구분해서 보여주기만 하면 된다.
     if (st.elevator.state === "thief") {
       var placedMine = st.elevator.thieves.placedThisRound[seat];
       var skippedMine = !!st.elevator.thieves.skipped[seat];
+      var usedUpMine = !!st.elevator.thieves.usedThisHalf[seat];
       var doneMine = placedMine !== null && placedMine !== undefined || skippedMine;
       html += '<div class="thief-window">';
-      html += '<h4>택배도둑 배치 (후반 전용)</h4>';
+      html += '<h4>택배도둑 배치 (후반 전용, 후반 통틀어 1회)</h4>';
       if (doneMine) {
         html += '<div style="color:var(--muted);font-size:0.85rem;">'
           + (placedMine !== null && placedMine !== undefined
             ? ('<strong style="color:var(--danger)">' + esc(FLOORS[placedMine]) + '</strong>에 배치했어요. 다음 라운드부터 그 층에 상대가 배송하면 뺏어요.')
-            : '이번 라운드는 배치하지 않았어요.')
+            : (usedUpMine ? '이번 후반에 택배도둑을 이미 사용했어요 (1인당 1회).' : '이번 라운드는 배치하지 않았어요.'))
           + ' 상대를 기다리는 중...</div>';
       } else {
-        html += '<div style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem;">층을 골라 배치하면, 다음 라운드에 상대가 그 층에 배송할 때 가로채서 상대에게 확정 마이너스 점수를 줘요.</div>';
+        html += '<div style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem;">층을 골라 배치하면, 다음 라운드에 상대가 그 층에 배송할 때 가로채서 상대에게 확정 마이너스 점수를 줘요. 이 후반 동안 딱 한 번만 놓을 수 있으니 신중하게 골라주세요.</div>';
         html += '<div class="thief-floors">' + FLOORS.map(function (f, i) {
           return '<button class="btn ghost" data-action="place-thief" data-floor-idx="' + i + '">' + esc(f) + '</button>';
         }).join('') + '<button class="btn ghost" data-action="skip-thief">건너뛰기</button></div>';
       }
-      html += '<div style="margin-top:0.6rem;color:var(--muted);font-size:0.8rem;" id="thief-clock">' + (doneMine ? '' : '남은 시간 계산 중...') + '</div>';
+      html += '<div class="time-left-big" id="thief-clock">' + (doneMine ? '' : '남은 시간 계산 중...') + '</div>';
       html += '</div>';
       html += '</div></div></main>';
       return html;
@@ -815,7 +862,7 @@ APP_JS_TEMPLATE = r"""
             + '<span class="sticker' + (isChosen ? '' : ' pending') + '">' + (isChosen ? '선택됨' : '선택') + '</span>'
             + '</div>';
         }).join('') + '</div>';
-        html += '<div style="margin-top:0.5rem;color:var(--muted);font-size:0.8rem;" id="choice-clock">' + (myChosen ? '상대를 기다리는 중...' : '남은 시간 계산 중...') + '</div>';
+        html += '<div class="time-left-big" id="choice-clock">' + (myChosen ? '상대를 기다리는 중...' : '남은 시간 계산 중...') + '</div>';
       } else {
         html += '<h4>잠시만요</h4><div style="color:var(--muted);font-size:0.85rem;">상대방이 같은 층 택배 중 먼저 보낼 걸 고르고 있어요...</div>';
       }
@@ -836,7 +883,7 @@ APP_JS_TEMPLATE = r"""
     html += '<div class="key-hint">' + (voting ? '키보드 ↑ / ↓ 화살표로도 누를 수 있어요' : '이번 라운드 투표가 끝났어요') + '</div>';
 
     if (voting) {
-      html += '<div style="margin-top:0.5rem;color:var(--muted);font-size:0.85rem;" id="round-clock">남은 시간 계산 중...</div>';
+      html += '<div class="time-left-big" id="round-clock">남은 시간 계산 중...</div>';
     } else if (st.elevator.log.length) {
       var last = st.elevator.log[st.elevator.log.length - 1];
       // Only the numeric up/down tally is hidden here -- which direction won, and where the

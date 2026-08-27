@@ -63,8 +63,14 @@ function scoreInvoice(inv) {
   const base = t.reward;
   return inv.deliveredWasPriority ? base * PRIORITY_MULTIPLIER : base;
 }
+// 2026-08-27: 도난당한 송장도 "미배송"으로 표기하도록 변경(사용자 요청 -- "배송이 되지 않았으니까").
+// 페널티/소진(재배송 불가) 로직은 이전과 동일 -- stolen은 여전히 deliveredRound를 채워 재시도 대상에서
+// 빠지게 하고 -penalty로 채점되지만(scoreInvoice, 변경 없음), 영구 상태 라벨만 "도난"에서 통합됐다.
+// 그 라운드의 실시간 결과 안내(_applyDeliveries가 만드는 delivered[].stolen, 클라이언트의
+// renderDeliveredCallout "택배도둑에게 도난당했어요!")는 별개로 남겨뒀다 -- 그건 "이번 라운드에 무슨
+// 일이 있었는지"를 보여주는 즉시성 정보라 계속 유용하다는 판단.
 function resultLabel(inv) {
-  if (inv.stolen) return "도난";
+  if (inv.stolen) return "미배송"; // deliveredRound는 채워져 있지만(재배송 방지용) 라벨은 미배송 취급
   return inv.deliveredRound === null ? "미배송" : "성공";
 }
 function totalScore(seat, state) {
@@ -104,7 +110,11 @@ function freshElevator() {
     // THIEF_PLACE_MS를 기다리지 않고 voting으로 넘어감 -- choosing의 조기-진행 패턴과 동일), active는
     // "바로 다음 라운드에 실제로 작동 중인 도둑 목록" -- 배치한 그 라운드에는 아직 작동하지 않고,
     // 다음 라운드의 thief 창이 열릴 때 activate된다 ("다음 라운드에 그 층에 배송하면 뺏어간다").
-    thieves: { placedThisRound: { "1": null, "2": null }, skipped: { "1": false, "2": false }, active: [] },
+    // usedThisHalf: 1인당 이 후반 전체(라운드 5개) 통틀어 택배도둑 배치는 딱 1번만 허용한다
+    // (2026-08-27 요청 -- 원래는 매 라운드 새로 놓을 수 있었음). 한 번 놓으면(스킵은 해당 안 됨)
+    // true로 굳어지고, 다음 하프에 freshElevator()가 다시 호출될 때만 리셋된다.
+    thieves: { placedThisRound: { "1": null, "2": null }, skipped: { "1": false, "2": false }, active: [],
+      usedThisHalf: { "1": false, "2": false } },
     thiefWindowEndsAt: null,
     log: [],
   };
@@ -248,6 +258,11 @@ class GameRoom {
       .map((s) => ({ seat: s, floorIdx: el.thieves.placedThisRound[s] }));
     el.thieves.placedThisRound = { "1": null, "2": null };
     el.thieves.skipped = { "1": false, "2": false };
+    // 이미 이 후반에 1회 배치를 다 쓴 플레이어는 이번 라운드도 자동으로 "넘김" 처리해서 굳이 화면에서
+    // 다시 액션을 요구하지 않는다 (2026-08-27, 후반 전체 1회 한도). 둘 다 이미 다 썼다면 아무도 놓을 수
+    // 없으니 thief 창 자체를 열지 않고 곧장 voting으로 넘어간다.
+    ["1", "2"].forEach((s) => { if (el.thieves.usedThisHalf[s]) el.thieves.skipped[s] = true; });
+    if (["1", "2"].every((s) => el.thieves.usedThisHalf[s])) { this._startVotingRound(); return; }
     el.state = "thief";
     el.thiefWindowEndsAt = Date.now() + THIEF_PLACE_MS;
     this._scheduleAt(el.thiefWindowEndsAt, () => this._endThiefWindow());
@@ -277,11 +292,13 @@ class GameRoom {
     // actual car move, not just their own
   }
 
-  // 후반(half===2)에서만, 그리고 오직 전용 "thief" 시간에만 유효. 1인당 라운드당 1회 -- 이번
-  // 라운드에 이미 배치했거나 넘겼다면 무시. 배치 직후엔 아무 효과 없고, 다음 라운드의 thief 창이
-  // 열릴 때(_startThiefWindow) active로 넘어가 작동한다. floorIdx가 null이면 "이번 라운드엔 안
-  // 놓음"으로 명시적으로 넘기는 것 -- 두 플레이어 모두 배치/넘기기를 마치면 THIEF_PLACE_MS를
-  // 다 기다리지 않고 곧장 voting으로 넘어간다.
+  // 후반(half===2)에서만, 그리고 오직 전용 "thief" 시간에만 유효. 이번 라운드에 이미 배치했거나
+  // 넘겼다면 무시. 1인당 이 후반 전체 5라운드를 통틀어 배치는 딱 1번만 허용된다(2026-08-27 요청,
+  // usedThisHalf) -- 이미 썼다면 _startThiefWindow가 매 라운드 자동으로 스킵 처리해두므로 여기까지
+  // 오는 일 자체가 없다. 배치 직후엔 아무 효과 없고, 다음 라운드의 thief 창이 열릴 때
+  // (_startThiefWindow) active로 넘어가 작동한다. floorIdx가 null이면 "이번 라운드엔 안 놓음"으로
+  // 명시적으로 넘기는 것(usedThisHalf는 소진되지 않음) -- 두 플레이어 모두 배치/넘기기를 마치면
+  // THIEF_PLACE_MS를 다 기다리지 않고 곧장 voting으로 넘어간다.
   placeThief(seat, floorIdx) {
     if (this.state.half !== 2) return;
     if (this.state.phase !== "elevator") return;
@@ -294,6 +311,7 @@ class GameRoom {
       el.thieves.skipped[seat] = true;
     } else {
       el.thieves.placedThisRound[seat] = floorIdx;
+      el.thieves.usedThisHalf[seat] = true; // 후반 전체 1회 한도 소진 (2026-08-27)
     }
     const bothDone = ["1", "2"].every((s) => el.thieves.placedThisRound[s] !== null || el.thieves.skipped[s]);
     if (bothDone) { this._endThiefWindow(); return; }
