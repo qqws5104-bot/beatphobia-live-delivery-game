@@ -240,6 +240,12 @@ async function main() {
   if (myListCountIdle !== 1) throw new Error(`expected exactly 1 rendered invoice-list (mine only) during the idle ready-gate, found ${myListCountIdle}`);
   log("confirmed: opponent's package list is not rendered during the pre-round-1 ready gate");
 
+  // ---- my package list renders in the left column, directly under the gauge (not off in the
+  // right-hand panel) -- p1 has secured cells by now so this is a populated list, not empty-state ----
+  const listUnderGauge = await countSel(p1, ".elev-left .invoice-list");
+  if (listUnderGauge !== 1) throw new Error(`expected my invoice list inside .elev-left (under the gauge), found ${listUnderGauge} there`);
+  log("confirmed: my package list renders directly under the gauge in the left column");
+
   await pressSpace(p1);
   await p1.waitForTimeout(150);
   const stillIdleAfterOnlyP1 = (await countSel(p1, '[data-action="vote-up"]')) === 0;
@@ -248,12 +254,15 @@ async function main() {
   await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: "round 1 voting starts after both ready", timeout: 5000 });
   log("pre-round-1 both-ready gate held, then correctly started round 1 voting");
 
-  // ---- opponent's live vote count must NEVER be shown -- only "나" (my own), never "상대" ----
+  // ---- no click count is ever shown -- neither mine nor the opponent's. The gauge (the real,
+  // shared floor position) is the only movement feedback during voting. ----
   await clickSel(p1, '[data-action="vote-up"]');
   await p1.waitForTimeout(300);
+  const p1Text = await bodyText(p1);
+  if (/[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " "))) throw new Error("a raw click counter (mine or the opponent's) is rendered during voting -- should be hidden");
   const p2SeesOpponentColumn = (await bodyText(p2)).includes("상대");
   if (p2SeesOpponentColumn) throw new Error("opponent's vote tally should never be rendered, but found a '상대' column in the DOM");
-  log("confirmed: opponent's live vote count is never shown (no '상대' column rendered)");
+  log("confirmed: no click count is ever shown (mine or the opponent's), no '상대' column rendered");
 
   // ---- play out all 5 rounds, requiring both players to press space after each round's result ----
   for (let round = 1; round <= 5; round++) {

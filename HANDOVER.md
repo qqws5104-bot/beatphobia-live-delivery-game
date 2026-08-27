@@ -144,8 +144,9 @@ idle   ─ 둘 다 스페이스 ─→  voting(5초)  ─ 타이머 만료 ─�
 - 서버가 클릭마다 전체 상태를 브로드캐스트하므로 **상대가 누른 이동도 내 화면에 실시간으로 보인다.**
 - 위/아래 끝(B1, 5F)에서는 clamp — 더 못 간다.
 - **5초가 끝나는 순간 엘리베이터가 서 있는 층이 그 라운드의 배송 위치**가 된다.
-- `state.elevator.votes[seat]`는 이제 **표시용 클릭 카운터일 뿐** 이동을 결정하지 않는다.
-  (라운드 로그와 "내 클릭 수" 표시에만 쓰임.)
+- `state.elevator.votes[seat]`는 서버 상태에는 여전히 클릭 카운터로 남아 있지만(라운드 로그용),
+  **클라이언트는 이제 이걸 화면에 전혀 그리지 않는다** (2026-08-27 추가 변경). 내 클릭 수든
+  상대 클릭 수든 노출 안 함 — 게이지(실제 공유 층 위치)가 유일한 이동 피드백이다.
 - 라운드 결과의 `dir`(상승/하강/동률)은 **라운드 시작 층 대비 최종 층**의 순증감일 뿐, 이동을 만들지 않는다.
 
 **배송 규칙**: 라운드가 끝나면 그 층으로 가는 **미배송 송장 중 가장 먼저 확보한 것 1장만** 배송된다.
@@ -333,31 +334,37 @@ git push origin main                      # → Render가 자동 배포
 
 ## 7. 엘리베이터 화면의 구조 — 게이지 바
 
-`.elev-layout`은 **2열 그리드**다: 왼쪽 220px = 게이지 바, 오른쪽 = 조작/정보 패널.
+`.elev-layout`은 **2열 그리드**다: 왼쪽 220px = 게이지 바 + 내 택배 목록, 오른쪽 = 조작/정보 패널.
 
 ```
 .elev-layout (grid 220px 1fr)
-├── .shaft                        ← 왼쪽 패널 껍데기
-│   └── .gauge                    ← 게이지 본체 (position:relative, overflow:hidden)
-│       ├── .gauge-fill           ← 아래에서 차오르는 금색 채움. height = (floorIdx+1)/6
-│       │   └── ::after           ← 채움 윗면의 밝은 "수면" 선
-│       └── .gauge-rows           ← flex column-reverse (B1이 시각적 맨 아래)
-│           └── .floor-stop × 6   ← 눈금 한 칸. i<=floorIdx면 .filled, i===floorIdx면 .current
-│               └── .car          ← 현재 층에만 보이는 작은 마커
+├── .elev-left                     ← 왼쪽 열 전체 (세로 flex)
+│   ├── .shaft                     ← 게이지 바 껍데기
+│   │   └── .gauge                 ← 게이지 본체 (position:relative, overflow:hidden)
+│   │       ├── .gauge-fill        ← 아래에서 차오르는 금색 채움. height = (floorIdx+1)/6
+│   │       │   └── ::after        ← 채움 윗면의 밝은 "수면" 선
+│   │       └── .gauge-rows        ← flex column-reverse (B1이 시각적 맨 아래)
+│   │           └── .floor-stop×6  ← 눈금 한 칸. i<=floorIdx면 .filled, i===floorIdx면 .current
+│   │               └── .car       ← 현재 층에만 보이는 작은 마커
+│   └── .player-col.me             ← 내 택배 목록. 게이지 바로 밑 (2026-08-27 이동)
+│       └── .invoice-list          ← 상대 목록은 절대 렌더 안 함 (3.4절)
 └── (오른쪽 카드)
     ├── .round-pill            "라운드 N / 5"
     ├── 현재 층 텍스트          ← 게이지와 별개로 층 이름을 한 번 더 명시
     ├── .vote-buttons          ▲위로 / ▼아래로
-    ├── .vote-count-row        내 클릭 수만
+    ├── .key-hint              "키보드 ↑/↓로도..." (클릭 카운트는 표시 안 함 — 아래 참고)
     ├── #round-clock           남은 시간
     ├── .round-result          라운드 결과 + .delivered-callout
-    ├── .ready-row             준비 칩
-    └── .invoice-list          내 택배 목록
+    └── .ready-row             준비 칩
 ```
 
+> **클릭 카운트 UI 제거됨** (2026-08-27). 예전엔 오른쪽 패널에 `.vote-count-row`로 "내 클릭 수"를
+> `▲N ▼N`으로 보여줬는데, 사용자 요청으로 완전히 뺐다. 서버 상태(`elevator.votes`)에는 여전히
+> 클릭 카운터가 남아 있다(라운드 로그용, `game-room.js`는 안 건드림) — **화면에만 안 그린다.**
+
 관련 코드 위치 (전부 `build_client.py`):
-- CSS: `HEAD_HTML` 안, `.shaft` ~ `@media (max-width:820px) { .gauge ... }`
-- 렌더: `APP_JS_TEMPLATE` 안 `renderShaft(floorIdx)` / `settleShaft()` / `shaftFillPct(i)`
+- CSS: `HEAD_HTML` 안, `.elev-layout` ~ `.elev-left .invoice .sticker` 부근, `.shaft` ~ `@media (max-width:820px) { .gauge ... }`
+- 렌더: `APP_JS_TEMPLATE` 안 `renderElevator` (왼쪽 열 조립), `renderShaft(floorIdx)` / `settleShaft()` / `shaftFillPct(i)`
 
 ### 동작 원리 (고칠 때 반드시 이해할 것)
 

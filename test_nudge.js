@@ -114,13 +114,22 @@ async function main() {
   if ((await currentFloorCount(p1)) !== 1) throw new Error("expected exactly one .current row while clamped at B1");
   log("over-clicking down clamped at B1 with the gauge at 1/6 (not empty) -- bottom bound holds");
 
-  // 4) still no raw opponent click-count leak in the DOM (only the real floor position, which is
-  // meant to be public, should ever be visible cross-seat)
+  // 4) no click count shown at all -- neither mine nor the opponent's. Only the real, shared floor
+  // position (the gauge) is ever the movement feedback during voting.
   const p1Text = await bodyText(p1);
-  if (/[▲▼]\s*\d+.*[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " ")) && p1Text.includes("상대")) {
-    throw new Error("opponent's raw click counter leaked into the DOM");
+  if (/[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " "))) {
+    throw new Error("a raw click counter (mine or the opponent's) is still shown in the DOM");
   }
-  log("confirmed: no opponent click-counter leak (only the real, shared floor position is visible)");
+  log("confirmed: no click counter shown at all (mine or the opponent's)");
+
+  // 5) my package list panel renders inside the left column, directly under the gauge -- not off
+  // in the right-hand panel -- so both are visible in the same glance. (This test never secures any
+  // cells, so the panel may legitimately show the empty-state text rather than a populated
+  // .invoice-list -- what's being checked here is where the panel itself lives, not its contents;
+  // test_hosted.js separately covers a populated list.)
+  const listInLeftColumn = await p1.evaluate(() => !!document.querySelector(".elev-left .player-col.me"));
+  if (!listInLeftColumn) throw new Error("my package-list panel is not rendered inside .elev-left (under the gauge)");
+  log("confirmed: my package list panel renders directly under the gauge in the left column");
 
   await browser.close();
   log("ALL CHECKS PASSED");

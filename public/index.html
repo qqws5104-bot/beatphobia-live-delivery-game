@@ -153,6 +153,14 @@
 
   .elev-layout { display:grid; grid-template-columns:220px 1fr; gap:1.2rem; align-items:start; }
   @media (max-width:820px) { .elev-layout { grid-template-columns:1fr; } }
+  /* left column: gauge + my own package list stacked underneath it, so "what I'm carrying" reads
+     right off the same glance as "where the car is" instead of living at the bottom of the far
+     wider right-hand panel. */
+  .elev-left { display:flex; flex-direction:column; gap:1rem; min-width:0; }
+  .elev-left .player-col.me { max-width:none; }
+  .elev-left .invoice { padding:0.5rem 0.6rem; gap:0.55rem; }
+  .elev-left .invoice .meta .t { font-size:0.82rem; }
+  .elev-left .invoice .sticker { font-size:0.68rem; padding:0.18rem 0.4rem; }
   /* Elevator position is drawn as a filling gauge rather than a list of rows. The two players share
      one car and each click moves it a notch, so what matters visually is the LEVEL rising and
      falling as they fight over it -- a highlight jumping between rows doesn't read as movement.
@@ -185,12 +193,6 @@
   .round-pill { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.8rem; border-radius:999px;
     background:rgba(109,187,253,0.14); color:var(--sky); font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .vote-buttons { display:flex; flex-direction:column; gap:0.7rem; margin-top:1rem; }
-  .vote-count-row { display:flex; justify-content:space-between; align-items:center; margin-top:0.6rem; font-family:var(--font-display); gap:1rem; }
-  .vote-count-col { text-align:center; flex:1; }
-  .vote-count-col .who { display:block; font-size:0.72rem; color:var(--muted); letter-spacing:0.04em; margin-bottom:0.2rem; }
-  .vote-count-col .nums { font-size:1.5rem; font-weight:700; font-variant-numeric:tabular-nums; }
-  .vote-count-col .nums .up { color:var(--ok); }
-  .vote-count-col .nums .down { color:var(--danger); margin-left:0.5rem; }
   .round-result { background:rgba(63,174,106,0.1); border:1px solid rgba(63,174,106,0.3); border-radius:10px; padding:0.9rem 1rem; margin-top:0.8rem; }
   .delivered-callout { margin-top:0.6rem; display:flex; flex-direction:column; gap:0.35rem; }
   .delivered-callout.empty { color:var(--muted); font-size:0.85rem; }
@@ -527,7 +529,11 @@
 
   function renderElevator(st, seat) {
     var html = '<main class="stage"><div class="elev-layout">';
-    html += renderShaft(st.elevator.floorIdx);
+    // left column: gauge, then my own package list directly beneath it -- opponent's list is
+    // never rendered here (or anywhere in the elevator phase), only mine.
+    html += '<div class="elev-left">' + renderShaft(st.elevator.floorIdx)
+      + '<div class="player-col me"><h3>내 택배</h3>' + renderInvoiceList(st, seat) + '</div>'
+      + '</div>';
 
     html += '<div>';
     html += '<div class="card">';
@@ -549,29 +555,18 @@
         + '<div class="space-hint">Space · 엘리베이터 이동 시작</div>';
       html += '</div>';
 
-      // opponent's package list is private -- only my own is ever rendered, here or anywhere else
-      // in the elevator phase (and, per the same rule, on the final results screen -- see renderEnd)
-      html += '<div style="margin-top:1rem;max-width:520px;">';
-      html += '<div class="player-col me"><h3>내 택배</h3>' + renderInvoiceList(st, seat) + '</div>';
-      html += '</div>';
-
       html += '</div></div></main>';
       return html;
     }
 
     var voting = st.elevator.state === "voting";
-    var mine = st.elevator.votes[seat] || { up: 0, down: 0 };
 
     html += '<div class="vote-buttons">';
     html += '<button class="btn big primary" data-action="vote-up"' + (voting ? '' : ' disabled') + '>▲ 위로</button>';
     html += '<button class="btn big ghost" data-action="vote-down"' + (voting ? '' : ' disabled') + '>▼ 아래로</button>';
     html += '</div>';
-    // the real floor position (shown in the shaft above) is always visible to both players, live --
-    // only the raw per-click counter here is private to "me"; the opponent's own count stays hidden
-    // so nobody can pace their clicking off the other player's exact tally.
-    html += '<div class="vote-count-row">'
-      + '<div class="vote-count-col"><span class="who">나 (플레이어 ' + seat + ')</span><span class="nums"><span class="up">▲' + mine.up + '</span><span class="down">▼' + mine.down + '</span></span></div>'
-      + '</div>';
+    // per-click counts (mine or the opponent's) are never shown -- the real floor position, shown
+    // live in the gauge, is the only movement feedback either player gets during voting.
     html += '<div class="key-hint">' + (voting ? '키보드 ↑ / ↓ 화살표로도 누를 수 있어요' : '이번 라운드 투표가 끝났어요') + '</div>';
 
     if (voting) {
@@ -598,10 +593,6 @@
         + '</div>'
         + '<div class="space-hint">Space · ' + nextLabel + '</div>';
     }
-    html += '</div>';
-
-    html += '<div style="margin-top:1rem;max-width:520px;">';
-    html += '<div class="player-col me"><h3>내 택배</h3>' + renderInvoiceList(st, seat) + '</div>';
     html += '</div>';
 
     html += '</div></div></main>';
