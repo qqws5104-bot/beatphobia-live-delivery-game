@@ -1,9 +1,12 @@
 "use strict";
 // Verifies the elevator car-hop feedback: clicking vote-up/vote-down (from EITHER player) should
-// make the NEIGHBORING floor row (current floor +/-1) briefly light up as ".hop-target" with a
+// make the NEIGHBORING floor row (current floor +/-1) light up as ".hop-target" with a
 // ".hop-up"/".hop-down" direction class shortly after, and it must react to the OPPONENT's clicks
 // too (since the feedback is meant to reflect the combined aggregate, not just "my own" clicks) --
 // while never exposing the raw vote numbers, and never moving the real ".current" floor marker.
+// This version also verifies the "persistent, non-reverting" behavior: the hop must NOT auto-revert
+// (it used to fade back out after ~550ms), it must stay lit indefinitely until countered by a click
+// in the opposite direction, and a direction flip must leave no OTHER row stuck highlighted.
 const { chromium } = require("playwright");
 
 const BASE = "http://localhost:3000";
@@ -12,6 +15,7 @@ async function clickSel(page, selector) { return page.evaluate((sel) => { const 
 async function pressSpace(page) { await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", key: " ", bubbles: true, cancelable: true }))); }
 async function bodyText(page) { return page.evaluate(() => document.body.innerText); }
 async function hopTargetClasses(page) { return page.evaluate(() => { const el = document.querySelector(".floor-stop.hop-target"); return el ? el.className : null; }); }
+async function hopTargetCount(page) { return page.evaluate(() => document.querySelectorAll(".floor-stop.hop-target").length); }
 async function currentFloorStillIntact(page) { return page.evaluate(() => document.querySelectorAll(".floor-stop.current").length === 1); }
 async function waitFor(fn, { timeout = 15000, interval = 100, label = "condition" } = {}) {
   const start = Date.now();
@@ -54,9 +58,18 @@ async function main() {
   if (!(await currentFloorStillIntact(p1))) throw new Error("the real current-floor marker moved/duplicated during the hop animation");
   log("p1's own vote-up click hopped the floor above on p1's view, real current floor unchanged");
 
-  // 2) the OPPONENT's click should also hop, on BOTH viewers -- confirms it reflects the combined
-  // aggregate (both players contribute), not just "my own" clicks
-  await p1.waitForTimeout(600); // let the previous animation fully finish
+  // 1b) PERSISTENCE: the hop must NOT auto-revert. Wait well past the old 550ms auto-revert window
+  // and confirm the hop-up highlight is still there, unprompted by any further click.
+  await p1.waitForTimeout(1500);
+  {
+    const cls = await hopTargetClasses(p1);
+    if (!cls || !cls.includes("hop-up")) throw new Error("the hop-up highlight auto-reverted -- it must persist until countered by an opposite-direction click");
+  }
+  log("hop-up highlight persisted past the old 550ms auto-revert window (no auto-revert) -- OK");
+
+  // 2) the OPPONENT's click in the OPPOSITE direction should clear p1's stale hop-up target and
+  // hop to the floor BELOW instead, on BOTH viewers -- confirms it reflects the combined aggregate
+  // (both players contribute), not just "my own" clicks, and that a direction flip works.
   await clickSel(p2, '[data-action="vote-down"]');
   await waitFor(async () => {
     const cls1 = await hopTargetClasses(p1);
@@ -64,11 +77,27 @@ async function main() {
   }, { label: "p1 sees hop-down after p2's (opponent's) vote-down click", timeout: 3000 });
   log("p2's (opponent's) vote-down click correctly hopped the floor below on p1's view too");
 
+  // 2b) DIRECTION-FLIP SAFETY: exactly one row should carry .hop-target after the flip -- the old
+  // (now-stale) hop-up row on the floor above must have been cleared, not left stuck highlighted.
+  {
+    const count = await hopTargetCount(p1);
+    if (count !== 1) throw new Error("expected exactly 1 .hop-target row after a direction flip, found " + count + " -- the old target was left stuck highlighted");
+  }
+  log("direction flip left exactly one .hop-target row (old stale target was correctly cleared)");
+
   await waitFor(async () => {
     const cls2 = await hopTargetClasses(p2);
     return cls2 && cls2.includes("hop-down");
   }, { label: "p2 also sees the hop on its own view", timeout: 3000 });
   log("p2 also sees the hop on its own view (own click)");
+
+  // 2c) the flipped hop-down state must ALSO persist without auto-reverting
+  await p1.waitForTimeout(1500);
+  {
+    const cls = await hopTargetClasses(p1);
+    if (!cls || !cls.includes("hop-down")) throw new Error("the hop-down highlight (after the direction flip) auto-reverted -- it must persist too");
+  }
+  log("hop-down highlight (post-flip) also persisted past the old auto-revert window -- OK");
 
   // 3) still no raw vote numbers exposed anywhere during this
   const p1Text = await bodyText(p1);

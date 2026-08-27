@@ -40,8 +40,17 @@ async function main() {
   await waitFor(async () => (await p1.locator('[data-action="vote-up"]').count()) > 0, { label: "round 1 voting starts" });
 
   await clickSel(p1, '[data-action="vote-up"]');
-  await p1.waitForTimeout(120); // mid-animation
-  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "nudge_up_mid_animation.png") });
+  await p1.waitForTimeout(120); // just after the landing pop
+  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "nudge_up_just_after_click.png") });
+
+  await p1.waitForTimeout(1800); // well past the old 550ms auto-revert window -- should still be lit
+  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "nudge_up_persisted_1.8s_later.png") });
+
+  // now flip direction via the opponent (p2) -- the old hop-up target must clear and the highlight
+  // must move to the floor below instead, with no row left stuck
+  await clickSel(p2, '[data-action="vote-down"]');
+  await p1.waitForTimeout(200);
+  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "nudge_down_after_opponent_flip.png") });
 
   await browser.close();
   console.log("saved to", OUT);
