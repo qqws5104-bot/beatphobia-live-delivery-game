@@ -36,8 +36,9 @@ server.js          HTTP + WebSocket. 방 코드 발급, 정적 서빙, 소켓 �
 build_images.py    퍼즐 이미지 압축 단계. 원본 PNG → /tmp/compressed/*.jpg. 아래 2.1절 참조.
 build_client.py    public/index.html을 생성하는 빌드 스크립트. CSS와 클라이언트 JS가 전부 여기 문자열로 들어있다.
 public/index.html  빌드 결과물. **커밋에 포함되어 그대로 배포된다.** 직접 수정 금지 (다음 빌드에 덮어써짐).
-test_hosted.js     Playwright E2E. 두 플레이어를 띄워 로비→확보→우선택배→전반 5라운드→하프타임→
-                   확보→우선택배→후반 5라운드→결과까지 전체 흐름을 검증.
+test_hosted.js     Playwright E2E. 두 플레이어를 띄워 로비→확보→전반 5라운드(라운드별 우선택배 지정
+                   포함)→하프타임→확보→후반 5라운드(우선택배 + 매 라운드 택배도둑 배치창 포함)→
+                   결과까지 전체 흐름을 검증.
 test_nudge.js      엘리베이터 실시간 이동 + 현재 층 표시 검증 테스트.
 screenshot*.js     화면 검수용 스크린샷 스크립트들.
 render.yaml        Render Blueprint 설정.
@@ -45,9 +46,11 @@ render.yaml        Render Blueprint 설정.
 
 > **2026-08-27 대규모 개편**: 냉장 택배 폐지 + 확정 층수 택배(6칸) 신설로 보드가 20칸→**21칸**,
 > 점수가 추상 점수→**원(KRW) 단위 실금액**, 그리고 **우선 택배 지정 / 같은 층 5초 선택 / 전반·후반
-> 2회 진행 / 후반 전용 택배도둑** 4개 메커닉이 새로 생겼다. 아래 3절 전체가 이 개편을 반영한
-> 최신 규칙이다 — 예전 버전(신선·냉동 택배, 20칸, 추상 점수)을 참고하는 코드/문서가 남아 있다면
-> 이 문서가 우선한다.
+> 2회 진행 / 후반 전용 택배도둑** 4개 메커닉이 새로 생겼다. **같은 날 안에 그중 두 개가 다시
+> 재설계됐다**: 우선 택배 지정은 하프 전체 1회 → **매 라운드 재지정(라운드 한정 보너스)**으로,
+> 택배도둑은 idle/voting 아무 때나 배치 → **전용 배치 시간(`thief` 상태)**으로 바뀌었다. 아래 3절
+> 전체가 이 최종 형태를 반영한 최신 규칙이다 — 예전 버전(신선·냉동 택배, 20칸, 추상 점수, 독립된
+> priority 페이즈)을 참고하는 코드/문서가 남아 있다면 이 문서가 우선한다.
 
 ### 2.1 퍼즐 이미지 파이프라인 (조용히 틀리기 쉬운 곳 — 반드시 읽을 것)
 
@@ -123,14 +126,20 @@ python3 build_client.py
 ### 3.1 진행 흐름
 
 ```
-lobby → secure(3분) → priority → elevator(5라운드) → halftime → secure(3분) → priority → elevator(5라운드) → end
-        └──────────────── 전반(half 1) ────────────────┘         └──────────────── 후반(half 2) ────────────────┘
+lobby → secure(3분) → elevator(5라운드) → halftime → secure(3분) → elevator(5라운드) → end
+        └──────────── 전반(half 1) ────────────┘         └──────────── 후반(half 2) ────────────┘
 ```
 
-**전체가 두 번(전반/후반) 연속으로 돈다** — 한 게임 세션 안에서 secure→priority→elevator 전체
-사이클이 두 번 실행되고, **점수는 두 하프의 합산**이다 (`state.halfHistory`에 각 하프 스냅샷,
+**전체가 두 번(전반/후반) 연속으로 돈다** — 한 게임 세션 안에서 secure→elevator 전체 사이클이
+두 번 실행되고, **점수는 두 하프의 합산**이다 (`state.halfHistory`에 각 하프 스냅샷,
 `state.scores`가 그 합산 — `game-room.js`의 `_finishHalf()`). 전반과 후반은 완전히 독립된
 새 보드/새 송장으로 시작한다 (하프타임에 리셋).
+
+> **2026-08-27 재설계 — 독립된 "priority" 단계는 더 이상 없다.** 예전엔 secure가 끝나면 elevator
+> 진입 전에 우선 택배를 한 번만 지정하는 별도 페이즈(`state.phase === "priority"`)가 있었는데,
+> "매 라운드마다 우선택배를 지정해야 한다"는 요구로 완전히 없앴다. secure가 끝나면 **곧장**
+> elevator로 간다. 우선 택배 지정은 이제 elevator의 라운드 게이트(`idle`/`result`)에 **내장**돼
+> 있고, **매 라운드 다시 골라야 한다** — 아래 3.2 참고.
 
 **lobby** — 두 사람이 각각 "플레이어 1" / "플레이어 2" 좌석 선택.
 이미 선점된 좌석은 못 고른다. 새로고침해도 좌석 유지(sessionStorage의 clientId로 서버가 식별).
@@ -144,14 +153,8 @@ lobby → secure(3분) → priority → elevator(5라운드) → halftime → se
 > **보드는 플레이어별로 완전히 독립이다.** 두 사람이 같은 칸 id를 각자 확보할 수 있고 서로 방해가 없다.
 > (`state.boards["1"]`, `state.boards["2"]`가 각각 21칸 사본을 가진다.)
 
-**priority (우선 택배 지정)** — secure가 끝나면 곧장 elevator로 안 가고 이 단계를 거친다. 각
-플레이어가 자기 송장 중 **최대 1개**를 "우선 택배"로 찍을 수 있다(선택 사항, 안 찍어도 됨). 그
-송장이 배송에 성공하면 점수가 **2배**(`PRIORITY_MULTIPLIER`)가 된다. 다른 게이트들과 동일하게
-**둘 다 스페이스바**를 눌러야 다음(elevator)으로 넘어간다. `state.priority.picks[seat]`가 서버의
-임시 선택값이고, 둘 다 준비되면 `state.players[seat].priorityInvoiceId`로 확정 복사된다
-(`game-room.js`의 `setPriority`/`priorityReady`).
-
-**elevator (5라운드)** — 아래 3.2에서 상세히.
+**elevator (5라운드)** — 아래 3.2에서 상세히. (우선 택배 지정은 이제 이 단계의 라운드 게이트에
+내장돼 있다 — 더 이상 별도 페이즈가 아니다.)
 
 **halftime (전반→후반 전환, 전반 끝에만 등장)** — 전반 5라운드가 끝나면 결과를 잠깐 보여주고,
 둘 다 스페이스바를 누르면 보드/송장/우선택배 지정이 전부 리셋되고 후반의 secure 페이즈가 다시
@@ -164,20 +167,45 @@ lobby → secure(3분) → priority → elevator(5라운드) → halftime → se
 
 층 배열: `FLOORS = ["B1","1F","2F","3F","4F","5F"]` (인덱스 0~5). **시작은 인덱스 1 = 1F.**
 
-한 라운드의 상태 머신 (2026-08-27, `choosing` 추가):
+한 라운드의 상태 머신 (2026-08-27 재설계 — `thief` 상태 신설, 전반은 건너뜀):
 
 ```
-idle ─ 둘 다 스페이스 ─→ voting(5초) ─ 타이머 만료 ─┬─(같은 층 충돌 없음)─→ result ─ 둘 다 스페이스 ─→ 다음 라운드 / halftime·end
-                                                    └─(충돌 있음)─→ choosing(5초) ─→ result
+idle ─ 둘 다 스페이스 ─→ [후반이면 thief(5초) ─→] voting(5초) ─ 타이머 만료 ─┬─(같은 층 충돌 없음)─→ result ─ 둘 다 스페이스 ─→ 다음 라운드(같은 분기) / halftime·end
+                                                                          └─(충돌 있음)─→ choosing(5초) ─→ result
 ```
 
-- `idle`: 라운드 1 시작 전 대기 게이트 (송장 훑어볼 시간). 후반이면 여기서도 택배도둑을 놓을 수 있다.
-- `voting`: **5초.** 이 동안 이동이 일어난다. 후반이면 여기서도 택배도둑을 놓을 수 있다.
+- `idle`: 라운드 1 시작 전 대기 게이트 (송장 훑어볼 시간). **이번 라운드 우선 택배**도 여기서 고른다
+  (아래 참고).
+- `thief` (**후반 전용, 2026-08-27 재설계**): `idle`/`result`에서 둘 다 준비되면, 후반에는 곧장
+  voting으로 안 가고 이 상태를 먼저 거친다. **매 라운드마다** 등장하는 독립된 5초(`THIEF_PLACE_MS`)
+  전용 화면이다 — 예전엔 `idle`/`voting` 상태 아무 때나 놓을 수 있는 임베디드 박스였는데, "택배도둑을
+  놓는 시간을 따로 줬으면 좋겠다"는 요청으로 완전히 분리했다. 1인당 배치(`floorIdx`) 또는 명시적
+  건너뛰기(`floorIdx: null`) 중 하나를 고르며, **둘 다 결정하면 타이머를 안 기다리고 즉시 voting으로
+  넘어간다** (`_endThiefWindow`의 조기 진행). 아래 별도 문단에서 상세히.
+- `voting`: **5초.** 이 동안 이동이 일어난다.
 - `choosing`: **같은 층에 내 미배송 송장이 2개 이상**일 때만 등장 (없으면 곧장 result로 건너뜀).
   `SAME_FLOOR_CHOICE_MS`(5초) 동안 어느 걸 먼저 보낼지 고른다 — **안 고르면 서버가 무작위로
   정한다** (`game-room.js`의 `_finalizeChoice`). 충돌이 없는 쪽 플레이어에게는 그냥 대기 메시지만
   보인다 (자기 화면엔 아무 영향 없음).
-- `result`: 이번 라운드 결과 + 내가 배송한 것(도난당했으면 그것도) 표시. 둘 다 스페이스를 눌러야 진행.
+- `result`: 이번 라운드 결과 + 내가 배송한 것(도난당했으면 그것도) 표시. **다음 라운드용 우선
+  택배**도 여기서 다시 고를 수 있다 (아래 참고). 둘 다 스페이스를 눌러야 진행.
+
+**우선 택배 (2026-08-27 재설계 — 라운드 한정, 매 라운드 재지정):** 예전엔 elevator 진입 전
+독립된 페이즈에서 하프 전체에 걸쳐 딱 한 번만 지정했는데, "엘리베이터 매 라운드마다 우선택배를
+지정하는걸 해야해"라는 요청으로 바뀌었다 — **사용자가 명시적으로 확인한 사양**: 그 라운드 안에
+배송까지 성공해야만 2배 보너스가 적용되고, 나중 라운드로 넘어가면 보너스는 사라진다(더 이상
+그 송장이 "우선"이 아니게 됨). 구현:
+- `el.priorityPick[seat]`가 "이번 라운드" 선택값. `setPriorityPick(seat, invoiceId)`는 `idle`/
+  `result` 상태에서만 허용된다(그 외엔 무시).
+- 라운드가 끝나면(`_finishRound`) 배송 성공 여부와 무관하게 `el.priorityPick`을 **항상** `{1:null,
+  2:null}`로 리셋한다 — 다음 라운드엔 새로 골라야 한다.
+- 배송 시점에 `el.priorityPick[seat] === 그 송장 id`였으면 그 송장의 `deliveredWasPriority`를
+  `true`로 영구 기록한다 (도난당한 경우는 예외 — 아래 택배도둑 문단 참고). 점수 계산(`scoreInvoice`)은
+  `priorityPick`이 아니라 이 영구 플래그를 본다 — 그래서 이미 배송된 송장의 "우선 성공" 표시는
+  다음 라운드에 픽이 리셋돼도 사라지지 않는다.
+- UI: `build_client.py`의 `renderPriorityPicker(st, seat)`가 `idle`/`result` 게이트 안에 임베드된
+  선택 카드를 그린다 (클릭 액션은 예전과 동일한 `pick-priority`/`set-priority` 메시지를 그대로
+  재사용 — 메시지 프로토콜은 안 바뀌었다).
 
 **이동 방식 (2026-08-27 변경, commit `527891b`):**
 
@@ -197,13 +225,19 @@ idle ─ 둘 다 스페이스 ─→ voting(5초) ─ 타이머 만료 ─┬─
 (같은 층에 2개 이상이면 위 `choosing` 단계에서 고른 것이 대신 배송됨). 같은 층에 여러 장이 밀려
 있어도 **한 번 방문에 한 장.** 나머지는 다음에 그 층에 다시 와야 한다.
 
-**택배도둑 (후반 전용, 2026-08-27 신설)** — 후반(`state.half === 2`)의 `idle`/`voting` 중,
-**1인당 라운드당 1회** 원하는 층에 도둑을 배치할 수 있다(`place-thief`). 배치 직후엔 아무 효과가
-없고, **다음 라운드가 시작되는 순간** 실제로 작동한다 (`_startVotingRound`에서 `placedThisRound`
-→ `active`로 승격). 작동 중인 도둑이 있는 층에 **상대방**(자기 자신 배치분은 자기 배송에 영향
-없음)이 배송하면, 그 송장은 `stolen: true`로 표시되고 **무조건 마이너스 점수**(해당 종류의 실패
-페널티, 아래 3.3)로 처리된다 — 원래 이 송장이 우선 택배였어도 2배 적용 안 됨. 배치 허용 횟수는
-**매 라운드 리셋**된다(라운드당 1회, 누적 아님) — 사용자가 확인한 답변 그대로.
+**택배도둑 (후반 전용, 2026-08-27 신설 → 같은 날 전용 시간으로 재설계)** — 후반(`state.half === 2`)의
+매 라운드마다, `idle`/`result` 게이트에서 둘 다 준비되면 voting 전에 독립된 `thief` 상태(5초,
+`THIEF_PLACE_MS`)가 열린다. **1인당 라운드당 1회** 원하는 층에 도둑을 배치하거나(`place-thief`
++ `floorIdx`), 명시적으로 건너뛸 수 있다(`place-thief` + `floorIdx: null`) — 배치도 건너뛰기도
+안 하면 타이머가 다 찰 때까지 대기하고, 둘 다 결정하면 조기에 다음(voting)으로 넘어간다. 배치
+직후엔 아무 효과가 없고, **다음 라운드의 `thief` 상태가 시작되는 순간** 실제로 작동한다
+(`_startThiefWindow`에서 `placedThisRound` → `active`로 승격). 작동 중인 도둑이 있는 층에
+**상대방**(자기 자신 배치분은 자기 배송에 영향 없음)이 배송하면, 그 송장은 `stolen: true`로
+표시되고 **무조건 마이너스 점수**(해당 종류의 실패 페널티, 아래 3.3)로 처리된다 — 원래 이 송장이
+우선 택배였어도 2배 적용 안 됨. 배치 허용 횟수는 **매 라운드 리셋**된다(라운드당 1회, 누적 아님) —
+사용자가 확인한 답변 그대로. UI는 `build_client.py`의 `renderElevator`가 `el.state === "thief"`일
+때 분기하는 전용 화면(`.thief-window`, `choosing`과 동일한 "먼저 조건부로 return하는 상태 분기"
+패턴)이며, 예전처럼 `idle`/`voting` 화면에 임베드된 박스가 아니다.
 
 > **⚠️ 확인 필요 — 도난 페널티 금액은 임의 선택값이다.** 사용자 지시("무조건 확정 마이너스
 > 점수")는 "얼마인지"까지는 정하지 않았다. 이 구현은 **가장 보수적인 해석**으로, 새 고정값을
@@ -242,8 +276,10 @@ idle ─ 둘 다 스페이스 ─→ voting(5초) ─ 타이머 만료 ─┬─
 `.box-tag`). 띠와 광택은 `rgba(0,0,0,..)`/`rgba(255,255,255,..)` 오버레이라 각 종류의 `color`가
 바뀌어도 자동으로 어울린다 — 종류별로 별도 하드코딩 안 함.
 
-**우선 택배 2배**: `priorityInvoiceId`와 일치하는 송장이 배송 성공하면 `reward * PRIORITY_MULTIPLIER`
-(현재 2배). 도난당한 경우엔 우선 택배여도 배수 적용 안 됨 — 위 택배도둑 항목 참조.
+**우선 택배 2배**: 그 라운드의 `el.priorityPick[seat]`와 일치하는 송장이 **같은 라운드 안에** 배송
+성공하면 `reward * PRIORITY_MULTIPLIER`(현재 2배), 영구히 `deliveredWasPriority: true`로 기록.
+도난당한 경우엔 우선 택배여도 배수 적용 안 됨 — 위 택배도둑 항목 참조. 자세한 재설계 배경은
+3.2절 "우선 택배" 문단.
 
 `pieces` 필드(우봉고 퍼즐 조각 개수 표시용, 예: "조각 3개")는 보드 칸 수(`count`)와 **무관한 별개
 숫자**다 — 헷갈리지 말 것.
@@ -255,7 +291,7 @@ idle ─ 둘 다 스페이스 ─→ voting(5초) ─ 타이머 만료 ─┬─
 | 상대 송장 목록 | **절대 표시 안 함** | **전체 공개** (전반+후반 각각) |
 | 상대의 클릭 수 | **절대 표시 안 함** | (해당 없음) |
 | 이번 라운드 배송 내역 | **내 것만** | **전체 공개** |
-| 상대의 우선 택배 선택 | **절대 표시 안 함** (priority 단계에서도) | **전체 공개** (송장 표에 "· 우선" 표시) |
+| 상대의 우선 택배 선택 | **절대 표시 안 함** (idle/result 게이트의 picker에서도) | **전체 공개** (송장 표에 "· 우선" 표시) |
 | 상대의 같은 층 선택(choosing) | **절대 표시 안 함** — 대기 메시지만 | (해당 없음) |
 | 상대의 택배도둑 배치 위치 | **절대 표시 안 함** (도둑맞았을 때 "도난당함"만 알림, 누가/어디인지는 비공개) | (해당 없음) |
 | 엘리베이터 현재 층 | **양쪽 다 봄** (공유 자원이므로 당연) | (해당 없음) |
@@ -295,22 +331,24 @@ Node가 싱글스레드라 두 사람의 동시 클릭도 그냥 순서대로 �
 | `elevator-ready` | — | `idle`/`result` 게이트 통과 |
 | `secure-cell` | `cellId` | 칸 확보 |
 | `vote` | `dir: "up"\|"down"` | **엘리베이터 1칸 즉시 이동** |
-| `set-priority` | `invoiceId` (또는 `null`) | 우선 택배 지정/해제 (priority 단계에서만) |
-| `priority-ready` | — | priority 단계 게이트 통과 |
+| `set-priority` | `invoiceId` (또는 `null`) | **이번 라운드** 우선 택배 지정/해제 (elevator의 `idle`/`result` 게이트에서만, 매 라운드 리셋) |
 | `choose-delivery` | `invoiceId` | 같은 층 충돌 시 먼저 보낼 송장 선택 (choosing 상태에서만) |
-| `place-thief` | `floorIdx` | 택배도둑 배치 (후반, idle/voting 중, 라운드당 1회) |
+| `place-thief` | `floorIdx` (또는 `null` = 건너뛰기) | 택배도둑 배치/건너뛰기 (후반, 전용 `thief` 상태에서만, 라운드당 1회) |
 | `halftime-ready` | — | 하프타임 게이트 통과 → 후반 secure 페이즈 시작 |
 
 서버 → 클라이언트: `{type:"state", state}` (전체 상태) 또는 `{type:"error", code, seat}`.
 
 ### 4.3 점수 로직이 두 군데 있다 (의도된 중복)
 
-`scoreInvoice(inv, priorityId)` / `resultLabel(inv)` / `totalScore(seat, state)`가 **`game-room.js`와
+`scoreInvoice(inv)` / `resultLabel(inv)` / `totalScore(seat, state)`가 **`game-room.js`와
 `build_client.py` 양쪽에** 있다.
 - `game-room.js` 쪽이 **권위 있는 버전**.
 - `build_client.py` 쪽은 **표시 전용 복제본**.
-- **한쪽을 고치면 반드시 다른 쪽도 똑같이 고칠 것.** (2026-08-27: `stolen` 분기와 `priorityId` 매개변수가
-  추가되면서 시그니처가 `scoreInvoice(inv)` → `scoreInvoice(inv, priorityId)`로 바뀌었다 — 두 파일 다 반영됨.)
+- **한쪽을 고치면 반드시 다른 쪽도 똑같이 고칠 것.** (2026-08-27: 처음엔 `stolen` 분기와
+  `priorityId` 매개변수가 추가되면서 `scoreInvoice(inv)` → `scoreInvoice(inv, priorityId)`로
+  바뀌었다가, 같은 날 우선 택배가 라운드 한정으로 재설계되면서 다시 **단일 인자**
+  `scoreInvoice(inv)`로 돌아갔다 — 이제 우선 여부는 매개변수로 비교하는 대신 송장 자체에 영구
+  기록된 `inv.deliveredWasPriority`를 직접 읽는다. 두 파일 다 반영됨.)
 - `test_hosted.js`가 `require("./game-room.js")`로 진짜 함수를 불러와 화면 표시값과 대조한다 — 어긋나면 테스트 실패.
 
 ---
@@ -444,6 +482,8 @@ git push origin main                      # → Render가 자동 배포
 └── (오른쪽 카드)
     ├── .round-pill            "라운드 N / 5"
     ├── 현재 층 텍스트          ← 왼쪽 층 표시와 별개로 층 이름을 한 번 더 명시
+    ├── (idle/result 상태일 때만) .priority-picker  ← 이번 라운드 우선 택배 지정 카드
+    ├── (전용 thief 상태일 때만) .thief-window       ← 여기서 return, 아래는 안 그림 (choosing과 동일 패턴)
     ├── .vote-buttons          ▲위로 / ▼아래로
     ├── .key-hint              "키보드 ↑/↓로도..." (클릭 카운트는 표시 안 함 — 아래 참고)
     ├── #round-clock           남은 시간
@@ -466,17 +506,26 @@ git push origin main                      # → Render가 자동 배포
 > `▲N ▼N`으로 보여줬는데, 사용자 요청으로 완전히 뺐다. 서버 상태(`elevator.votes`)에는 여전히
 > 클릭 카운터가 남아 있다(라운드 로그용, `game-room.js`는 안 건드림) — **화면에만 안 그린다.**
 
-> **2026-08-27 추가**: 오른쪽 카드에 두 가지가 상태에 따라 더 붙는다.
-> - `.choice-box` (같은 층 충돌 시, `el.state === "choosing"`일 때만) — `renderElevator` 안에서
->   voting/result 렌더보다 먼저 분기해서 처리하고 즉시 `return`한다.
-> - `.thief-box` (후반의 idle/voting 상태에서만, `renderThiefBox(st, seat)`) — 전반에는 아예
->   렌더되지 않는다 (`st.half !== 2`면 빈 문자열 반환).
+> **2026-08-27 추가, 같은 날 재설계**: `renderElevator`는 상태별로 조건부 `return`하는 분기가
+> 여러 개 있다 (순서대로 `idle` → `thief` → `choosing`, 그 외엔 voting/result를 그린다):
+> - `idle`: 라운드 1 게이트. `.priority-picker`를 렌더하고 `return`.
+> - `thief` (**후반 전용**, `el.state === "thief"`): 전용 카드 `.thief-window` — 층 버튼 +
+>   "건너뛰기" 버튼 + `#thief-clock` 카운트다운. 전반에는 이 상태 자체가 존재하지 않으므로
+>   (`_enterNextRound`가 half===2일 때만 `_startThiefWindow`로 감) 이 분기에 도달하지 않는다.
+> - `choosing` (같은 층 충돌 시): `.choice-box`, 기존과 동일.
+> - `voting`/`result`: 기존 투표 UI. `result`에서는 라운드 결과 아래에 `.priority-picker`가
+>   **다시** 나타난다 (다음 라운드용 재지정).
+>
+> 우선 택배 picker(`.priority-picker`)는 위 `idle`과 `result` **양쪽** 분기 끝에서 호출되는
+> 별도 헬퍼 `renderPriorityPicker(st, seat)`이 그린다 — 더 이상 독립된 `renderPriority` 전체
+> 페이즈 함수가 아니다 (그 함수는 삭제됐다).
 
 관련 코드 위치 (전부 `build_client.py`):
 - CSS: `HEAD_HTML` 안, `.elev-layout` ~ `.elev-left .invoice .sticker` 부근, `.shaft` ~ `.floor-stop.current .car`,
-  `.choice-box`/`.thief-box`/`.halftime-*` (2026-08-27 추가분)
-- 렌더: `APP_JS_TEMPLATE` 안 `renderElevator` (왼쪽 열 조립 + choosing/thief 분기), `renderShaft(floorIdx)`,
-  `renderThiefBox`, `renderPriority`, `renderHalftime`
+  `.choice-box`/`.thief-window`/`.priority-picker`/`.halftime-*`
+- 렌더: `APP_JS_TEMPLATE` 안 `renderElevator` (왼쪽 열 조립 + idle/thief/choosing 분기), `renderShaft(floorIdx)`,
+  `renderPriorityPicker`, `renderHalftime` — 이제 `renderThiefBox`/`renderPriority`(옛 독립 페이즈 함수)는
+  존재하지 않는다.
 
 > **주의 1**: `.shaft-track`이 `flex-direction: column-reverse`라 **DOM 순서(B1→5F)와 화면 순서(5F→B1)가 반대**다.
 > `querySelectorAll(".floor-stop")[i]`는 화면 위치와 무관하게 `FLOORS[i]`에 대응한다. 테스트가 이 전제에 의존한다.

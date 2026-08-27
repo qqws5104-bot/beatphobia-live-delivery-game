@@ -1,7 +1,10 @@
 // Two-player end-to-end test against the REAL local WS server (not a mock), simulating two
 // separate devices via two separate browser contexts (independent sessionStorage/clientId).
 // Covers the full 2026-08-27 rework: 21-cell board (확정 층수 택배 = 6 cells), currency scoring,
-// priority-package phase, and the full 전반 -> halftime -> 후반 -> end flow.
+// per-round priority-package picker embedded in the elevator ready-gate (re-picked every round,
+// bonus only applies if delivered that same round), 후반-only dedicated 택배도둑 placement window
+// (its own state between each round's ready-gate and voting), and the full
+// 전반 -> halftime -> 후반 -> end flow.
 "use strict";
 const { chromium } = require("playwright");
 const { totalScore: serverTotalScore } = require("./game-room.js");
@@ -190,71 +193,98 @@ async function main() {
   await secureCell(p2, "valuable-1");
   log("secured additional cells for both players");
 
-  // ---- wait out the secure phase (server override, shortened for this test run) -> priority phase ----
-  await waitFor(async () => {
-    const t1 = await bodyText(p1);
-    const t2 = await bodyText(p2);
-    return t1.includes("우선 택배 지정") && t2.includes("우선 택배 지정");
-  }, { label: "both entered priority phase", timeout: 15000 });
-  log("secure phase ended -> priority phase entered on both");
-
-  // ---- priority pick: p1 marks one invoice as priority, confirm the flag renders and is private
-  // (p2 should never see p1's pick reflected anywhere) ----
-  const priorityCandidates = await countSel(p1, '.invoice[data-action="pick-priority"]');
-  if (priorityCandidates === 0) throw new Error("no priority-pickable invoices rendered for p1");
-  await clickSel(p1, '.invoice[data-action="pick-priority"]');
-  await waitFor(async () => (await countSel(p1, ".invoice.is-priority")) === 1, { label: "p1's priority pick highlights" });
-  log("priority pick confirmed on p1");
-
-  await pressSpace(p1);
-  await p1.waitForTimeout(150);
-  const stillPriorityAfterOnlyP1 = (await bodyText(p1)).includes("우선 택배 지정");
-  if (!stillPriorityAfterOnlyP1) throw new Error("priority phase advanced after only p1 pressed space -- both-ready gate is broken");
-  await pressSpace(p2);
+  // ---- wait out the secure phase (server override, shortened for this test run) -> straight into
+  // the elevator phase's "idle" (pre-round-1) ready-gate. There is no more standalone "priority"
+  // phase -- the priority picker is now embedded directly in this gate (and in the between-round
+  // "result" gate), re-picked fresh every round. ----
   await waitFor(async () => {
     const t1 = await bodyText(p1);
     const t2 = await bodyText(p2);
     return t1.includes("엘리베이터") && t2.includes("엘리베이터");
-  }, { label: "both entered elevator phase (half 1)", timeout: 5000 });
-  log("priority both-ready gate held, then correctly entered elevator phase");
+  }, { label: "both entered elevator phase (half 1)", timeout: 15000 });
+  log("secure phase ended -> elevator phase entered directly on both (no standalone priority phase)");
 
-  // ---- pre-round-1 ready gate: entering "elevator" must NOT auto-start voting ----
+  // ---- pre-round-1 ready gate: entering "elevator" must NOT auto-start voting, and must not show
+  // the thief window yet either (그건 준비 완료 이후, 그리고 후반에서만) ----
   const voteButtonsBeforeReady = await countSel(p1, '[data-action="vote-up"]');
   if (voteButtonsBeforeReady !== 0) throw new Error("vote buttons should not render before both players ready up for round 1");
-  log("confirmed: elevator phase does not auto-start voting -- idle ready-gate shown first");
+  const thiefWindowBeforeReady = await countSel(p1, ".thief-window");
+  if (thiefWindowBeforeReady !== 0) throw new Error("thief window should not render before both players ready up (and never during 전반)");
+  log("confirmed: elevator phase does not auto-start voting or the thief window -- idle ready-gate shown first");
 
-  // half 1: no thief box should render (thief mechanic is 후반 전용)
-  const thiefBoxHalf1 = await countSel(p1, ".thief-box");
-  if (thiefBoxHalf1 !== 0) throw new Error("thief placement box rendered during 전반 (half 1) -- should be 후반-only");
-  log("confirmed: no thief-placement UI during 전반");
-
-  const myListCountIdle = await countSel(p1, ".invoice-list");
-  if (myListCountIdle !== 1) throw new Error(`expected exactly 1 rendered invoice-list (mine only) during the idle ready-gate, found ${myListCountIdle}`);
-
+  // Note: ".invoice-list" now legitimately renders twice during idle/result gates -- once for my
+  // package list under the gauge (.elev-left), and once more inside the embedded priority-picker
+  // card (which reuses the same list markup for its pickable items) -- so the meaningful
+  // assertion is specifically about the one under the gauge, checked here.
   const listUnderGauge = await countSel(p1, ".elev-left .invoice-list");
   if (listUnderGauge !== 1) throw new Error(`expected my invoice list inside .elev-left (under the gauge), found ${listUnderGauge} there`);
 
+  // ---- priority pick, now embedded in the idle gate: p1 marks one invoice as this round's
+  // priority, confirm the flag renders and is private (p2 should never see p1's pick reflected
+  // anywhere), then confirm "지정 안 함" clears it back out. ----
+  const priorityCandidates = await countSel(p1, '.priority-picker .invoice[data-action="pick-priority"]');
+  if (priorityCandidates === 0) throw new Error("no priority-pickable invoices rendered for p1 in the idle gate");
+  await clickSel(p1, '.priority-picker .invoice[data-action="pick-priority"]');
+  await waitFor(async () => (await countSel(p1, ".priority-picker .invoice.is-priority")) === 1, { label: "p1's priority pick highlights" });
+  const p2SeesP1Pick = await countSel(p2, ".priority-picker .invoice.is-priority");
+  if (p2SeesP1Pick !== 0) throw new Error("p2's own priority-picker should never reflect p1's pick -- picks are per-player");
+  log("round-1 priority pick confirmed on p1, and confirmed private from p2");
+  await clickSel(p1, '.priority-picker [data-action="pick-priority"][data-inv=""]');
+  await waitFor(async () => (await countSel(p1, ".priority-picker .invoice.is-priority")) === 0, { label: "p1's priority pick clears via 지정 안 함" });
+  // re-pick for round 1 so the round-scoped-reset assertion in playHalf (round 2) has something
+  // to actually observe resetting.
+  await clickSel(p1, '.priority-picker .invoice[data-action="pick-priority"]');
+  await waitFor(async () => (await countSel(p1, ".priority-picker .invoice.is-priority")) === 1, { label: "p1 re-picks priority for round 1" });
+  log("confirmed: 지정 안 함 clears the pick; re-picked for round 1");
+
   await pressSpace(p1);
   await p1.waitForTimeout(150);
-  const stillIdleAfterOnlyP1 = (await countSel(p1, '[data-action="vote-up"]')) === 0;
-  if (!stillIdleAfterOnlyP1) throw new Error("round 1 voting started after only p1 pressed space -- pre-round-1 both-ready gate is broken");
+  const stillIdleAfterOnlyP1 = (await countSel(p1, '[data-action="vote-up"]')) === 0 && (await countSel(p1, ".thief-window")) === 0;
+  if (!stillIdleAfterOnlyP1) throw new Error("round 1 advanced after only p1 pressed space -- pre-round-1 both-ready gate is broken");
   await pressSpace(p2);
-  await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: "round 1 voting starts after both ready", timeout: 5000 });
-  log("pre-round-1 both-ready gate held, then correctly started round 1 voting");
-
-  // ---- no click count is ever shown -- neither mine nor the opponent's ----
-  await clickSel(p1, '[data-action="vote-up"]');
-  await p1.waitForTimeout(300);
-  const p1Text = await bodyText(p1);
-  if (/[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " "))) throw new Error("a raw click counter (mine or the opponent's) is rendered during voting -- should be hidden");
-  log("confirmed: no click count is ever shown (mine or the opponent's)");
+  log("pre-round-1 both-ready gate held while only one player was ready");
 
   // ---- play out a full 5-round half, handling the optional "choosing" (same-floor conflict)
-  // sub-state whenever it appears -- both players click vote-up every round, which drives the
-  // shared floor to the top and keeps it there, making same-floor collisions likely across 21
+  // sub-state whenever it appears, plus (후반 only) a dedicated "thief" placement window that now
+  // appears before every round's voting -- both players click vote-up every round, which drives
+  // the shared floor to the top and keeps it there, making same-floor collisions likely across 21
   // secured cells. ----
-  async function playHalf(halfLabel) {
+  async function playHalf(halfLabel, isHalf2) {
     for (let round = 1; round <= 5; round++) {
+      if (!isHalf2) {
+        const strayThief = await countSel(p1, ".thief-window");
+        if (strayThief !== 0) throw new Error(`${halfLabel} round ${round}: thief window rendered during 전반 -- should be 후반-only`);
+      }
+      if (round === 2 && halfLabel === "전반") {
+        // round-scoped reset: round 1's pick (made above) must NOT still be selected here, even
+        // though it was never delivered -- the server clears el.priorityPick every round.
+        const stillPicked = await countSel(p1, ".priority-picker .invoice.is-priority");
+        if (stillPicked !== 0) throw new Error("round 1's priority pick leaked into round 2's picker -- should reset every round");
+        log(`${halfLabel} round ${round}: confirmed priority pick reset from the previous round (매 라운드 재지정 확인)`);
+      }
+
+      if (isHalf2) {
+        await waitFor(async () => (await countSel(p1, ".thief-window")) > 0, { label: `${halfLabel} round ${round}: thief window`, timeout: 6000 });
+        if (await countSel(p1, '.thief-floors [data-action="place-thief"]')) {
+          await clickSel(p1, '.thief-floors [data-action="place-thief"]');
+          await waitFor(async () => (await bodyText(p1)).includes("배치했어요"), { label: `${halfLabel} round ${round}: p1's thief placement confirmed in UI`, timeout: 3000 });
+        }
+        if (await countSel(p2, '[data-action="skip-thief"]')) await clickSel(p2, '[data-action="skip-thief"]');
+        await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: `${halfLabel} round ${round}: voting starts after thief window`, timeout: 6000 });
+      } else {
+        await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: `${halfLabel} round ${round}: voting starts`, timeout: 6000 });
+      }
+
+      if (halfLabel === "전반" && round === 1) {
+        // no click count is ever shown -- neither mine nor the opponent's (checked once, here,
+        // right as round 1 voting opens).
+        await clickSel(p1, '[data-action="vote-up"]');
+        await p1.waitForTimeout(300);
+        const p1Text = await bodyText(p1);
+        if (/[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " "))) throw new Error("a raw click counter (mine or the opponent's) is rendered during voting -- should be hidden");
+        log("confirmed: no click count is ever shown (mine or the opponent's)");
+      }
+
       await clickSel(p1, '[data-action="vote-up"]');
       await clickSel(p2, '[data-action="vote-up"]');
 
@@ -278,8 +308,14 @@ async function main() {
       const hasCallout = (await countSel(p1, ".delivered-callout")) > 0;
       if (!hasCallout) throw new Error(`${halfLabel} round ${round}: delivered-items callout did not render on the result screen`);
 
-      const myListCountResult = await countSel(p1, ".invoice-list");
-      if (myListCountResult !== 1) throw new Error(`${halfLabel} round ${round}: expected exactly 1 rendered invoice-list (mine only), found ${myListCountResult}`);
+      const listUnderGaugeResult = await countSel(p1, ".elev-left .invoice-list");
+      if (listUnderGaugeResult !== 1) throw new Error(`${halfLabel} round ${round}: expected my invoice list inside .elev-left (under the gauge), found ${listUnderGaugeResult} there`);
+
+      // between-round gate also re-exposes the priority picker (still round-scoped) for any
+      // undelivered invoices -- pick again on p1 so later rounds keep exercising it.
+      if (await countSel(p1, '.priority-picker .invoice[data-action="pick-priority"]')) {
+        await clickSel(p1, '.priority-picker .invoice[data-action="pick-priority"]');
+      }
 
       await pressSpace(p1);
       await p1.waitForTimeout(150);
@@ -296,7 +332,7 @@ async function main() {
     log(`${halfLabel}: all 5 rounds completed`);
   }
 
-  await playHalf("전반");
+  await playHalf("전반", false);
 
   // ---- halftime transition: must appear after 전반's 5th round, on both viewers ----
   await waitFor(async () => {
@@ -329,34 +365,30 @@ async function main() {
   await secureCell(p2, "normal-1");
   await secureCell(p2, "fixed-floor-1");
 
-  await waitFor(async () => {
-    const t1 = await bodyText(p1);
-    const t2 = await bodyText(p2);
-    return t1.includes("우선 택배 지정") && t2.includes("우선 택배 지정");
-  }, { label: "both entered priority phase (half 2)", timeout: 15000 });
-  await pressSpace(p1);
-  await pressSpace(p2);
+  // ---- secure phase ends straight into elevator's idle gate again, same as half 1 -- no
+  // standalone priority phase. Pick a priority invoice here too (light touch -- the full
+  // pick/clear/re-pick UI mechanics were already exercised in half 1), then ready up; playHalf's
+  // round-1 iteration handles the (후반-only) thief window before voting starts. ----
   await waitFor(async () => {
     const t1 = await bodyText(p1);
     const t2 = await bodyText(p2);
     return t1.includes("엘리베이터") && t2.includes("엘리베이터");
-  }, { label: "both entered elevator phase (half 2)", timeout: 5000 });
-
-  // ---- 후반 only: thief placement UI must now be present ----
-  const thiefBoxHalf2 = await countSel(p1, ".thief-box");
-  if (thiefBoxHalf2 !== 1) throw new Error("thief placement box did not render during 후반 (should be exactly 1)");
-  const thiefFloorButtons = await countSel(p1, '.thief-floors [data-action="place-thief"]');
-  if (thiefFloorButtons === 0) throw new Error("no thief floor-placement buttons rendered in 후반");
-  await clickSel(p1, '.thief-floors [data-action="place-thief"]');
-  await waitFor(async () => (await bodyText(p1)).includes("배치했어요"), { label: "p1's thief placement confirmed in UI" });
-  log("confirmed: 택배도둑 placement UI appears only in 후반, and placing one updates the UI");
+  }, { label: "both entered elevator phase (half 2)", timeout: 15000 });
+  const idleVoteButtonsHalf2 = await countSel(p1, '[data-action="vote-up"]');
+  if (idleVoteButtonsHalf2 !== 0) throw new Error("vote buttons should not render before both players ready up for 후반 round 1");
+  const idleThiefWindowHalf2 = await countSel(p1, ".thief-window");
+  if (idleThiefWindowHalf2 !== 0) throw new Error("thief window should not render before both players ready up, even in 후반");
+  if (await countSel(p1, '.priority-picker .invoice[data-action="pick-priority"]')) {
+    await clickSel(p1, '.priority-picker .invoice[data-action="pick-priority"]');
+    await waitFor(async () => (await countSel(p1, ".priority-picker .invoice.is-priority")) === 1, { label: "p1's priority pick highlights (half 2)" });
+  }
+  log("secure phase ended -> elevator phase entered directly on both for 후반 too, idle gate confirmed clean");
 
   await pressSpace(p1);
   await p1.waitForTimeout(150);
   await pressSpace(p2);
-  await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: "후반 round 1 voting starts", timeout: 5000 });
 
-  await playHalf("후반");
+  await playHalf("후반", true);
 
   // ---- final end screen: two halves' worth of tables (2 players x 2 halves = 4 score-tables),
   // plus a grand-total currency line per player ----

@@ -46,8 +46,11 @@ const PRIORITY_MULTIPLIER = 2;
 const SAME_FLOOR_CHOICE_MS = 5000;
 // 전반/후반 두 번 연속 진행, 점수는 두 번의 합산.
 const HALVES = 2;
+// 후반 전용: 매 라운드 이동(voting) 시작 전, 택배도둑을 놓을지 말지 따로 주어지는 시간
+// (2026-08-27 신설 -- 원래는 idle/voting 중 아무 때나 놓을 수 있었는데, 별도의 전용 시간으로 분리).
+const THIEF_PLACE_MS = 5000;
 
 module.exports = {
   TYPES, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
-  PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES,
+  PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS,
 };

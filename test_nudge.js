@@ -40,13 +40,13 @@ async function main() {
   await pressSpace(p1);
   await pressSpace(p2);
   await waitFor(async () => (await bodyText(p1)).includes("택배 확보"), { label: "secure phase" });
-  // secure phase now ends into a "priority" (우선 택배 지정) phase before the elevator -- neither
-  // player secured anything here, so there's nothing to pick, but both still have to press space
-  // to get past the both-ready gate (same pattern as every other gate in this game).
-  await waitFor(async () => (await bodyText(p1)).includes("우선 택배 지정"), { label: "priority phase", timeout: 15000 });
-  await pressSpace(p1);
-  await pressSpace(p2);
-  await waitFor(async () => (await bodyText(p1)).includes("엘리베이터"), { label: "elevator phase", timeout: 5000 });
+  // secure phase now ends straight into the elevator phase's "idle" (pre-round-1) ready-gate --
+  // there's no more standalone priority phase (the picker is embedded directly in the idle/result
+  // gates now, and there's nothing to pick here since neither player secured anything). Both
+  // still have to press space to get past the both-ready gate (same pattern as every other gate
+  // in this game); this is half 1 (전반), so ready-up goes straight to round 1 voting with no
+  // intervening thief window (that only exists in 후반).
+  await waitFor(async () => (await bodyText(p1)).includes("엘리베이터"), { label: "elevator phase", timeout: 15000 });
   await pressSpace(p1);
   await pressSpace(p2);
   await waitFor(async () => (await p1.locator('[data-action="vote-up"]').count()) > 0, { label: "round 1 voting starts" });
