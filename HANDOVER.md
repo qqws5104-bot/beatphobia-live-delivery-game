@@ -265,19 +265,22 @@ git push origin main                      # → Render가 자동 배포
 
 ---
 
-## 7. 현재 엘리베이터 화면의 구조 (다음 작업 대상)
+## 7. 엘리베이터 화면의 구조 — 게이지 바
 
-`.elev-layout`은 **2열 그리드**다: 왼쪽 220px = 샤프트, 오른쪽 = 조작/정보 패널.
+`.elev-layout`은 **2열 그리드**다: 왼쪽 220px = 게이지 바, 오른쪽 = 조작/정보 패널.
 
 ```
 .elev-layout (grid 220px 1fr)
-├── .shaft                     ← 왼쪽. 현재 이 부분이 "층 목록" 형태
-│   └── .shaft-track           ← flex column-reverse (B1이 시각적으로 맨 아래)
-│       └── .floor-stop × 6    ← 각 층 한 줄. 현재 층에만 .current
-│           └── .car           ← 발광하는 작은 사각형 마커
+├── .shaft                        ← 왼쪽 패널 껍데기
+│   └── .gauge                    ← 게이지 본체 (position:relative, overflow:hidden)
+│       ├── .gauge-fill           ← 아래에서 차오르는 금색 채움. height = (floorIdx+1)/6
+│       │   └── ::after           ← 채움 윗면의 밝은 "수면" 선
+│       └── .gauge-rows           ← flex column-reverse (B1이 시각적 맨 아래)
+│           └── .floor-stop × 6   ← 눈금 한 칸. i<=floorIdx면 .filled, i===floorIdx면 .current
+│               └── .car          ← 현재 층에만 보이는 작은 마커
 └── (오른쪽 카드)
     ├── .round-pill            "라운드 N / 5"
-    ├── 현재 층 텍스트
+    ├── 현재 층 텍스트          ← 게이지와 별개로 층 이름을 한 번 더 명시
     ├── .vote-buttons          ▲위로 / ▼아래로
     ├── .vote-count-row        내 클릭 수만
     ├── #round-clock           남은 시간
@@ -286,31 +289,39 @@ git push origin main                      # → Render가 자동 배포
     └── .invoice-list          내 택배 목록
 ```
 
-관련 코드 위치:
-- CSS: `build_client.py`의 `HEAD_HTML` 안, `.elev-layout` ~ `.floor-stop.current .car` (대략 260~268행)
-- 렌더: `build_client.py`의 `APP_JS_TEMPLATE` 안 `renderShaft(floorIdx)` 함수
+관련 코드 위치 (전부 `build_client.py`):
+- CSS: `HEAD_HTML` 안, `.shaft` ~ `@media (max-width:820px) { .gauge ... }`
+- 렌더: `APP_JS_TEMPLATE` 안 `renderShaft(floorIdx)` / `settleShaft()` / `shaftFillPct(i)`
 
-```js
-function renderShaft(floorIdx) {
-  var html = '<div class="shaft"><div class="shaft-track">';
-  FLOORS.forEach(function (f, i) {
-    html += '<div class="floor-stop' + (i === floorIdx ? ' current' : '')
-          + '"><span class="car"></span>' + f + '</div>';
-  });
-  html += '</div></div>';
-  return html;
-}
-```
+### 동작 원리 (고칠 때 반드시 이해할 것)
 
-> **주의**: `.shaft-track`이 `flex-direction: column-reverse`라 **DOM 순서(B1→5F)와 화면 순서(5F→B1)가 반대**다.
-> `querySelectorAll(".floor-stop")[i]`는 화면 위치와 무관하게 `FLOORS[i]`에 대응한다.
-> 테스트 코드가 이 전제에 의존한다.
+**채움 높이 = `(floorIdx + 1) / 6`.** 즉 B1(인덱스 0)은 1/6, 5F(인덱스 5)는 6/6.
+항상 눈금 경계에 정확히 걸리므로 "지금 몇 층인지"가 모호해지지 않는다
+(배송 주소가 `401호`처럼 층에 묶여 있어 이게 중요하다).
 
-### 이 화면의 문제
+**애니메이션이 성립하는 방식이 조금 특이하다.** `render()`는 브로드캐스트마다 DOM을 통째로
+갈아엎는다. 그래서 채움 요소를 최종 높이로 만들어버리면 그냥 그 높이로 "나타날" 뿐 움직이지 않는다.
+그래서:
 
-이동 메커니즘 자체는 정상 동작한다. 그런데 화면은 여전히 **"목록에서 하이라이트 한 줄이 옮겨다니는"**
-정적인 표현이라, 두 사람이 연타로 밀고 당기는 긴장감이 시각적으로 거의 전달되지 않는다.
-→ **이것이 다음 작업(`WORKORDER-gauge-bar.md`)의 대상이다.**
+1. `renderShaft`는 채움을 **직전 층 높이**(`prevShaftFloorIdx`)로 그리고, 진짜 목표를 `data-target`에 넣는다.
+2. `render()` 끝에서 `settleShaft()`가 **`requestAnimationFrame` 2번 중첩** 후 실제 높이를 넣는다.
+   → 브라우저가 "직전 높이"를 한 번 그린 뒤 바뀌므로 transition이 실제로 재생된다.
+   (rAF 1번만 쓰면 브라우저가 둘을 같은 초기 레이아웃으로 합쳐버려 transition이 생략된다.)
+
+연타해도 막히지 않는다 — 새 클릭은 그냥 다음 렌더를 부르고, 그 렌더는 언제나 "직전 논리적 위치"에서
+시작해 새 위치로 이어간다.
+
+> **주의 1**: `.gauge-rows`가 `flex-direction: column-reverse`라 **DOM 순서(B1→5F)와 화면 순서(5F→B1)가 반대**다.
+> `querySelectorAll(".floor-stop")[i]`는 화면 위치와 무관하게 `FLOORS[i]`에 대응한다. 테스트가 이 전제에 의존한다.
+>
+> **주의 2**: 채움 위에 올라간 눈금(`.filled`)은 금색 배경 위라서 **어두운 잉크**를 쓴다.
+> 색만 바꾸면 채움 아래 칸의 글씨가 안 보이게 되니 `.filled` / `.current` 규칙을 함께 볼 것.
+>
+> **주의 3**: 클라이언트에서 층을 **미리 움직이지 말 것**. `floorIdx`는 서버 값을 그대로 그린다.
+> 부드럽게 만들겠다고 낙관적 업데이트를 넣으면 상대 화면과 어긋난다 (4.1절).
+
+`test_nudge.js`가 게이지 채움 비율까지 검증한다 (`.gauge-fill` 높이 ÷ `.gauge` 높이가
+`(floorIdx+1)/6`인지, B1에서 clamp되는지 포함).
 
 ---
 
