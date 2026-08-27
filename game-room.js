@@ -60,10 +60,13 @@ function initialState() {
     players: { "1": { invoices: [] }, "2": { invoices: [] } },
     elevator: {
       // state: "idle" | "voting" | "result" | "done"
-      // "result" is a pause after the 5s tally where both players must press space (readyNext)
+      // "result" is a pause after the 5s window where both players must press space (readyNext)
       // before the next round (or the end screen, for the final round) begins.
       round: 1, floorIdx: START_FLOOR_IDX, state: "idle", votingEndsAt: null,
+      // votes: per-seat click counters, kept purely for display (the client's "내 클릭 수" readout)
+      // and the round log -- they no longer decide anything. Real movement is immediate, see vote().
       votes: { "1": { up: 0, down: 0 }, "2": { up: 0, down: 0 } },
+      roundStartFloorIdx: START_FLOOR_IDX,
       readyNext: { "1": false, "2": false },
       log: [],
     },
@@ -147,19 +150,30 @@ class GameRoom {
   _startVotingRound() {
     this.state.elevator.state = "voting";
     this.state.elevator.votes = { "1": { up: 0, down: 0 }, "2": { up: 0, down: 0 } };
+    this.state.elevator.roundStartFloorIdx = this.state.elevator.floorIdx;
     this.state.elevator.readyNext = { "1": false, "2": false };
     this.state.elevator.votingEndsAt = Date.now() + VOTE_MS;
     this._scheduleAt(this.state.elevator.votingEndsAt, () => this._resolveRound());
     this.emit();
   }
 
+  // Each accepted click moves the REAL elevator by exactly one floor, right now -- not a vote that
+  // gets tallied and resolved later. Both players share control of the same car during the round's
+  // 5-second window, so whichever of them clicks, the car visibly steps immediately for everyone
+  // (the broadcast below reaches both clients). Wherever it happens to be sitting when the round's
+  // timer fires is what _resolveRound() uses for that round's delivery. votes[seat] is still
+  // incremented as a simple per-player click counter -- it no longer decides direction, but the
+  // client still shows it ("내 클릭 수") and the round log still records it for reference.
   vote(seat, dir) {
     if (this.state.phase !== "elevator" || this.state.elevator.state !== "voting") return;
     if (dir !== "up" && dir !== "down") return;
     this.touch();
-    this.state.elevator.votes[seat][dir] += 1;
-    this.emit(); // real-time: broadcast every single click immediately (server-side; the client
-    // chooses whether to render the opponent's live count -- see build_client.py)
+    const el = this.state.elevator;
+    el.votes[seat][dir] += 1;
+    if (dir === "up") el.floorIdx = Math.min(FLOORS.length - 1, el.floorIdx + 1);
+    else el.floorIdx = Math.max(0, el.floorIdx - 1);
+    this.emit(); // real-time: broadcast every single click immediately so both players see the
+    // actual car move, not just their own
   }
 
   // Returns the list of {seat, catIdx, floorIdx, room} for invoices delivered just now, so the
@@ -187,14 +201,16 @@ class GameRoom {
     this.state.scores = { "1": totalScore("1", this.state), "2": totalScore("2", this.state) };
   }
 
+  // The floor has already moved live, click by click, over the course of the round (see vote()) --
+  // this just locks in wherever it ended up as the round's result: deliveries happen at that final
+  // floor, and "dir" here is only the net direction over the whole round (end vs. start), used for
+  // the round-result summary text ("상승"/"하강"/"동률") -- it no longer drives any real movement.
   _resolveRound() {
     if (this.state.phase !== "elevator" || this.state.elevator.state !== "voting") return;
     const el = this.state.elevator;
     const v1 = el.votes["1"], v2 = el.votes["2"];
     const totalUp = v1.up + v2.up, totalDown = v1.down + v2.down;
-    const dir = totalUp > totalDown ? "up" : (totalDown > totalUp ? "down" : "tie");
-    if (dir === "up") el.floorIdx = Math.min(FLOORS.length - 1, el.floorIdx + 1);
-    if (dir === "down") el.floorIdx = Math.max(0, el.floorIdx - 1);
+    const dir = el.floorIdx > el.roundStartFloorIdx ? "up" : (el.floorIdx < el.roundStartFloorIdx ? "down" : "tie");
     const delivered = this._applyDeliveries(el.round);
     el.log.push({ round: el.round, up: totalUp, down: totalDown, dir, floorIdx: el.floorIdx, delivered });
     // Pause here regardless of whether this was the final round -- both players press space to

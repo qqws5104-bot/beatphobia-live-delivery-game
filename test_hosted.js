@@ -205,11 +205,13 @@ async function main() {
   await secureCell(p2, "fresh-1"); // same id as p1 -- must not conflict, per-player boards
   await secureCell(p1, "fragile-1");
   await secureCell(p2, "valuable-1");
-  // secure a bunch more for p1 specifically -- with all-up voting for 5 rounds starting at 1F
-  // (index 1 of 6 floors), the elevator caps at the top floor (5F, index 5) on round 4 and stays
-  // there for round 5 too -- a guaranteed same-floor revisit. Securing many cells raises the odds
-  // that 2+ of p1's invoices land on 5F, which lets us actually exercise (not just unit-reason
-  // about) the "only one package delivers per floor visit, the rest wait for a later visit" rule.
+  // secure a bunch more for p1 specifically -- clicking vote-up (from either seat) now moves the
+  // REAL floor by one immediately, so with both players clicking up every round starting from 1F
+  // (index 1 of 6 floors), the elevator hits the top floor (5F, index 5) well before round 5 and
+  // just stays there (further up-clicks clamp) -- a guaranteed same-floor revisit across several
+  // rounds. Securing many cells raises the odds that 2+ of p1's invoices land on 5F, which lets us
+  // actually exercise (not just unit-reason about) the "only one package delivers per floor visit,
+  // the rest wait for a later visit" rule.
   for (const id of ["normal-2", "normal-3", "normal-4", "fresh-2", "fresh-3", "fragile-2", "fragile-3", "valuable-2", "valuable-3"]) {
     await secureCell(p1, id);
   }
@@ -315,9 +317,10 @@ async function main() {
     }
   }
 
-  // ---- one-package-per-floor-visit rule: with all-up voting for 5 rounds from 1F (index 1 of 6),
-  // the elevator caps at 5F (index 5) on round 4 and stays there for round 5 -- a guaranteed
-  // same-floor revisit. If p1 secured 2+ invoices bound for 5F, confirm they delivered on
+  // ---- one-package-per-floor-visit rule: with both players clicking vote-up every round from 1F
+  // (index 1 of 6), the real floor reaches 5F (index 5) within the first couple of rounds and stays
+  // there (further up-clicks clamp) -- a guaranteed same-floor revisit across the remaining rounds.
+  // If p1 secured 2+ invoices bound for 5F, confirm they delivered on
   // DIFFERENT rounds (never both in the same visit), and in acquisition order (earliest-acquired
   // first). With only a soft guarantee that 2+ invoices land on the same floor (random per
   // invoice), this assertion only runs when the sample actually produced a collision, and logs a

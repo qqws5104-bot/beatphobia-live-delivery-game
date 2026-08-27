@@ -1,22 +1,19 @@
 "use strict";
-// Verifies the elevator car-hop feedback: clicking vote-up/vote-down (from EITHER player) should
-// make the NEIGHBORING floor row (current floor +/-1) light up as ".hop-target" with a
-// ".hop-up"/".hop-down" direction class shortly after, and it must react to the OPPONENT's clicks
-// too (since the feedback is meant to reflect the combined aggregate, not just "my own" clicks) --
-// while never exposing the raw vote numbers, and never moving the real ".current" floor marker.
-// This version also verifies the "persistent, non-reverting" behavior: the hop must NOT auto-revert
-// (it used to fade back out after ~550ms), it must stay lit indefinitely until countered by a click
-// in the opposite direction, and a direction flip must leave no OTHER row stuck highlighted.
+// Verifies REAL, live elevator movement: clicking vote-up/vote-down now moves the actual,
+// server-authoritative floor by exactly one step immediately (no vote tally, no "resolve at the
+// end of 5s" step) -- and that movement must be visible on BOTH players' screens right away,
+// since either seat can move the shared car. Also checks the floor clamps at the top/bottom of the
+// shaft instead of going out of bounds, and that only the raw per-click counter (not the real
+// floor) is ever seat-private.
 const { chromium } = require("playwright");
 
 const BASE = "http://localhost:3000";
-function log(...args) { console.log("[nudge]", ...args); }
+function log(...args) { console.log("[elevmove]", ...args); }
 async function clickSel(page, selector) { return page.evaluate((sel) => { const el = document.querySelector(sel); if (!el) return false; el.click(); return true; }, selector); }
 async function pressSpace(page) { await page.evaluate(() => document.dispatchEvent(new KeyboardEvent("keydown", { code: "Space", key: " ", bubbles: true, cancelable: true }))); }
 async function bodyText(page) { return page.evaluate(() => document.body.innerText); }
-async function hopTargetClasses(page) { return page.evaluate(() => { const el = document.querySelector(".floor-stop.hop-target"); return el ? el.className : null; }); }
-async function hopTargetCount(page) { return page.evaluate(() => document.querySelectorAll(".floor-stop.hop-target").length); }
-async function currentFloorStillIntact(page) { return page.evaluate(() => document.querySelectorAll(".floor-stop.current").length === 1); }
+async function currentFloorLabel(page) { return page.evaluate(() => { const el = document.querySelector(".floor-stop.current"); return el ? el.textContent.trim() : null; }); }
+async function currentFloorCount(page) { return page.evaluate(() => document.querySelectorAll(".floor-stop.current").length); }
 async function waitFor(fn, { timeout = 15000, interval = 100, label = "condition" } = {}) {
   const start = Date.now();
   for (;;) { const v = await fn(); if (v) return v; if (Date.now() - start > timeout) throw new Error("timeout: " + label); await new Promise((r) => setTimeout(r, interval)); }
@@ -48,66 +45,47 @@ async function main() {
   await pressSpace(p2);
   await waitFor(async () => (await p1.locator('[data-action="vote-up"]').count()) > 0, { label: "round 1 voting starts" });
 
-  // 1) my own (p1) click should hop the neighboring (one-floor-up) row on p1's own view, while
-  // the real current-floor marker stays exactly where it was (still exactly one ".current" row)
+  // starting floor is 1F (START_FLOOR_IDX)
+  const startFloor = await currentFloorLabel(p1);
+  if (startFloor !== "1F") throw new Error("expected to start at 1F, got " + startFloor);
+  log("starting floor confirmed: " + startFloor);
+
+  // 1) MY OWN click should move the REAL current floor immediately -- not a cosmetic hop, the
+  // actual ".current" row itself changes, and it must be exactly one row (no ambiguity/duplication)
   await clickSel(p1, '[data-action="vote-up"]');
-  await waitFor(async () => {
-    const cls = await hopTargetClasses(p1);
-    return cls && cls.includes("hop-up");
-  }, { label: "p1 sees hop-up on the floor above after its own vote-up click", timeout: 3000 });
-  if (!(await currentFloorStillIntact(p1))) throw new Error("the real current-floor marker moved/duplicated during the hop animation");
-  log("p1's own vote-up click hopped the floor above on p1's view, real current floor unchanged");
+  await waitFor(async () => (await currentFloorLabel(p1)) === "2F", { label: "p1's own click moved the real floor to 2F", timeout: 3000 });
+  if ((await currentFloorCount(p1)) !== 1) throw new Error("expected exactly one .current row after moving");
+  log("p1's own vote-up click moved the REAL floor from 1F to 2F");
 
-  // 1b) PERSISTENCE: the hop must NOT auto-revert. Wait well past the old 550ms auto-revert window
-  // and confirm the hop-up highlight is still there, unprompted by any further click.
+  // 1b) this must be REAL, not a cosmetic effect that reverts -- wait well past any old animation
+  // window and confirm the floor is still 2F, unprompted
   await p1.waitForTimeout(1500);
-  {
-    const cls = await hopTargetClasses(p1);
-    if (!cls || !cls.includes("hop-up")) throw new Error("the hop-up highlight auto-reverted -- it must persist until countered by an opposite-direction click");
-  }
-  log("hop-up highlight persisted past the old 550ms auto-revert window (no auto-revert) -- OK");
+  if ((await currentFloorLabel(p1)) !== "2F") throw new Error("the real floor reverted on its own -- movement must be permanent (server-authoritative), not a transient animation");
+  log("floor stayed at 2F -- confirmed real (server-authoritative), not a transient animation");
 
-  // 2) the OPPONENT's click in the OPPOSITE direction should clear p1's stale hop-up target and
-  // hop to the floor BELOW instead, on BOTH viewers -- confirms it reflects the combined aggregate
-  // (both players contribute), not just "my own" clicks, and that a direction flip works.
-  await clickSel(p2, '[data-action="vote-down"]');
-  await waitFor(async () => {
-    const cls1 = await hopTargetClasses(p1);
-    return cls1 && cls1.includes("hop-down");
-  }, { label: "p1 sees hop-down after p2's (opponent's) vote-down click", timeout: 3000 });
-  log("p2's (opponent's) vote-down click correctly hopped the floor below on p1's view too");
+  // 2) the OPPONENT's click should ALSO move the real floor, visible on BOTH viewers immediately
+  await clickSel(p2, '[data-action="vote-up"]');
+  await waitFor(async () => (await currentFloorLabel(p1)) === "3F", { label: "p1 sees the real floor move to 3F after p2's (opponent's) click", timeout: 3000 });
+  log("p2's (opponent's) vote-up click moved the shared real floor to 3F, visible on p1's screen");
+  await waitFor(async () => (await currentFloorLabel(p2)) === "3F", { label: "p2 also sees 3F on its own view", timeout: 3000 });
+  log("p2 also sees the real floor at 3F on its own view");
 
-  // 2b) DIRECTION-FLIP SAFETY: exactly one row should carry .hop-target after the flip -- the old
-  // (now-stale) hop-up row on the floor above must have been cleared, not left stuck highlighted.
-  {
-    const count = await hopTargetCount(p1);
-    if (count !== 1) throw new Error("expected exactly 1 .hop-target row after a direction flip, found " + count + " -- the old target was left stuck highlighted");
-  }
-  log("direction flip left exactly one .hop-target row (old stale target was correctly cleared)");
+  // 3) opposite-direction click steps it back down by exactly one, confirming each click is a
+  // discrete +/-1 step (not a snap to some target)
+  await clickSel(p1, '[data-action="vote-down"]');
+  await waitFor(async () => (await currentFloorLabel(p2)) === "2F", { label: "p2 sees the floor step back down to 2F after p1's vote-down click", timeout: 3000 });
+  log("p1's vote-down click stepped the real floor back down to 2F, visible on p2's screen too");
 
-  await waitFor(async () => {
-    const cls2 = await hopTargetClasses(p2);
-    return cls2 && cls2.includes("hop-down");
-  }, { label: "p2 also sees the hop on its own view", timeout: 3000 });
-  log("p2 also sees the hop on its own view (own click)");
-
-  // 2c) the flipped hop-down state must ALSO persist without auto-reverting
-  await p1.waitForTimeout(1500);
-  {
-    const cls = await hopTargetClasses(p1);
-    if (!cls || !cls.includes("hop-down")) throw new Error("the hop-down highlight (after the direction flip) auto-reverted -- it must persist too");
-  }
-  log("hop-down highlight (post-flip) also persisted past the old auto-revert window -- OK");
-
-  // 3) still no raw vote numbers exposed anywhere during this
+  // 4) still no raw opponent click-count leak in the DOM (only the real floor position, which is
+  // meant to be public, should ever be visible cross-seat)
   const p1Text = await bodyText(p1);
   if (/[▲▼]\s*\d+.*[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " ")) && p1Text.includes("상대")) {
-    throw new Error("opponent's vote tally leaked into the DOM alongside the nudge feature");
+    throw new Error("opponent's raw click counter leaked into the DOM");
   }
-  log("confirmed: no opponent vote-count leak introduced by the nudge feature");
+  log("confirmed: no opponent click-counter leak (only the real, shared floor position is visible)");
 
   await browser.close();
   log("ALL CHECKS PASSED");
 }
 
-main().catch((e) => { console.error("[nudge] FAILED:", e); process.exit(1); });
+main().catch((e) => { console.error("[elevmove] FAILED:", e); process.exit(1); });

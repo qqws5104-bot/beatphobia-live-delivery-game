@@ -1,4 +1,7 @@
 "use strict";
+// Captures the elevator shaft before/after real clicks, and after the opponent's click, to visually
+// confirm the car actually steps floor-to-floor in real time (server-authoritative movement, not a
+// cosmetic effect layered on top of a static floor).
 const { chromium } = require("playwright");
 const path = require("path");
 const OUT = "/tmp/shots_nudge";
@@ -39,18 +42,17 @@ async function main() {
   await pressSpace(p2);
   await waitFor(async () => (await p1.locator('[data-action="vote-up"]').count()) > 0, { label: "round 1 voting starts" });
 
+  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "01_start_1F.png") });
+
   await clickSel(p1, '[data-action="vote-up"]');
-  await p1.waitForTimeout(120); // just after the landing pop
-  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "nudge_up_just_after_click.png") });
+  await clickSel(p1, '[data-action="vote-up"]');
+  await p1.waitForTimeout(150);
+  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "02_after_two_own_clicks_3F.png") });
 
-  await p1.waitForTimeout(1800); // well past the old 550ms auto-revert window -- should still be lit
-  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "nudge_up_persisted_1.8s_later.png") });
-
-  // now flip direction via the opponent (p2) -- the old hop-up target must clear and the highlight
-  // must move to the floor below instead, with no row left stuck
-  await clickSel(p2, '[data-action="vote-down"]');
-  await p1.waitForTimeout(200);
-  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "nudge_down_after_opponent_flip.png") });
+  await clickSel(p2, '[data-action="vote-up"]');
+  await p1.waitForTimeout(150);
+  await p1.locator(".shaft").screenshot({ path: path.join(OUT, "03_after_opponent_click_4F_on_p1_view.png") });
+  await p2.locator(".shaft").screenshot({ path: path.join(OUT, "03b_same_state_on_p2_view.png") });
 
   await browser.close();
   console.log("saved to", OUT);

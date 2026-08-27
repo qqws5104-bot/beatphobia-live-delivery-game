@@ -266,23 +266,6 @@ HEAD_HTML = """<!doctype html>
   .floor-stop.current { background:rgba(240,184,74,0.14); color:var(--gold); }
   .floor-stop .car { width:10px; height:10px; border-radius:3px; background:transparent; transition:background-color 0.22s ease, box-shadow 0.22s ease; }
   .floor-stop.current .car { background:var(--gold); box-shadow:0 0 10px var(--gold); }
-  /* the actual floor still only changes once the 5s vote window resolves (aggregate tally,
-     unchanged) -- but during voting, the car marker now tracks whichever direction's click landed
-     MOST RECENTLY (from either player -- the exact counts stay hidden, only "who's currently
-     leading" is shown), hopping to that neighboring floor row and STAYING there -- it does not
-     spring back on its own. It only moves again when a click in the OTHER direction lands, which
-     moves it to the opposite neighbor instead. The row that actually holds "current" (the real,
-     authoritative floor) never changes here -- only .hop-target's own highlight/glow is toggled,
-     so there's no ambiguity about where the elevator truly is between rounds. */
-  .floor-stop.hop-target { background:rgba(240,184,74,0.22); color:var(--gold); }
-  .floor-stop.hop-target .car { background:var(--gold); box-shadow:0 0 10px var(--gold); }
-  .floor-stop.hop-source { background:rgba(240,184,74,0.04); color:var(--muted); }
-  .floor-stop.hop-source .car { background:transparent; box-shadow:none; }
-  .floor-stop .hop-arrow { position:absolute; right:0.7rem; font-size:0.75rem; color:var(--gold); opacity:0; }
-  .floor-stop.hop-target .hop-arrow { opacity:1; } /* stays visible -- no auto fade-out */
-  .floor-stop.hop-target.hop-up .hop-arrow { animation:hopArrowPop 0.3s ease; }
-  .floor-stop.hop-target.hop-down .hop-arrow { animation:hopArrowPop 0.3s ease; }
-  @keyframes hopArrowPop { 0% { opacity:0; transform:scale(0.4); } 65% { opacity:1; transform:scale(1.2); } 100% { opacity:1; transform:scale(1); } }
   .round-pill { display:inline-flex; align-items:center; gap:0.4rem; padding:0.3rem 0.8rem; border-radius:999px;
     background:rgba(109,187,253,0.14); color:var(--sky); font-family:var(--font-display); font-weight:600; font-size:0.85rem; }
   .vote-buttons { display:flex; flex-direction:column; gap:0.7rem; margin-top:1rem; }
@@ -353,50 +336,6 @@ APP_JS_TEMPLATE = r"""
   function setMySeat(s) { try { sessionStorage.setItem("bp-seat", s); } catch (e) {} }
 
   var state = null; // populated by the first "state" message from the server
-
-  // ---------- elevator car hop: purely cosmetic per-click feedback -- diffs the previous vote
-  // tally against the new one to see whether an up or down click just landed (from EITHER player
-  // -- their exact counts stay hidden, only the fact that something just moved is used), then
-  // makes the glowing car marker hop to the NEIGHBORING floor row in that direction and hold there
-  // -- it does NOT spring back on its own. It only moves again once a click in the OTHER direction
-  // lands, which then moves it to the opposite neighbor instead, always tracking whichever
-  // direction most recently "won" a click, shared across both players. The actual current-floor
-  // row (the real, authoritative floor) never moves here -- only the neighbor's own highlight is
-  // toggled -- so the true floor position stays unambiguous. The floor itself still only changes
-  // once the round resolves from the full aggregate, unchanged. A fresh round's render() wipes any
-  // leftover hop state automatically (full DOM replace), so nothing needs resetting by hand. ----------
-  function detectVoteBump(prevState, nextState) {
-    if (!nextState || nextState.phase !== "elevator" || nextState.elevator.state !== "voting") return null;
-    if (!prevState || prevState.phase !== "elevator" || !prevState.elevator) return null;
-    if (prevState.elevator.round !== nextState.elevator.round) return null; // new round starting fresh, not a click
-    var pv = prevState.elevator.votes, nv = nextState.elevator.votes;
-    var upDelta = 0, downDelta = 0;
-    ["1", "2"].forEach(function (s) {
-      upDelta += nv[s].up - (pv[s] ? pv[s].up : 0);
-      downDelta += nv[s].down - (pv[s] ? pv[s].down : 0);
-    });
-    if (upDelta <= 0 && downDelta <= 0) return null;
-    return upDelta >= downDelta ? "up" : "down";
-  }
-  function bumpCar(dir) {
-    if (!state || state.phase !== "elevator") return;
-    var floorIdx = state.elevator.floorIdx;
-    var targetIdx = dir === "up" ? floorIdx + 1 : floorIdx - 1;
-    if (targetIdx < 0 || targetIdx >= FLOORS.length) return; // already at the very top/bottom -- nowhere to hop to
-    var rows = document.querySelectorAll(".floor-stop"); // DOM order matches FLOORS order (B1..top),
-    // regardless of the shaft's visual column-reverse layout -- so rows[i] is floor index i.
-    // Clear hop state off EVERY row first (not just this click's source/target pair) -- if the
-    // previous click hopped the OTHER direction, its target row is a different row than either of
-    // this click's rows, and would otherwise be left stuck highlighted forever.
-    rows.forEach(function (row) { row.classList.remove("hop-source", "hop-target", "hop-up", "hop-down"); });
-    var sourceRow = rows[floorIdx], targetRow = rows[targetIdx];
-    if (!targetRow) return;
-    void targetRow.offsetWidth; // force reflow so the pop-in animation restarts even on a same-direction repeat click
-    var arrow = targetRow.querySelector(".hop-arrow");
-    if (arrow) arrow.textContent = dir === "up" ? "▲" : "▼";
-    if (sourceRow) sourceRow.classList.add("hop-source");
-    targetRow.classList.add("hop-target", dir === "up" ? "hop-up" : "hop-down");
-  }
   var local = { openCellId: null, toast: null };
   var wsConnected = false;
 
@@ -455,10 +394,11 @@ APP_JS_TEMPLATE = r"""
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (!msg) return;
       if (msg.type === "state") {
-        var bump = detectVoteBump(state, msg.state);
+        // the elevator's floorIdx is now real, server-authoritative position -- every click (from
+        // either player) already moves it for real before this broadcast goes out, so a plain
+        // re-render is enough to show the car actually stepping; no client-side simulation needed.
         state = msg.state;
         render();
-        if (bump) bumpCar(bump);
       }
       else if (msg.type === "error") { handleWsError(msg); }
     };
@@ -598,11 +538,13 @@ APP_JS_TEMPLATE = r"""
       + '</div></div></div>';
   }
 
+  // floorIdx is the real, server-authoritative elevator position -- it now moves live as either
+  // player clicks (see game-room.js's vote()), so this simple re-render on every state broadcast is
+  // all that's needed for both players to see the car actually stepping in real time.
   function renderShaft(floorIdx) {
     var html = '<div class="shaft"><div class="shaft-track">';
     FLOORS.forEach(function (f, i) {
-      html += '<div class="floor-stop' + (i === floorIdx ? ' current' : '') + '"><span class="car"></span>' + f
-        + '<span class="hop-arrow">▲</span></div>';
+      html += '<div class="floor-stop' + (i === floorIdx ? ' current' : '') + '"><span class="car"></span>' + f + '</div>';
     });
     html += '</div></div>';
     return html;
@@ -675,8 +617,9 @@ APP_JS_TEMPLATE = r"""
     html += '<button class="btn big primary" data-action="vote-up"' + (voting ? '' : ' disabled') + '>▲ 위로</button>';
     html += '<button class="btn big ghost" data-action="vote-down"' + (voting ? '' : ' disabled') + '>▼ 아래로</button>';
     html += '</div>';
-    // only my own live count is shown -- the opponent's tally stays hidden until the round
-    // resolves, so nobody can pace their clicking off the other player's running total.
+    // the real floor position (shown in the shaft above) is always visible to both players, live --
+    // only the raw per-click counter here is private to "me"; the opponent's own count stays hidden
+    // so nobody can pace their clicking off the other player's exact tally.
     html += '<div class="vote-count-row">'
       + '<div class="vote-count-col"><span class="who">나 (플레이어 ' + seat + ')</span><span class="nums"><span class="up">▲' + mine.up + '</span><span class="down">▼' + mine.down + '</span></span></div>'
       + '</div>';
