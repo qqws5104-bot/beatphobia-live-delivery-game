@@ -17,12 +17,31 @@ const {
 function cellById(state, seat, id) { return state.boards[seat].find((c) => c.id === id) || null; }
 function cellMeta(id) { return CELLS.find((c) => c.id === id) || null; }
 
+// 호수(ROOMS, "1"~"9")는 플레이어별로 겹치지 않게 뽑는다 -- 완전 무작위 복원추출이면 같은 플레이어
+// 안에서도 "401호"와 "101호"처럼 호수 숫자가 자주 겹쳐 보였다("한 플레이어한테 같은 호수 안나오게끔"
+// 요청, 2026-08-27). 셔플된 가방(bag)에서 하나씩 뽑아 쓰고, 다 떨어지면(9개 다 씀) 새로 셔플해서
+// 다시 채운다 -- 그래서 "같은 9개를 한 바퀴 다 돌기 전까지는" 절대 안 겹치고, 그 이후엔 다시 안 겹치는
+// 새 사이클이 시작된다. 21칸을 다 채우는 극단적 케이스에도 완전히 막을 순 없지만(호수 풀이 9개뿐이라
+// 수학적으로 불가능), 그 안에서 최대한 안 겹치게 분산시킨다.
+function shuffledRooms() {
+  const arr = ROOMS.slice();
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function drawRoom(playerState) {
+  if (!playerState.roomBag || playerState.roomBag.length === 0) playerState.roomBag = shuffledRooms();
+  return playerState.roomBag.pop();
+}
+
 // fixedFloor 종류(확정 층수 택배)는 칸의 num(0..5)이 그대로 FLOORS 인덱스가 된다 -- 무작위가 아니라
-// 어느 칸을 확보했는지에 따라 배송지가 결정되어 있다. 그 외 종류는 기존처럼 무작위 층.
-function randomInvoice(seat, catIdx, num, acquiredSeq) {
+// 어느 칸을 확보했는지에 따라 배송지가 결정되어 있다. 그 외 종류는 기존처럼 무작위 층. room은 이제
+// 호출부(secureCell)에서 drawRoom()으로 뽑아 넘겨준다 (플레이어별 중복 방지, 위 참고).
+function randomInvoice(seat, catIdx, num, acquiredSeq, room) {
   const t = TYPES[catIdx];
   const floorIdx = t.fixedFloor ? num : Math.floor(Math.random() * FLOORS.length);
-  const room = ROOMS[Math.floor(Math.random() * ROOMS.length)];
   return {
     id: "inv-" + seat + "-" + acquiredSeq,
     catIdx, floorIdx, room, acquiredSeq,
@@ -56,7 +75,9 @@ function freshBoard() {
   return CELLS.map((c) => ({ id: c.id, catIdx: c.catIdx, num: c.num, taken: false, acquiredSeq: null }));
 }
 function freshPlayers() {
-  return { "1": { invoices: [] }, "2": { invoices: [] } };
+  // roomBag: 이 플레이어의 이번 하프용 "안 겹치는 호수" 셔플 가방 (drawRoom() 참고). 하프가 바뀌면
+  // (freshPlayers()가 다시 호출되면) 완전히 새로 셔플돼서 이전 하프의 소진 상태를 이어받지 않는다.
+  return { "1": { invoices: [], roomBag: shuffledRooms() }, "2": { invoices: [], roomBag: shuffledRooms() } };
 }
 function freshElevator() {
   return {
@@ -165,7 +186,8 @@ class GameRoom {
     this.state.acquireCounter[seat] += 1;
     cell.acquiredSeq = this.state.acquireCounter[seat];
     const meta = cellMeta(cellId);
-    this.state.players[seat].invoices.push(randomInvoice(seat, meta.catIdx, meta.num, cell.acquiredSeq));
+    const room = drawRoom(this.state.players[seat]);
+    this.state.players[seat].invoices.push(randomInvoice(seat, meta.catIdx, meta.num, cell.acquiredSeq, room));
     this.emit();
   }
 

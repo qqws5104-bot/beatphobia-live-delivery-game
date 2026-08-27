@@ -341,7 +341,7 @@ HEAD_HTML = """<!doctype html>
   .priority-picker { margin-top:0.75rem; padding-top:0.75rem; border-top:1px dashed var(--panel-line); }
   .priority-picker h4 { margin:0 0 0.5rem; font-family:var(--font-display); font-size:0.9rem; color:var(--gold); }
 
-  /* same-floor 5초 선택 (같은 층에 배송 대기 중인 내 택배가 2개 이상일 때) */
+  /* same-floor 선택 (같은 층에 배송 대기 중인 내 택배가 2개 이상일 때, SAME_FLOOR_CHOICE_MS 동안) */
   .choice-box { background:rgba(240,184,74,0.08); border:1px solid rgba(240,184,74,0.35); border-radius:12px;
     padding:0.9rem 1rem; margin-top:0.75rem; }
   .choice-box h4 { margin:0 0 0.5rem; font-family:var(--font-display); font-size:0.95rem; color:var(--gold); }

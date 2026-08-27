@@ -13,11 +13,11 @@
 const TYPES = [
   { key: "normal", name: "일반택배", count: 5, pieces: 2, reward: 2500, penalty: 1000,
     color: "#C9A576", ink: "#16233F" },
-  { key: "fragile", name: "깨지기 쉬운 택배", count: 5, pieces: 4, reward: 5000, penalty: 2500,
+  { key: "fragile", name: "깨지기 쉬운 택배", count: 5, pieces: 3, reward: 5000, penalty: 2500,
     color: "#C7E29A", ink: "#16233F" },
-  { key: "valuable", name: "귀중품", count: 5, pieces: 3, reward: 10000, penalty: 5000,
+  { key: "valuable", name: "귀중품", count: 5, pieces: 4, reward: 10000, penalty: 5000,
     color: "#F0B84A", ink: "#16233F" },
-  { key: "fixed-floor", name: "확정 층수 택배", count: 6, pieces: 3, fixedFloor: true, reward: 3000, penalty: 1500,
+  { key: "fixed-floor", name: "확정 층수 택배", count: 6, pieces: 3, fixedFloor: true, reward: 3000, penalty: 2500,
     color: "#6DBBFD", ink: "#16233F" },
 ];
 
@@ -40,10 +40,13 @@ const SECURE_PHASE_MS = 3 * 60 * 1000;
 const VOTE_MS = 5000; // 엘리베이터 이동 라운드 길이 (기존과 동일)
 
 // ---- 2026-08-27 신규 상수 ----
-// 우선 택배(엘리베이터 페이즈 시작 전 지정, 1인당 1개)가 배송 성공하면 점수 2배.
+// 우선 택배 -- 엘리베이터의 각 라운드 게이트(idle/result)에서 매 라운드 새로 지정한다(1인당 1개,
+// 그 라운드 안에 배송 성공해야만 적용, 게임 시작 전 1회가 아님 -- game-room.js의 el.priorityPick
+// 참고). 배송 성공하면 점수 2배.
 const PRIORITY_MULTIPLIER = 2;
 // 같은 층에 배송 대기 중인 내 택배가 2개 이상일 때, 어느 걸 먼저 보낼지 고르는 시간(안 고르면 무작위).
-const SAME_FLOOR_CHOICE_MS = 5000;
+// 2026-08-27: 5초 -> 10초로 늘림(사용자 요청).
+const SAME_FLOOR_CHOICE_MS = 10000;
 // 전반/후반 두 번 연속 진행, 점수는 두 번의 합산.
 const HALVES = 2;
 // 후반 전용: 매 라운드 이동(voting) 시작 전, 택배도둑을 놓을지 말지 따로 주어지는 시간
