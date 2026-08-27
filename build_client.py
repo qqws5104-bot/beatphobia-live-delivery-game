@@ -230,35 +230,40 @@ HEAD_HTML = """<!doctype html>
     font-family:var(--font-display); }
   .board-label .cat-name { font-size:1rem; font-weight:800; letter-spacing:0.01em; text-shadow:0 1px 2px rgba(0,0,0,0.22); }
   .board-label .price { display:flex; flex-direction:column; gap:0.1rem; margin-top:0.35rem; font-weight:600; font-size:0.72rem; opacity:0.85; }
-  /* each cell is styled to read as a cardboard delivery box: folded top flaps (the two diagonal
-     seams meeting at top-center), a vertical packing-tape strip down the middle, a beveled
-     top/bottom edge for depth, and a small barcode tucked in the bottom-right corner. aspect-ratio
-     is intentionally NOT set -- the cell stretches to fill its grid row/column exactly (see
-     board-grid's grid-template-rows:1fr above), which is what makes the whole board fit any
-     viewport height without scrolling. */
-  .cell { position:relative; min-height:0; border-radius:6px; border:none; display:flex; align-items:center; justify-content:center;
-    font-family:var(--font-display); font-weight:700; font-size:1.2rem; color:#fff; overflow:hidden;
-    box-shadow: inset 0 -7px 0 rgba(0,0,0,0.16), inset 0 3px 0 rgba(255,255,255,0.16); }
-  .cell::before { content:""; position:absolute; top:0; left:0; right:0; height:44%; z-index:1;
-    background:
-      linear-gradient(115deg, transparent 47%, rgba(0,0,0,0.17) 49%, rgba(0,0,0,0.17) 51%, transparent 53%),
-      linear-gradient(65deg, transparent 47%, rgba(0,0,0,0.17) 49%, rgba(0,0,0,0.17) 51%, transparent 53%); }
-  .cell::after { content:""; position:absolute; top:0; bottom:0; left:50%; width:20%; transform:translateX(-50%); z-index:1;
-    background:rgba(255,255,255,0.2); box-shadow:0 0 0 1px rgba(255,255,255,0.1); }
-  .cell .cell-num { position:relative; z-index:3; text-shadow:0 1px 3px rgba(0,0,0,0.5); }
-  .cell .barcode { position:absolute; z-index:3; right:5px; bottom:5px; width:24px; height:12px; border-radius:1px;
-    background: repeating-linear-gradient(90deg, #20180f 0 1px, transparent 1px 2px, #20180f 3px 4px, transparent 4px 6px), #f4f1ea;
-    opacity:0.88; }
+  /* each cell reads as a soft, rounded 3D delivery box (2026-08-27 restyle, matching the reference
+     clay-render look) instead of the old flat cardboard-with-tape look: chunky rounded corners, a
+     glossy highlight top-left, a wide darkened "strap" band wrapping across the top, and a small
+     tag+lines glyph tucked in the bottom-right corner. Every category keeps its own background/ink
+     color (set inline per-cell, see renderBoard) -- the strap/highlight/glyph are all drawn with
+     black/white/currentColor overlays so they automatically match whatever color a category has,
+     with nothing hardcoded to any one hue. aspect-ratio is intentionally NOT set -- the cell
+     stretches to fill its grid row/column exactly (board-grid's grid-template-rows:1fr above),
+     which is what makes the whole board fit any viewport height without scrolling. */
+  .cell { position:relative; min-height:0; border-radius:16px; border:none; display:flex; align-items:center; justify-content:center;
+    font-family:var(--font-display); font-weight:700; font-size:1.25rem; overflow:hidden;
+    box-shadow: inset 0 3px 0 rgba(255,255,255,0.38), inset 0 -12px 16px rgba(0,0,0,0.22), 0 6px 14px rgba(0,0,0,0.22); }
+  /* glossy sheen, upper-left */
+  .cell::before { content:""; position:absolute; inset:0; z-index:1; border-radius:inherit;
+    background: radial-gradient(120% 90% at 28% 14%, rgba(255,255,255,0.4), transparent 55%); }
+  /* the wrap-around strap: a diagonal darkened band across the box's own color -- reads as a
+     slightly darker sash/ribbon without needing a separate strap color per category. */
+  .cell::after { content:""; position:absolute; inset:-15% -15%; z-index:1;
+    background: linear-gradient(112deg, transparent 39%, rgba(0,0,0,0.15) 44%, rgba(0,0,0,0.15) 60%, transparent 65%); }
+  .cell .cell-num { position:relative; z-index:3; text-shadow:0 1px 2px rgba(0,0,0,0.18); }
+  .cell .box-tag { position:absolute; z-index:3; right:8px; bottom:7px; display:flex; align-items:center; gap:4px; opacity:0.55; }
+  .cell .box-tag .chip { width:9px; height:9px; border-radius:2px; background:currentColor; }
+  .cell .box-tag .lines { display:flex; flex-direction:column; gap:2px; }
+  .cell .box-tag .lines span { display:block; width:15px; height:2px; border-radius:1px; background:currentColor; }
   /* a secured cell keeps its category color (it reads as "this box's contents"), it just gets a
      shipping-label sticker slapped on with the invoice's destination room code instead of the
      plain index number -- the box stays identifiable, not just greyed into a blank "used" tile. */
   .cell.taken { cursor:default; }
-  .cell.taken::before, .cell.taken::after { opacity:0.4; }
-  .cell.taken .barcode { opacity:0.6; }
+  .cell.taken::before, .cell.taken::after { opacity:0.5; }
+  .cell.taken .box-tag { opacity:0.3; }
   .cell .invoice-label { position:relative; z-index:3; background:#f4f1ea; color:#20180f;
     font-family:var(--font-display); font-weight:700; font-size:1.05rem; letter-spacing:0.02em;
     padding:0.32rem 0.65rem; border-radius:4px; box-shadow:0 3px 8px rgba(0,0,0,0.3); transform:rotate(-2deg); }
-  .cell:not(.taken):hover { filter:brightness(1.1); }
+  .cell:not(.taken):hover { filter:brightness(1.06); transform:translateY(-1px); }
 
   /* on genuinely short viewports, shrink the chrome around the board (topbar + side-timer) too --
      the board itself already fills whatever's left via grid-template-rows:1fr, but a smaller
@@ -378,6 +383,8 @@ APP_JS_TEMPLATE = r"""
   var PRIORITY_MULTIPLIER = @@PRIORITY_MULTIPLIER@@;
   var SAME_FLOOR_CHOICE_MS = @@SAME_FLOOR_CHOICE_MS@@;
   var HALVES = @@HALVES@@;
+  // 확정 층수 택배를 제외한 나머지 종류는 칸 번호 대신 a/b/c/d/e로 표기한다 (사용자 요청).
+  var CELL_LETTERS = ["a", "b", "c", "d", "e", "f"];
 
   var ROOM = (new URLSearchParams(window.location.search).get("room") || "").trim().toUpperCase();
 
@@ -569,10 +576,11 @@ APP_JS_TEMPLATE = r"""
       for (var num = 0; num < t.count; num++) {
         var cell = boardById[t.key + "-" + (num + 1)];
         var taken = !!cell.taken;
-        // 확정 층수 택배는 칸의 num이 곧 배송 층이므로, 미확보 상태에서도 어느 층인지 미리 보여준다.
+        // 확정 층수 택배는 칸의 num이 곧 배송 층이므로 지금 표기(층 이름) 그대로 유지하고,
+        // 나머지 종류는 숫자 대신 a/b/c/d/e로 표기한다 (사용자 요청, 2026-08-27).
         var faceHtml = t.fixedFloor
           ? '<span class="cell-num">' + esc(FLOORS[num]) + '</span>'
-          : '<span class="cell-num">' + (num + 1) + '</span>';
+          : '<span class="cell-num">' + esc(CELL_LETTERS[num] || String(num + 1)) + '</span>';
         if (taken) {
           // the invoice created at securing time shares this cell's acquiredSeq -- look it up to
           // show its destination as a shipping-label sticker instead of the plain index number.
@@ -580,10 +588,10 @@ APP_JS_TEMPLATE = r"""
           for (var i = 0; i < myInvoices.length; i++) { if (myInvoices[i].acquiredSeq === cell.acquiredSeq) { inv = myInvoices[i]; break; } }
           faceHtml = inv ? ('<span class="invoice-label">' + esc(roomCode(inv.floorIdx, inv.room)) + '</span>') : faceHtml;
         }
-        html += '<button class="cell' + (taken ? ' taken' : '') + '" style="background:' + t.color + ';"'
+        html += '<button class="cell' + (taken ? ' taken' : '') + '" style="background:' + t.color + ';color:' + t.ink + ';"'
           + (taken ? '' : (' data-action="open-cell" data-cell="' + cell.id + '"'))
           + '>' + faceHtml
-          + '<span class="barcode"></span>'
+          + '<span class="box-tag"><span class="chip"></span><span class="lines"><span></span><span></span><span></span></span></span>'
           + '</button>';
       }
       html += '</div>';
