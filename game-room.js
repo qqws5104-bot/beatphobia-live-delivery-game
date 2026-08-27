@@ -6,7 +6,7 @@
 "use strict";
 
 const {
-  TYPES, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
+  TYPES, COURIERS, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
   PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS,
 } = require("./game-data");
 
@@ -125,6 +125,10 @@ function initialState() {
     phase: "lobby", // lobby -> secure -> elevator -> halftime -> secure -> elevator -> end
     ready: { "1": false, "2": false },
     seatOwners: { "1": null, "2": null },
+    // courierPick: 좌석당 고른 가상 택배사 key(COURIERS 참고, null이면 아직 미선택). 좌석 배정과
+    // 동시에(pickCourier) 정해지고, 하프가 바뀌어도 그대로 유지된다(게임 시작 전 1회 선택 -- 리셋
+    // 없음). 2026-08-27 신설.
+    courierPick: { "1": null, "2": null },
     secureEndsAt: null,
     boards: { "1": freshBoard(), "2": freshBoard() },
     acquireCounter: { "1": 0, "2": 0 },
@@ -159,11 +163,38 @@ class GameRoom {
     this.touch();
     const owners = this.state.seatOwners;
     if (owners[seat] && owners[seat] !== clientId) return { ok: false, code: "seat_taken" };
-    // freeing any other seat this same client previously held (e.g. picked wrong seat, retried)
-    ["1", "2"].forEach((s) => { if (owners[s] === clientId && s !== seat) owners[s] = null; });
+    // freeing any other seat this same client previously held (e.g. picked wrong seat, retried) --
+    // also clears its courierPick so that courier becomes pickable again, rather than staying
+    // reserved on a now-unowned seat.
+    ["1", "2"].forEach((s) => {
+      if (owners[s] === clientId && s !== seat) { owners[s] = null; this.state.courierPick[s] = null; }
+    });
     owners[seat] = clientId;
     this.emit();
     return { ok: true };
+  }
+
+  // 2026-08-27 신설: 좌석 선택 화면이 "플레이어 1/2" 버튼 대신 가상 택배사 5종 아이콘을 보여주고,
+  // 클라이언트는 자기가 몇 번 좌석이 될지 미리 알 수 없으므로(먼저 온 사람이 "1", 나중 온 사람이
+  // "2") 좌석 번호 없이 courierKey만 보내면 서버가 정한다. 이미 이 clientId가 어느 좌석을 갖고
+  // 있으면(마음 바꿔 다른 아이콘 다시 고르는 경우) 그 좌석을 그대로 재사용하고, 없으면 비어 있는
+  // 좌석("1" 우선) 하나를 새로 배정한다. courierKey는 반대쪽 좌석이 이미 고른 것과 겹칠 수 없다.
+  pickCourier(courierKey, clientId) {
+    this.touch();
+    if (!COURIERS.some((c) => c.key === courierKey)) return { ok: false, code: "bad_courier" };
+    const owners = this.state.seatOwners;
+    const picks = this.state.courierPick;
+    let seat = ["1", "2"].find((s) => owners[s] === clientId) || null;
+    if (!seat) {
+      seat = owners["1"] === null ? "1" : (owners["2"] === null ? "2" : null);
+      if (!seat) return { ok: false, code: "room_full" };
+    }
+    const otherSeat = seat === "1" ? "2" : "1";
+    if (picks[otherSeat] === courierKey) return { ok: false, code: "courier_taken" };
+    owners[seat] = clientId;
+    picks[seat] = courierKey;
+    this.emit();
+    return { ok: true, seat };
   }
 
   setReady(seat) {
@@ -494,6 +525,11 @@ class GameRoom {
   releaseSeatIfOrphaned(seat, clientId, stillConnectedClientIds) {
     if (this.state.seatOwners[seat] === clientId && !stillConnectedClientIds.has(clientId)) {
       this.state.seatOwners[seat] = null;
+      // 게임 시작 전(로비)이었다면 그 좌석의 택배사 선택도 같이 풀어줘서 다른 사람이 다시 고를 수
+      // 있게 한다. 게임이 이미 시작된 뒤의 연결 끊김은 courierPick을 그대로 둔다 -- 그 좌석은
+      // 여전히 "그 택배사 직원"으로 진행 중인 게임의 일부이므로, 재접속하면 같은 좌석/택배사로
+      // 복귀해야 한다(위 pickSeat의 재접속 경로).
+      if (this.state.phase === "lobby") this.state.courierPick[seat] = null;
       this.emit();
     }
   }

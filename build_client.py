@@ -43,6 +43,7 @@ def load_shared_constants():
         return m.group(1)
 
     types_js = grab("TYPES")
+    couriers_js = grab("COURIERS")
     floors_js = grab("FLOORS")
     rooms_js = grab("ROOMS")
     elevator_rounds = eval(grab("ELEVATOR_ROUNDS"))
@@ -63,13 +64,14 @@ def load_shared_constants():
         return js
 
     types = json.loads(js_object_to_json(types_js))
+    couriers = json.loads(js_object_to_json(couriers_js))
     floors = json.loads(js_object_to_json(floors_js))
     rooms = json.loads(js_object_to_json(rooms_js))
-    return (types, floors, rooms, elevator_rounds, secure_phase_ms, vote_ms,
+    return (types, couriers, floors, rooms, elevator_rounds, secure_phase_ms, vote_ms,
             priority_multiplier, same_floor_choice_ms, halves, thief_place_ms)
 
 
-(TYPES, FLOORS, ROOMS, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
+(TYPES, COURIERS, FLOORS, ROOMS, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
  PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS) = load_shared_constants()
 
 # 2026-08-27 개편: 보드가 20칸(4종류x5개 고정)에서 21칸(종류별 count가 다름, 확정 층수 택배만 6개)으로
@@ -130,6 +132,7 @@ def box_art_data_uri(key):
 BOX_ART = [box_art_data_uri(t["key"]) for t in TYPES]
 
 TYPES_JSON = json.dumps(TYPES, ensure_ascii=False)
+COURIERS_JSON = json.dumps(COURIERS, ensure_ascii=False)
 CELLS_JSON = json.dumps(CELLS, ensure_ascii=False)
 FLOORS_JSON = json.dumps(FLOORS, ensure_ascii=False)
 BOX_ART_JSON = json.dumps(BOX_ART, ensure_ascii=False)
@@ -202,14 +205,30 @@ HEAD_HTML = """<!doctype html>
   .btn:disabled { opacity:0.4; cursor:not-allowed; transform:none; }
   .btn.big { padding:1.4rem; font-size:1.4rem; border-radius:16px; width:100%; }
 
-  .center-screen { flex:1; display:flex; align-items:center; justify-content:center; }
-  .seat-pick { text-align:center; max-width:420px; }
+  .center-screen { flex:1; display:flex; align-items:center; justify-content:center; padding:2rem 1rem; }
+  /* 2026-08-27: 좌석 선택 화면을 "플레이어 1/2" 두 버튼에서 가상 택배사 5종 아이콘 픽커로 교체하면서
+     같이 카드 배경 + 장식용 택배박스 일러스트를 추가했다 (사용자 요청: "처음 시작 페이지에 택배박스
+     모양이 좀 그려져 있으면 좋을 것 같아"). .picker-scene이 그 장식(.lobby-box-deco, 카드 뒤에 옅게
+     흩어진 박스 라인아트)의 위치 기준점 -- 카드(.seat-pick) 자체는 z-index로 그 위에 뜬다. */
+  .picker-scene { position:relative; width:100%; max-width:680px; display:flex; justify-content:center; }
+  .lobby-box-deco { position:absolute; pointer-events:none; z-index:0; }
+  .lobby-box-deco svg { width:100%; height:100%; display:block; }
+  .seat-pick { position:relative; z-index:1; text-align:center; max-width:640px; width:100%; padding:1.6rem 1.8rem; }
   .seat-pick h2 { font-family:var(--font-display); font-size:1.6rem; margin:0 0 0.4rem; }
   .seat-pick p { color:var(--muted); font-size:0.9rem; margin:0 0 1.4rem; }
-  .seat-options { display:flex; gap:0.8rem; justify-content:center; }
-  .seat-options .btn { flex:1; padding:1.6rem 1rem; font-size:1.15rem; }
-  .seat-options .btn.taken { position:relative; }
-  .seat-options .btn .taken-note { display:block; font-size:0.7rem; font-weight:500; margin-top:0.3rem; opacity:0.8; }
+  .courier-options { display:flex; gap:0.7rem; justify-content:center; flex-wrap:wrap; }
+  .courier-btn { --courier-color:var(--gold); flex:0 1 108px; display:flex; flex-direction:column; align-items:center;
+    gap:0.4rem; padding:0.9rem 0.6rem; border-radius:14px; background:var(--panel);
+    border:2px solid var(--panel-line); font-family:var(--font-display); color:var(--ink);
+    transition:transform .12s ease, border-color .12s ease, box-shadow .12s ease; }
+  .courier-btn:not(:disabled):hover { transform:translateY(-2px); border-color:var(--courier-color);
+    box-shadow:0 8px 18px rgba(43,29,18,0.14); }
+  .courier-btn .courier-icon { width:34px; height:34px; color:var(--courier-color); }
+  .courier-btn .courier-icon svg { width:100%; height:100%; display:block; }
+  .courier-btn .courier-name { font-size:0.82rem; font-weight:700; }
+  .courier-btn.mine { border-color:var(--courier-color); background:color-mix(in srgb, var(--courier-color) 12%, var(--panel)); }
+  .courier-btn.taken, .courier-btn:disabled:not(.mine) { opacity:0.45; cursor:not-allowed; }
+  .courier-btn .taken-note { display:block; font-size:0.68rem; font-weight:600; color:var(--muted); }
   .room-share { margin-top:1.2rem; padding-top:1.2rem; border-top:1px solid var(--panel-line); color:var(--muted); font-size:0.85rem; }
   .room-share strong { color:var(--sky); font-family:var(--font-display); letter-spacing:0.08em; }
 
@@ -264,13 +283,9 @@ HEAD_HTML = """<!doctype html>
   .board-label .cat-icon svg { width:100%; height:100%; display:block; }
   .board-label .cat-name { font-family:var(--font-display); font-size:0.76rem; font-weight:800; letter-spacing:0.005em;
     line-height:1.15; color:var(--ink); }
-  .board-label .price-grid { display:grid; grid-template-columns:1fr 1fr; gap:1px 3px; margin-top:0.05rem; }
-  .board-label .price-grid .ph { font-family:var(--font-display); font-size:0.56rem; font-weight:700;
-    color:var(--gold-ink); background:var(--gold); text-align:center; padding:0.1rem 0; letter-spacing:0.02em; }
-  .board-label .price-grid .ph:first-child { border-radius:4px 0 0 4px; }
-  .board-label .price-grid .ph:last-child { border-radius:0 4px 4px 0; }
-  .board-label .price-grid .pk { font-family:var(--font-display); font-size:0.6rem; color:var(--muted); font-weight:600; }
-  .board-label .price-grid .pv { font-family:var(--font-display); font-size:0.6rem; color:var(--ink); font-weight:700;
+  .board-label .price-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px 4px; margin-top:0.2rem; }
+  .board-label .price-grid .pk { font-family:var(--font-display); font-size:0.64rem; color:var(--muted); font-weight:600; }
+  .board-label .price-grid .pv { font-family:var(--font-display); font-size:0.64rem; color:var(--ink); font-weight:700;
     text-align:right; font-variant-numeric:tabular-nums; }
   /* each cell reads as a soft, rounded 3D delivery box. Base layer is still the category's flat
      color (set inline per-cell, see renderBoard) -- on top of that (2026-08-27) sits the user-
@@ -440,6 +455,18 @@ APP_JS_TEMPLATE = r"""
   var CELLS = @@CELLS_JSON@@;
   var FLOORS = @@FLOORS_JSON@@;
   var ROOMS = @@ROOMS_JSON@@;
+  // 2026-08-27 신설: 좌석 선택 화면에서 고르는 가상 택배사 5종 (game-data.js와 동일 -- 서버가
+  // pickCourier에서 이 key 목록으로 유효성 검사도 한다). 실제 택배사 로고를 흉내내면 상표권
+  // 문제가 있어서 완전 창작 브랜드로 대체했다 (HANDOVER.md 3.6 참고).
+  var COURIERS = @@COURIERS_JSON@@;
+  // COURIERS와 순서를 맞춘 손그림 flat 아이콘 (SVG, 순수 표시용이라 서버/game-data.js엔 없음).
+  var COURIER_ICONS = [
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M13 7l-5 6h4l-1 4 5-6h-4z" fill="currentColor" stroke="none"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="9" cy="12" r="2.3" fill="currentColor" stroke="none"></circle><circle cx="15" cy="12" r="2.3" fill="currentColor" stroke="none"></circle></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 0 1 12 0c0 4-2 7-6 7s-6-3-6-7z"></path><circle cx="9.5" cy="10" r="0.8" fill="currentColor" stroke="none"></circle><circle cx="14.5" cy="10" r="0.8" fill="currentColor" stroke="none"></circle><ellipse cx="12" cy="13.5" rx="1.6" ry="1.1" fill="currentColor" stroke="none"></ellipse><path d="M4 9l3 1M20 9l-3 1M4 13l3-.5M20 13l-3-.5"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c3 2 4 6 4 10 0 2-1 4-4 6-3-2-4-4-4-6 0-4 1-8 4-10z"></path><circle cx="12" cy="9" r="1.6"></circle><path d="M8 14l-3 4 4-1M16 14l3 4-4-1"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4 4 0 0 1 .3-8 5 5 0 0 1 9.4 1.2A3.5 3.5 0 0 1 16.5 15z"></path><rect x="9.5" y="15" width="6" height="5" rx="1"></rect></svg>'
+  ];
   // catIdx로 인덱싱하는 종류별 보드-칸 배경 일러스트 (위 BOX_ART_DIR 참고). CELLS[].src(칸마다 다른
   // 퍼즐 이미지, 오버레이 전용)와는 별개 -- 이건 보드 위 21칸 자체의 배경으로 쓴다.
   var BOX_ART = @@BOX_ART_JSON@@;
@@ -459,8 +486,8 @@ APP_JS_TEMPLATE = r"""
   var SAME_FLOOR_CHOICE_MS = @@SAME_FLOOR_CHOICE_MS@@;
   var HALVES = @@HALVES@@;
   var THIEF_PLACE_MS = @@THIEF_PLACE_MS@@;
-  // 확정 층수 택배를 제외한 나머지 종류는 칸 번호 대신 a/b/c/d/e로 표기한다 (사용자 요청).
-  var CELL_LETTERS = ["a", "b", "c", "d", "e", "f"];
+  // 확정 층수 택배를 제외한 나머지 종류는 칸 번호 대신 A/B/C/D/E로 표기한다 (사용자 요청, 2026-08-27: 대문자로 변경).
+  var CELL_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
   var ROOM = (new URLSearchParams(window.location.search).get("room") || "").trim().toUpperCase();
 
@@ -539,6 +566,13 @@ APP_JS_TEMPLATE = r"""
         // either player) already moves it for real before this broadcast goes out, so a plain
         // re-render is enough to show the car actually stepping; no client-side simulation needed.
         state = msg.state;
+        // 2026-08-27: "pick-courier"는 좌석 번호를 클라이언트가 미리 못 정하므로(서버가 정해서
+        // 돌려줌 -- game-room.js의 pickCourier), 낙관적으로 sessionStorage에 세팅하는 대신 여기서
+        // 매 상태 브로드캐스트마다 "아직 내 좌석을 모르는 상태에서 내 clientId가 어느 좌석 주인이
+        // 됐는지"를 확인해서 확정한다. 한 번 확정되면(mySeat() !== null) 더 이상 스캔 안 함.
+        if (!mySeat()) {
+          ["1", "2"].forEach(function (s) { if (state.seatOwners[s] === CLIENT_ID) setMySeat(s); });
+        }
         render();
       }
       else if (msg.type === "error") { handleWsError(msg); }
@@ -553,7 +587,15 @@ APP_JS_TEMPLATE = r"""
   function handleWsError(msg) {
     if (msg.code === "seat_taken") {
       try { sessionStorage.removeItem("bp-seat"); } catch (e) {}
-      showToast("플레이어 " + msg.seat + "는 이미 다른 사람이 선택했어요. 다른 좌석을 골라주세요.");
+      showToast(seatName(msg.seat, state) + "는 이미 다른 사람이 선택했어요. 다시 골라주세요.");
+      render();
+    }
+    else if (msg.code === "courier_taken") {
+      showToast("바로 직전에 상대방이 그 택배사를 먼저 골랐어요. 다른 곳을 골라주세요.");
+      render();
+    }
+    else if (msg.code === "room_full") {
+      showToast("이 방은 이미 두 명이 다 찼어요.");
       render();
     }
   }
@@ -585,19 +627,61 @@ APP_JS_TEMPLATE = r"""
     return floorDigitLabel(floorIdx) + "0" + room + "호";
   }
 
+  // ---------- 택배사(courier) 표시 이름 -- 2026-08-27 신설 ----------
+  // "플레이어 1/2" 대신 화면 곳곳에서 좌석을 부를 때 이걸 쓴다. 아직 그 좌석이 택배사를 안 골랐으면
+  // (게임 시작 전 극히 짧은 순간, 혹은 옛 상태 호환) "플레이어 N"으로 그냥 폴백한다.
+  function courierByKey(key) {
+    for (var i = 0; i < COURIERS.length; i++) if (COURIERS[i].key === key) return COURIERS[i];
+    return null;
+  }
+  function seatName(seat, st) {
+    var key = st && st.courierPick && st.courierPick[seat];
+    var c = key ? courierByKey(key) : null;
+    return c ? c.name : ("플레이어 " + seat);
+  }
+
+  // 시작(택배사 선택) 화면 뒤에 옅게 흩뿌리는 장식용 택배박스 라인아트 -- 2026-08-27 신설
+  // (사용자 요청: "처음 시작 페이지에 택배박스 모양이 좀 그려져 있으면 좋을 것 같아"). 순수 장식이라
+  // 클릭 불가(pointer-events:none)이고, 위치/크기/회전/색만 다른 같은 SVG 하나를 4번 찍는다.
+  function renderLobbyBoxes() {
+    var BOX_SVG = '<svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"><path d="M6 14 20 8 34 14 34 30 20 36 6 30Z"></path><path d="M6 14 20 20 34 14M20 20V36"></path></svg>';
+    function deco(style) { return '<span class="lobby-box-deco" style="' + style + '">' + BOX_SVG + '</span>'; }
+    return deco('top:-4%;left:-3%;width:88px;height:88px;color:var(--gold);opacity:0.16;transform:rotate(-12deg);')
+      + deco('top:60%;left:-6%;width:66px;height:66px;color:var(--sky);opacity:0.14;transform:rotate(9deg);')
+      + deco('top:-7%;right:-2%;width:74px;height:74px;color:var(--ok);opacity:0.15;transform:rotate(13deg);')
+      + deco('top:56%;right:-5%;width:92px;height:92px;color:var(--danger);opacity:0.12;transform:rotate(-9deg);');
+  }
+
   function renderSeatPicker() {
-    var taken1 = state && state.seatOwners["1"] && state.seatOwners["1"] !== CLIENT_ID;
-    var taken2 = state && state.seatOwners["2"] && state.seatOwners["2"] !== CLIENT_ID;
-    function seatBtn(n, taken) {
-      return '<button class="btn primary' + (taken ? ' taken' : '') + '" data-action="pick-seat" data-seat="' + n + '"' + (taken ? ' disabled' : '') + '>'
-        + '플레이어 ' + n + (taken ? '<span class="taken-note">이미 선택됨</span>' : '') + '</button>';
+    var picks = (state && state.courierPick) || { "1": null, "2": null };
+    var myKey = null;
+    ["1", "2"].forEach(function (s) { if (state && state.seatOwners[s] === CLIENT_ID) myKey = picks[s]; });
+    var takenKeys = {};
+    ["1", "2"].forEach(function (s) {
+      if (picks[s] && state.seatOwners[s] !== CLIENT_ID) takenKeys[picks[s]] = true;
+    });
+    var roomFull = state && state.seatOwners["1"] && state.seatOwners["2"]
+      && state.seatOwners["1"] !== CLIENT_ID && state.seatOwners["2"] !== CLIENT_ID;
+    function courierBtn(c, i) {
+      var taken = !!takenKeys[c.key];
+      var mine = myKey === c.key;
+      var disabled = taken || (roomFull && !mine);
+      return '<button class="courier-btn' + (taken ? ' taken' : '') + (mine ? ' mine' : '') + '"'
+        + ' style="--courier-color:' + c.color + '" data-action="pick-courier" data-courier="' + c.key + '"'
+        + (disabled ? ' disabled' : '') + '>'
+        + '<span class="courier-icon">' + COURIER_ICONS[i] + '</span>'
+        + '<span class="courier-name">' + esc(c.name) + '</span>'
+        + (taken ? '<span class="taken-note">이미 선택됨</span>' : (mine ? '<span class="taken-note">내 선택</span>' : ''))
+        + '</button>';
     }
-    return '<div class="center-screen"><div class="seat-pick">'
-      + '<h2>어느 플레이어인가요?</h2>'
-      + '<p>이 기기에서 조작할 좌석을 한 번만 선택하세요. 다른 사람과 겹치지 않게 서로 다른 좌석을 골라주세요.</p>'
-      + '<div class="seat-options">' + seatBtn("1", taken1) + seatBtn("2", taken2) + '</div>'
+    return '<div class="center-screen"><div class="picker-scene">'
+      + renderLobbyBoxes()
+      + '<div class="seat-pick card">'
+      + '<h2>어느 택배사 직원인가요?</h2>'
+      + '<p>이 기기에서 플레이할 가상 택배사를 하나 골라주세요. 상대방이 먼저 고른 곳은 고를 수 없어요.</p>'
+      + '<div class="courier-options">' + COURIERS.map(courierBtn).join('') + '</div>'
       + '<div class="room-share">이 방 코드: <strong>' + esc(ROOM) + '</strong><br>상대방에게는 지금 이 페이지의 링크를 그대로 보내주면 같은 방으로 들어와요.</div>'
-      + '</div></div>';
+      + '</div></div></div>';
   }
 
   function renderTopbar(st, seat) {
@@ -607,7 +691,7 @@ APP_JS_TEMPLATE = r"""
     }
     return '<div class="topbar"><div class="brand"><span class="eyebrow">BeatPhobia · Live</span><h1>택배 배송 게임 — ' + phaseLabel + '</h1></div>'
       + '<div class="right"><span class="room-chip">방 ' + esc(ROOM) + '</span>'
-      + '<span class="seat-badge">' + (seat ? ("내 좌석 · 플레이어 " + seat) : "좌석 미선택") + '</span></div></div>';
+      + '<span class="seat-badge">' + (seat ? ("내 좌석 · " + seatName(seat, st)) : "택배사 미선택") + '</span></div></div>';
   }
 
   function renderLobby(st, seat) {
@@ -619,8 +703,8 @@ APP_JS_TEMPLATE = r"""
       + '<p>두 사람 모두 이 페이지를 열고 좌석을 선택한 뒤, 각자 자기 키보드의 <strong>스페이스바</strong>를 누르면 준비 완료예요.<br>'
       + '둘 다 준비되면 자동으로 시작하고, 3분 동안 택배 확보 미니게임을 진행한 뒤 자동으로 엘리베이터 라운드(총 ' + ELEVATOR_ROUNDS + '라운드)로 넘어가요.</p>'
       + '<div class="ready-row">'
-      + '<span class="ready-chip' + (mine ? ' is-ready' : '') + '">나 · 플레이어 ' + (seat || "-") + (mine ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
-      + '<span class="ready-chip' + (other ? ' is-ready' : '') + '">플레이어 ' + (otherSeat || "-") + (other ? ' · 준비 완료' : ' · 대기 중') + '</span>'
+      + '<span class="ready-chip' + (mine ? ' is-ready' : '') + '">나 · ' + (seat ? seatName(seat, st) : "-") + (mine ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
+      + '<span class="ready-chip' + (other ? ' is-ready' : '') + '">' + (otherSeat ? seatName(otherSeat, st) : "-") + (other ? ' · 준비 완료' : ' · 대기 중') + '</span>'
       + '</div>'
       + '<div class="space-hint">Space</div>'
       + '</div></div></main>';
@@ -651,7 +735,6 @@ APP_JS_TEMPLATE = r"""
         + '<div class="cat-head"><span class="cat-icon" style="color:' + t.color + '">' + CAT_ICONS[catIdx] + '</span>'
         + '<span class="cat-name">' + esc(t.name) + '</span></div>'
         + '<div class="price-grid">'
-        + '<span class="ph">구분</span><span class="ph">요금</span>'
         + '<span class="pk">성공</span><span class="pv">' + fmtWon(t.reward) + '</span>'
         + '<span class="pk">실패</span><span class="pv">' + fmtWon(-t.penalty) + '</span>'
         + '</div></div>';
@@ -659,7 +742,7 @@ APP_JS_TEMPLATE = r"""
         var cell = boardById[t.key + "-" + (num + 1)];
         var taken = !!cell.taken;
         // 확정 층수 택배는 칸의 num이 곧 배송 층이므로 지금 표기(층 이름) 그대로 유지하고,
-        // 나머지 종류는 숫자 대신 a/b/c/d/e로 표기한다 (사용자 요청, 2026-08-27).
+        // 나머지 종류는 숫자 대신 A/B/C/D/E로 표기한다 (사용자 요청, 2026-08-27; 같은 날 다시 대문자로 변경).
         var faceHtml = t.fixedFloor
           ? '<span class="cell-num">' + esc(FLOORS[num]) + '</span>'
           : '<span class="cell-num">' + esc(CELL_LETTERS[num] || String(num + 1)) + '</span>';
@@ -795,8 +878,8 @@ APP_JS_TEMPLATE = r"""
       var otherReady0 = !!st.elevator.readyNext[otherSeat0];
       html += '<div style="margin-top:0.75rem;color:var(--muted);font-size:0.9rem;">확보한 택배를 확인하고, 준비가 되면 스페이스바를 눌러주세요.</div>';
       html += '<div class="ready-row" style="margin-top:0.75rem;">'
-        + '<span class="ready-chip' + (myReady0 ? ' is-ready' : '') + '">나 · 플레이어 ' + seat + (myReady0 ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
-        + '<span class="ready-chip' + (otherReady0 ? ' is-ready' : '') + '">플레이어 ' + otherSeat0 + (otherReady0 ? ' · 준비 완료' : ' · 대기 중') + '</span>'
+        + '<span class="ready-chip' + (myReady0 ? ' is-ready' : '') + '">나 · ' + seatName(seat, st) + (myReady0 ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
+        + '<span class="ready-chip' + (otherReady0 ? ' is-ready' : '') + '">' + seatName(otherSeat0, st) + (otherReady0 ? ' · 준비 완료' : ' · 대기 중') + '</span>'
         + '</div>'
         + '<div class="space-hint">Space · 엘리베이터 이동 시작</div>';
       html += renderPriorityPicker(st, seat);
@@ -901,8 +984,8 @@ APP_JS_TEMPLATE = r"""
       var otherReady = !!st.elevator.readyNext[otherSeat];
       var nextLabel = st.elevator.round >= ELEVATOR_ROUNDS ? "최종 결과 보기" : "다음 라운드로";
       html += '<div class="ready-row">'
-        + '<span class="ready-chip' + (myReady ? ' is-ready' : '') + '">나 · 플레이어 ' + seat + (myReady ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
-        + '<span class="ready-chip' + (otherReady ? ' is-ready' : '') + '">플레이어 ' + otherSeat + (otherReady ? ' · 준비 완료' : ' · 대기 중') + '</span>'
+        + '<span class="ready-chip' + (myReady ? ' is-ready' : '') + '">나 · ' + seatName(seat, st) + (myReady ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
+        + '<span class="ready-chip' + (otherReady ? ' is-ready' : '') + '">' + seatName(otherSeat, st) + (otherReady ? ' · 준비 완료' : ' · 대기 중') + '</span>'
         + '</div>'
         + '<div class="space-hint">Space · ' + nextLabel + '</div>';
       html += renderPriorityPicker(st, seat);
@@ -924,14 +1007,14 @@ APP_JS_TEMPLATE = r"""
     html += '<h2>전반 종료</h2>';
     if (h1) {
       html += '<div class="halftime-scores">'
-        + '<div class="chip">플레이어 1<span class="n">' + fmtWon(h1.scores["1"]) + '</span></div>'
-        + '<div class="chip">플레이어 2<span class="n">' + fmtWon(h1.scores["2"]) + '</span></div>'
+        + '<div class="chip">' + esc(seatName("1", st)) + '<span class="n">' + fmtWon(h1.scores["1"]) + '</span></div>'
+        + '<div class="chip">' + esc(seatName("2", st)) + '<span class="n">' + fmtWon(h1.scores["2"]) + '</span></div>'
         + '</div>';
     }
     html += '<p style="color:var(--muted);font-size:0.9rem;">후반이 시작돼요. 택배 보드가 새로 채워지고, 후반부터는 <strong style="color:var(--danger)">택배도둑</strong>을 배치할 수 있어요.</p>';
     html += '<div class="ready-row">'
-      + '<span class="ready-chip' + (myReady ? ' is-ready' : '') + '">나 · 플레이어 ' + seat + (myReady ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
-      + '<span class="ready-chip' + (otherReady ? ' is-ready' : '') + '">플레이어 ' + otherSeat + (otherReady ? ' · 준비 완료' : ' · 대기 중') + '</span>'
+      + '<span class="ready-chip' + (myReady ? ' is-ready' : '') + '">나 · ' + seatName(seat, st) + (myReady ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
+      + '<span class="ready-chip' + (otherReady ? ' is-ready' : '') + '">' + seatName(otherSeat, st) + (otherReady ? ' · 준비 완료' : ' · 대기 중') + '</span>'
       + '</div>'
       + '<div class="space-hint">Space · 후반 시작</div>';
     html += '</div></div></main>';
@@ -957,7 +1040,7 @@ APP_JS_TEMPLATE = r"""
 
   function renderEnd(st, seat) {
     var s1 = st.scores ? st.scores["1"] : 0, s2 = st.scores ? st.scores["2"] : 0;
-    var winner = s1 === s2 ? "무승부" : (s1 > s2 ? "플레이어 1 승리" : "플레이어 2 승리");
+    var winner = s1 === s2 ? "무승부" : (s1 > s2 ? (seatName("1", st) + " 승리") : (seatName("2", st) + " 승리"));
     var html = '<main class="stage">';
     html += '<div class="winner-banner">' + winner + '</div>';
     // Game's over -- unlike the elevator phase (where per-round delivery info stays private so
@@ -968,15 +1051,15 @@ APP_JS_TEMPLATE = r"""
       html += '<h3 style="font-family:var(--font-display);color:var(--muted);margin:1.2rem 0 0.4rem;">' + (h.half === 1 ? "전반" : "후반") + '</h3>';
       html += '<div class="split-two">';
       ["1", "2"].forEach(function (s) {
-        html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">플레이어 ' + s + (s === seat ? ' (나)' : '') + ' — ' + fmtWon(h.scores[s]) + '</h3>';
+        html += '<div class="card"><h3 style="font-family:var(--font-display);margin-top:0;">' + esc(seatName(s, st)) + (s === seat ? ' (나)' : '') + ' — ' + fmtWon(h.scores[s]) + '</h3>';
         html += renderHalfTable(s, h);
         html += '</div>';
       });
       html += '</div>';
     });
     html += '<div class="halftime-scores" style="margin-top:1.4rem;">'
-      + '<div class="chip">플레이어 1 총점<span class="n">' + fmtWon(s1) + '</span></div>'
-      + '<div class="chip">플레이어 2 총점<span class="n">' + fmtWon(s2) + '</span></div>'
+      + '<div class="chip">' + esc(seatName("1", st)) + ' 총점<span class="n">' + fmtWon(s1) + '</span></div>'
+      + '<div class="chip">' + esc(seatName("2", st)) + ' 총점<span class="n">' + fmtWon(s2) + '</span></div>'
       + '</div>';
     html += '</main>';
     return html;
@@ -1025,11 +1108,11 @@ APP_JS_TEMPLATE = r"""
     if (!t) return;
     var action = t.getAttribute("data-action");
 
-    if (action === "pick-seat") {
-      var seat = t.getAttribute("data-seat");
-      setMySeat(seat);
-      send({ type: "pick-seat", seat: seat });
-      render();
+    if (action === "pick-courier") {
+      // 좌석 번호는 서버가 정해서 돌려주므로(먼저 온 사람이 "1") 여기선 낙관적으로 세팅하지 않는다 --
+      // 다음 "state" 브로드캐스트에서 내 clientId가 어느 좌석의 주인이 됐는지 보고 그때 확정한다
+      // (connectWS의 onmessage 참고). 여기선 그냥 요청만 보낸다.
+      send({ type: "pick-courier", courier: t.getAttribute("data-courier") });
       return;
     }
     if (action === "open-cell") { local.openCellId = t.getAttribute("data-cell"); render(); return; }
@@ -1133,6 +1216,7 @@ APP_JS = (APP_JS_TEMPLATE
           .replace("@@CELLS_JSON@@", CELLS_JSON)
           .replace("@@FLOORS_JSON@@", FLOORS_JSON)
           .replace("@@ROOMS_JSON@@", ROOMS_JSON)
+          .replace("@@COURIERS_JSON@@", COURIERS_JSON)
           .replace("@@BOX_ART_JSON@@", BOX_ART_JSON)
           .replace("@@ELEVATOR_ROUNDS@@", str(ELEVATOR_ROUNDS))
           .replace("@@SECURE_PHASE_MS@@", str(SECURE_PHASE_MS))

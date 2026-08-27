@@ -109,6 +109,18 @@ wss.on("connection", (ws, req) => {
         if (!res.ok) ws.send(JSON.stringify({ type: "error", code: res.code, seat }));
         break;
       }
+      // 2026-08-27 신설: 좌석 선택 화면이 "플레이어 1/2" 대신 가상 택배사 아이콘 5개를 보여주면서
+      // 생긴 메시지 -- 클라이언트는 자기가 몇 번 좌석이 될지 미리 모르므로 courierKey만 보내고,
+      // 좌석 번호는 room.pickCourier가 정해서 돌려준다. 성공하면 그 좌석 번호를 이 커넥션에도
+      // 기록해둬야(conn.seat) 뒤이은 secure-cell/vote 같은 메시지들이 제대로 처리된다 -- pick-seat과
+      // 달리 이 메시지엔 seat 필드가 없어서 위쪽의 공통 destructuring이 대신 채워주지 못한다.
+      case "pick-courier": {
+        if (!conn.clientId || typeof msg.courier !== "string") return;
+        const res = entry.room.pickCourier(msg.courier, conn.clientId);
+        if (res.ok) conn.seat = res.seat;
+        else ws.send(JSON.stringify({ type: "error", code: res.code }));
+        break;
+      }
       case "set-ready":
         if (!conn.seat) return;
         entry.room.setReady(conn.seat);

@@ -31,9 +31,9 @@ async function main() {
   await p1.goto(roomUrl);
   await p2.goto(roomUrl);
   await waitFor(async () => (await p1.locator(".seat-pick").count()) > 0, { label: "seat picker" });
-  await clickSel(p1, '[data-action="pick-seat"][data-seat="1"]');
-  await clickSel(p2, '[data-action="pick-seat"][data-seat="2"]');
-  await waitFor(async () => (await bodyText(p1)).includes("좌석 · 플레이어 1"), { label: "p1 seat" });
+  await clickSel(p1, '[data-action="pick-courier"][data-courier="lightning"]');
+  await clickSel(p2, '[data-action="pick-courier"][data-courier="eyes"]');
+  await waitFor(async () => (await bodyText(p1)).includes("내 좌석 · 번개특급"), { label: "p1 seat" });
   await pressSpace(p1);
   await pressSpace(p2);
   await waitFor(async () => (await bodyText(p1)).includes("택배 확보"), { label: "secure phase" });

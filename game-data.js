@@ -21,6 +21,19 @@ const TYPES = [
     color: "#6DBBFD", ink: "#16233F" },
 ];
 
+// 2026-08-27 신설: 좌석 선택 화면에서 "플레이어 1/2" 대신 고르는 가상 택배사 5종 (사용자 요청 --
+// 실제 택배사 로고를 흉내내면 상표권 문제가 있어서, 완전히 새로 지어낸 가상 브랜드로 대체했다.
+// 자세한 배경은 HANDOVER.md 3.6 참고). 5개 중 2개만 실제로 쓰이며(플레이어 수만큼), 한쪽 좌석이
+// 고른 건 다른 좌석이 못 고른다 -- game-room.js의 pickCourier() 참고. 아이콘(SVG)은 순수 표시용이라
+// 여기 안 두고 build_client.py의 COURIER_ICONS에 key 순서 맞춰 따로 둔다.
+const COURIERS = [
+  { key: "lightning", name: "번개특급", color: "#E8B23D" },
+  { key: "eyes", name: "왕눈이택배", color: "#4C8FE0" },
+  { key: "mole", name: "두더지퀵", color: "#8B5E34" },
+  { key: "rocket", name: "로켓아저씨", color: "#D64550" },
+  { key: "cloud", name: "구름배송", color: "#8B7CC8" },
+];
+
 const FLOORS = ["B1", "1F", "2F", "3F", "4F", "5F"];
 // Single-digit room slot within a floor; the client combines this with the floor to display a
 // realistic-looking room code like "401호" (4F, room 1) or "B03호" (B1, room 3) -- see roomCode()
@@ -54,6 +67,6 @@ const HALVES = 2;
 const THIEF_PLACE_MS = 5000;
 
 module.exports = {
-  TYPES, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
+  TYPES, COURIERS, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
   PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS,
 };
