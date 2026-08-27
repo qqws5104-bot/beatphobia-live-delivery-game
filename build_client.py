@@ -23,6 +23,10 @@ REF_DIR = "/home/claude/project/quiz_board/ref"
 COMPRESSED_DIR = "/tmp/compressed"
 GAME_DATA_JS = os.path.join(os.path.dirname(__file__), "game-data.js")
 OUT_HTML = os.path.join(os.path.dirname(__file__), "public", "index.html")
+# 2026-08-27: 종류별 보드 칸 배경으로 쓰는 박스 일러스트 (사용자 제공, ref/box_art/<key>.webp --
+# 알파 채널 있는 투명 배경 PNG를 크롭해 webp로 저장해둔 것). CELLS의 퍼즐 이미지(칸마다 다름)와는
+# 별개로, 종류(TYPES)당 딱 1장씩만 있고 그 종류의 21칸 전부가 공유해서 쓴다.
+BOX_ART_DIR = os.path.join(os.path.dirname(__file__), "box_art")
 
 
 def load_shared_constants():
@@ -115,9 +119,20 @@ for cat_idx, t in enumerate(TYPES):
         })
         _flat_idx += 1
 
+def box_art_data_uri(key):
+    path = os.path.join(BOX_ART_DIR, f"{key}.webp")
+    with open(path, "rb") as f:
+        b64 = base64.b64encode(f.read()).decode("ascii")
+    return f"data:image/webp;base64,{b64}"
+
+
+# catIdx로 바로 인덱싱해서 쓰는 배열 (TYPES 순서와 항상 같이 감) -- renderBoard가 BOX_ART[catIdx]로 참조.
+BOX_ART = [box_art_data_uri(t["key"]) for t in TYPES]
+
 TYPES_JSON = json.dumps(TYPES, ensure_ascii=False)
 CELLS_JSON = json.dumps(CELLS, ensure_ascii=False)
 FLOORS_JSON = json.dumps(FLOORS, ensure_ascii=False)
+BOX_ART_JSON = json.dumps(BOX_ART, ensure_ascii=False)
 ROOMS_JSON = json.dumps(ROOMS, ensure_ascii=False)
 
 HEAD_HTML = """<!doctype html>
@@ -231,18 +246,26 @@ HEAD_HTML = """<!doctype html>
     font-family:var(--font-display); }
   .board-label .cat-name { font-size:1rem; font-weight:800; letter-spacing:0.01em; text-shadow:0 1px 2px rgba(0,0,0,0.22); }
   .board-label .price { display:flex; flex-direction:column; gap:0.1rem; margin-top:0.35rem; font-weight:600; font-size:0.72rem; opacity:0.85; }
-  /* each cell reads as a soft, rounded 3D delivery box (2026-08-27 restyle, matching the reference
-     clay-render look) instead of the old flat cardboard-with-tape look: chunky rounded corners, a
-     glossy highlight top-left, a wide darkened "strap" band wrapping across the top, and a small
-     tag+lines glyph tucked in the bottom-right corner. Every category keeps its own background/ink
-     color (set inline per-cell, see renderBoard) -- the strap/highlight/glyph are all drawn with
-     black/white/currentColor overlays so they automatically match whatever color a category has,
-     with nothing hardcoded to any one hue. aspect-ratio is intentionally NOT set -- the cell
-     stretches to fill its grid row/column exactly (board-grid's grid-template-rows:1fr above),
-     which is what makes the whole board fit any viewport height without scrolling. */
+  /* each cell reads as a soft, rounded 3D delivery box. Base layer is still the category's flat
+     color (set inline per-cell, see renderBoard) -- on top of that (2026-08-27) sits the user-
+     supplied box illustration (.cell-art, one image per category, shared by all cells of that
+     category) as a blurred backdrop, then the glossy highlight + diagonal "strap" band (still
+     drawn with black/white overlays so they work over any art), then the a/b/c/d/e or floor label
+     on top of all of it. aspect-ratio is intentionally NOT set -- the cell stretches to fill its
+     grid row/column exactly (board-grid's grid-template-rows:1fr above), which is what makes the
+     whole board fit any viewport height without scrolling. */
   .cell { position:relative; min-height:0; border-radius:16px; border:none; display:flex; align-items:center; justify-content:center;
     font-family:var(--font-display); font-weight:700; font-size:1.25rem; overflow:hidden;
     box-shadow: inset 0 3px 0 rgba(255,255,255,0.38), inset 0 -12px 16px rgba(0,0,0,0.22), 0 6px 14px rgba(0,0,0,0.22); }
+  /* box illustration backdrop (2026-08-27, user-supplied art per category -- see box_art/ and
+     BOX_ART in renderBoard). Cells are small (21 of them fit on one screen) and the source art has
+     its own baked-in label text, so it's deliberately BLURRED and lets the a/b/c/d/e or floor
+     label (z-index 3, its own opaque chip below) stay the thing you actually read -- the art is
+     ambient texture/color, not something meant to be legible at this size. Oversized inset (not
+     0) so the blur has room to sample past the cell's own edge instead of fading to transparent
+     there; .cell's overflow:hidden clips it back to the rounded shape. */
+  .cell .cell-art { position:absolute; inset:-20% -20%; z-index:0; background-repeat:no-repeat;
+    background-position:center; background-size:cover; filter:blur(6px); opacity:0.92; }
   /* glossy sheen, upper-left */
   .cell::before { content:""; position:absolute; inset:0; z-index:1; border-radius:inherit;
     background: radial-gradient(120% 90% at 28% 14%, rgba(255,255,255,0.4), transparent 55%); }
@@ -250,7 +273,15 @@ HEAD_HTML = """<!doctype html>
      slightly darker sash/ribbon without needing a separate strap color per category. */
   .cell::after { content:""; position:absolute; inset:-15% -15%; z-index:1;
     background: linear-gradient(112deg, transparent 39%, rgba(0,0,0,0.15) 44%, rgba(0,0,0,0.15) 60%, transparent 65%); }
-  .cell .cell-num { position:relative; z-index:3; text-shadow:0 1px 2px rgba(0,0,0,0.18); }
+  /* the a/b/c/d/e or floor label is styled as its own little shipping-label plate -- cream fill +
+     navy border -- echoing the white label-plate-with-navy-outline that's already part of the box
+     art itself, so it reads as "that thing on the box" rather than a generic floating text overlay
+     (2026-08-27, to go with the box art backdrop above). Same treatment as .invoice-label below,
+     just without the rotation (that one reads as a sticker slapped on after the fact; this one
+     reads as printed on the box). */
+  .cell .cell-num { position:relative; z-index:3; background:#f4f1ea; color:#20180f;
+    border:2px solid #16233f; font-family:var(--font-display); font-weight:700; font-size:1.05rem;
+    letter-spacing:0.02em; padding:0.26rem 0.6rem; border-radius:6px; box-shadow:0 3px 8px rgba(0,0,0,0.3); }
   .cell .box-tag { position:absolute; z-index:3; right:8px; bottom:7px; display:flex; align-items:center; gap:4px; opacity:0.55; }
   .cell .box-tag .chip { width:9px; height:9px; border-radius:2px; background:currentColor; }
   .cell .box-tag .lines { display:flex; flex-direction:column; gap:2px; }
@@ -260,10 +291,11 @@ HEAD_HTML = """<!doctype html>
      plain index number -- the box stays identifiable, not just greyed into a blank "used" tile. */
   .cell.taken { cursor:default; }
   .cell.taken::before, .cell.taken::after { opacity:0.5; }
+  .cell.taken .cell-art { opacity:0.45; }
   .cell.taken .box-tag { opacity:0.3; }
   .cell .invoice-label { position:relative; z-index:3; background:#f4f1ea; color:#20180f;
-    font-family:var(--font-display); font-weight:700; font-size:1.05rem; letter-spacing:0.02em;
-    padding:0.32rem 0.65rem; border-radius:4px; box-shadow:0 3px 8px rgba(0,0,0,0.3); transform:rotate(-2deg); }
+    border:2px solid #16233f; font-family:var(--font-display); font-weight:700; font-size:1.05rem; letter-spacing:0.02em;
+    padding:0.3rem 0.63rem; border-radius:6px; box-shadow:0 3px 8px rgba(0,0,0,0.3); transform:rotate(-2deg); }
   .cell:not(.taken):hover { filter:brightness(1.06); transform:translateY(-1px); }
 
   /* on genuinely short viewports, shrink the chrome around the board (topbar + side-timer) too --
@@ -382,6 +414,9 @@ APP_JS_TEMPLATE = r"""
   var CELLS = @@CELLS_JSON@@;
   var FLOORS = @@FLOORS_JSON@@;
   var ROOMS = @@ROOMS_JSON@@;
+  // catIdx로 인덱싱하는 종류별 보드-칸 배경 일러스트 (위 BOX_ART_DIR 참고). CELLS[].src(칸마다 다른
+  // 퍼즐 이미지, 오버레이 전용)와는 별개 -- 이건 보드 위 21칸 자체의 배경으로 쓴다.
+  var BOX_ART = @@BOX_ART_JSON@@;
   var ELEVATOR_ROUNDS = @@ELEVATOR_ROUNDS@@;
   var SECURE_PHASE_MS = @@SECURE_PHASE_MS@@;
   var PRIORITY_MULTIPLIER = @@PRIORITY_MULTIPLIER@@;
@@ -594,7 +629,7 @@ APP_JS_TEMPLATE = r"""
         }
         html += '<button class="cell' + (taken ? ' taken' : '') + '" style="background:' + t.color + ';color:' + t.ink + ';"'
           + (taken ? '' : (' data-action="open-cell" data-cell="' + cell.id + '"'))
-          + '>' + faceHtml
+          + '>' + '<span class="cell-art" style="background-image:url(\'' + BOX_ART[catIdx] + '\')"></span>' + faceHtml
           + '<span class="box-tag"><span class="chip"></span><span class="lines"><span></span><span></span><span></span></span></span>'
           + '</button>';
       }
@@ -1051,6 +1086,7 @@ APP_JS = (APP_JS_TEMPLATE
           .replace("@@CELLS_JSON@@", CELLS_JSON)
           .replace("@@FLOORS_JSON@@", FLOORS_JSON)
           .replace("@@ROOMS_JSON@@", ROOMS_JSON)
+          .replace("@@BOX_ART_JSON@@", BOX_ART_JSON)
           .replace("@@ELEVATOR_ROUNDS@@", str(ELEVATOR_ROUNDS))
           .replace("@@SECURE_PHASE_MS@@", str(SECURE_PHASE_MS))
           .replace("@@PRIORITY_MULTIPLIER@@", str(PRIORITY_MULTIPLIER))
