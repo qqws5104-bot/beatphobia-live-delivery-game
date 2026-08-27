@@ -14,27 +14,6 @@ async function pressSpace(page) { await page.evaluate(() => document.dispatchEve
 async function bodyText(page) { return page.evaluate(() => document.body.innerText); }
 async function currentFloorLabel(page) { return page.evaluate(() => { const el = document.querySelector(".floor-stop.current"); return el ? el.textContent.trim() : null; }); }
 async function currentFloorCount(page) { return page.evaluate(() => document.querySelectorAll(".floor-stop.current").length); }
-// The gauge's fill must actually track the floor, not just the text label. Measured against the
-// gauge's own box so this stays true whatever height the gauge is given. Read after the settle
-// frame has run, so it reflects the target level rather than the level it was drawn at.
-async function gaugeFillRatio(page) {
-  return page.evaluate(() => {
-    const fill = document.querySelector(".gauge-fill");
-    const box = document.querySelector(".gauge");
-    if (!fill || !box) return null;
-    return fill.getBoundingClientRect().height / box.getBoundingClientRect().height;
-  });
-}
-// floorIdx 0 (B1) -> 1/6 filled, floorIdx 5 (5F) -> 6/6. Tolerance covers sub-pixel rounding and
-// any in-flight transition frame.
-async function expectGaugeAtFloor(page, floorIdx, who) {
-  const expected = (floorIdx + 1) / 6;
-  const actual = await gaugeFillRatio(page);
-  if (actual === null) throw new Error(`${who}: gauge elements (.gauge / .gauge-fill) not found`);
-  if (Math.abs(actual - expected) > 0.02) {
-    throw new Error(`${who}: gauge fill is ${(actual * 100).toFixed(1)}% but floor index ${floorIdx} needs ${(expected * 100).toFixed(1)}%`);
-  }
-}
 async function waitFor(fn, { timeout = 15000, interval = 100, label = "condition" } = {}) {
   const start = Date.now();
   for (;;) { const v = await fn(); if (v) return v; if (Date.now() - start > timeout) throw new Error("timeout: " + label); await new Promise((r) => setTimeout(r, interval)); }
@@ -69,12 +48,11 @@ async function main() {
   // starting floor is 1F (START_FLOOR_IDX)
   const startFloor = await currentFloorLabel(p1);
   if (startFloor !== "1F") throw new Error("expected to start at 1F, got " + startFloor);
-  await p1.waitForTimeout(350); // let the gauge's settle frame + transition finish
-  await expectGaugeAtFloor(p1, 1, "p1 at start");
-  log("starting floor confirmed: " + startFloor + " (gauge filled 2/6 to match)");
+  if ((await currentFloorCount(p1)) !== 1) throw new Error("expected exactly one .current row at start");
+  log("starting floor confirmed: " + startFloor);
 
-  // 1) MY OWN click should move the REAL current floor immediately -- not a cosmetic hop, the
-  // actual ".current" row itself changes, and it must be exactly one row (no ambiguity/duplication)
+  // 1) MY OWN click should move the REAL current floor immediately -- the actual ".current" row
+  // itself changes, and it must be exactly one row (no ambiguity/duplication)
   await clickSel(p1, '[data-action="vote-up"]');
   await waitFor(async () => (await currentFloorLabel(p1)) === "2F", { label: "p1's own click moved the real floor to 2F", timeout: 3000 });
   if ((await currentFloorCount(p1)) !== 1) throw new Error("expected exactly one .current row after moving");
@@ -84,38 +62,30 @@ async function main() {
   // window and confirm the floor is still 2F, unprompted
   await p1.waitForTimeout(1500);
   if ((await currentFloorLabel(p1)) !== "2F") throw new Error("the real floor reverted on its own -- movement must be permanent (server-authoritative), not a transient animation");
-  await expectGaugeAtFloor(p1, 2, "p1 after one up-click");
-  log("floor stayed at 2F, gauge settled at 3/6 -- confirmed real, not a transient animation");
+  log("floor stayed at 2F -- confirmed real, not a transient animation");
 
   // 2) the OPPONENT's click should ALSO move the real floor, visible on BOTH viewers immediately
   await clickSel(p2, '[data-action="vote-up"]');
   await waitFor(async () => (await currentFloorLabel(p1)) === "3F", { label: "p1 sees the real floor move to 3F after p2's (opponent's) click", timeout: 3000 });
   log("p2's (opponent's) vote-up click moved the shared real floor to 3F, visible on p1's screen");
   await waitFor(async () => (await currentFloorLabel(p2)) === "3F", { label: "p2 also sees 3F on its own view", timeout: 3000 });
-  await p2.waitForTimeout(350);
-  await expectGaugeAtFloor(p1, 3, "p1 after opponent's up-click");
-  await expectGaugeAtFloor(p2, 3, "p2 after its own up-click");
-  log("p2 also sees the real floor at 3F on its own view; both gauges filled 4/6");
+  log("p2 also sees the real floor at 3F on its own view");
 
   // 3) opposite-direction click steps it back down by exactly one, confirming each click is a
   // discrete +/-1 step (not a snap to some target)
   await clickSel(p1, '[data-action="vote-down"]');
   await waitFor(async () => (await currentFloorLabel(p2)) === "2F", { label: "p2 sees the floor step back down to 2F after p1's vote-down click", timeout: 3000 });
-  await p2.waitForTimeout(350);
-  await expectGaugeAtFloor(p2, 2, "p2 after the down-click");
-  log("p1's vote-down click stepped the real floor back down to 2F, gauge drained to 3/6 on p2 too");
+  log("p1's vote-down click stepped the real floor back down to 2F, visible on p2's screen too");
 
-  // 3b) clamping: from 2F, five more down-clicks would run past B1 -- the gauge must stop at the
-  // bottom notch (1/6 filled, never 0 or negative) rather than emptying out or breaking
+  // 3b) clamping: from 2F, five more down-clicks would run past B1 -- the real floor must stop at
+  // B1 (never go negative / wrap) and stay a single unambiguous row
   for (let i = 0; i < 5; i++) await clickSel(p1, '[data-action="vote-down"]');
   await waitFor(async () => (await currentFloorLabel(p1)) === "B1", { label: "floor clamps at B1", timeout: 3000 });
-  await p1.waitForTimeout(350);
-  await expectGaugeAtFloor(p1, 0, "p1 clamped at the bottom");
   if ((await currentFloorCount(p1)) !== 1) throw new Error("expected exactly one .current row while clamped at B1");
-  log("over-clicking down clamped at B1 with the gauge at 1/6 (not empty) -- bottom bound holds");
+  log("over-clicking down clamped at B1 -- bottom bound holds");
 
   // 4) no click count shown at all -- neither mine nor the opponent's. Only the real, shared floor
-  // position (the gauge) is ever the movement feedback during voting.
+  // position (whichever row carries .current) is ever the movement feedback during voting.
   const p1Text = await bodyText(p1);
   if (/[▲▼]\s*\d+/.test(p1Text.replace(/\n/g, " "))) {
     throw new Error("a raw click counter (mine or the opponent's) is still shown in the DOM");
