@@ -950,7 +950,14 @@
     var seat = mySeat();
     var body = renderTopbar(state, seat);
     if (!seat) { body += renderSeatPicker(); return body; }
-    if (state.phase === "lobby") body += renderLobby(state, seat);
+    if (state.phase === "lobby") {
+      // 방어적 체크 (2026-08-28 버그 수정): 이 좌석이 서버에 등록돼 있어도(seat truthy) courierPick이
+      // 비어 있으면(재접속 유예 로직으로도 못 막은 예외적 타이밍, 혹은 방이 스윕돼 새로 만들어진 뒤
+      // sessionStorage만 남아있던 경우 등) 절대 "스페이스바 대기" 화면을 보여주지 않는다 -- 택배사를
+      // 안 골랐는데 대기 화면만 뜨면 사용자가 다시 고를 방법이 없다("한번씩 대기 시간에 택배사 선택이
+      // 안 떠" 버그 리포트). 내 택배사가 실제로 정해져 있을 때만 대기 화면, 아니면 선택 화면.
+      body += (state.courierPick && state.courierPick[seat]) ? renderLobby(state, seat) : renderSeatPicker();
+    }
     else if (state.phase === "secure") body += renderBoard(state, seat) + renderPuzzleOverlay(state);
     else if (state.phase === "elevator") body += renderElevator(state, seat);
     else if (state.phase === "halftime") body += renderHalftime(state, seat);
