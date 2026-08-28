@@ -19,7 +19,10 @@ import re
 import base64
 import json
 
-REF_DIR = "/home/claude/project/quiz_board/ref"
+# 2026-08-28: 전반/후반 퍼즐 이미지 분리 (이전엔 REF_DIR 하나를 두 하프가 공유했다 -- 후반용 세트가
+# 아직 안 와서 임시로 그랬던 것. 후반 세트가 도착해서 REF_DIR_1(전반)/REF_DIR_2(후반)로 나눔).
+REF_DIR_1 = "/home/claude/project/quiz_board/ref"
+REF_DIR_2 = "/home/claude/project/quiz_board/ref_2"
 COMPRESSED_DIR = "/tmp/compressed"
 GAME_DATA_JS = os.path.join(os.path.dirname(__file__), "game-data.js")
 OUT_HTML = os.path.join(os.path.dirname(__file__), "public", "index.html")
@@ -77,28 +80,38 @@ def load_shared_constants():
 # 2026-08-27 개편: 보드가 20칸(4종류x5개 고정)에서 21칸(종류별 count가 다름, 확정 층수 택배만 6개)으로
 # 바뀌면서, 예전의 스와치 개수(2/3/4조각) 기준 이미지 그룹핑은 더 이상 종류별 칸 수와 맞물리지 않는다
 # (그 그룹핑은 애초에 시각적 편의였을 뿐 게임 로직과는 무관했다). 이제는 CELLS 순서대로 이미지 파일을
-# 그냥 하나씩 배정한다. 21칸에 맞는 원본 PNG가 아직 REF_DIR에 없다면(예: 전반/후반용 새 이미지 세트가
-# 아직 도착하지 않음), 마지막 이미지를 재사용해 자리만 채우고 크게 경고한다 -- 빌드/배포는 막지 않되
-# 실제 플레이에는 쓰면 안 되는 플레이스홀더임을 분명히 한다.
-IMAGE_FILES = sorted(
-    f for f in os.listdir(REF_DIR)
-    if f.lower().endswith(".png") and f != "contact_sheet.png"
-)
+# 그냥 하나씩 배정한다. 21칸에 맞는 원본 PNG가 REF_DIR_1/REF_DIR_2에 없다면, 마지막 이미지를 재사용해
+# 자리만 채우고 크게 경고한다 -- 빌드/배포는 막지 않되 실제 플레이에는 쓰면 안 되는 플레이스홀더임을
+# 분명히 한다.
+#
+# 2026-08-28: 전반(half 1)과 후반(half 2)이 서로 다른 21장 세트를 쓴다 (REF_DIR_1/REF_DIR_2).
+# 보드 구조(id/catIdx/num, game-data.js의 CELLS)는 두 하프가 그대로 공유하지만 -- 서버는 이미지에
+# 관심이 없다, 순전히 클라이언트가 퍼즐 오버레이에 띄우는 이미지만 하프별로 다르다. 그래서 이 파일의
+# CELLS는 half별로 두 벌(CELLS_1/CELLS_2)을 만들고, 클라이언트의 cellMeta(id, half)가 그중 하나를
+# 골라 쓴다 (렌더 함수 쪽 주석 참고).
 TOTAL_CELLS = sum(t["count"] for t in TYPES)
-if len(IMAGE_FILES) < TOTAL_CELLS:
-    print(
-        f"WARNING: {REF_DIR} 안에 원본 PNG가 {len(IMAGE_FILES)}장뿐인데 칸은 {TOTAL_CELLS}개입니다. "
-        f"부족한 {TOTAL_CELLS - len(IMAGE_FILES)}칸은 마지막 이미지를 임시로 재사용합니다 -- "
-        "실제 플레이 전 반드시 새 이미지 세트로 교체하세요."
+
+
+def load_image_files(ref_dir):
+    files = sorted(
+        f for f in os.listdir(ref_dir)
+        if f.lower().endswith(".png") and f != "contact_sheet.png"
     )
-elif len(IMAGE_FILES) > TOTAL_CELLS:
-    print(f"WARNING: 원본 PNG가 {len(IMAGE_FILES)}장 있는데 칸은 {TOTAL_CELLS}개뿐입니다. 앞에서부터 {TOTAL_CELLS}장만 사용합니다.")
+    if len(files) < TOTAL_CELLS:
+        print(
+            f"WARNING: {ref_dir} 안에 원본 PNG가 {len(files)}장뿐인데 칸은 {TOTAL_CELLS}개입니다. "
+            f"부족한 {TOTAL_CELLS - len(files)}칸은 마지막 이미지를 임시로 재사용합니다 -- "
+            "실제 플레이 전 반드시 새 이미지 세트로 교체하세요."
+        )
+    elif len(files) > TOTAL_CELLS:
+        print(f"WARNING: 원본 PNG가 {len(files)}장 있는데 칸은 {TOTAL_CELLS}개뿐입니다 ({ref_dir}). 앞에서부터 {TOTAL_CELLS}장만 사용합니다.")
+    return files
 
 
-def image_for_flat_idx(i):
-    if not IMAGE_FILES:
-        raise RuntimeError(f"{REF_DIR}에 원본 PNG가 하나도 없습니다.")
-    return IMAGE_FILES[i] if i < len(IMAGE_FILES) else IMAGE_FILES[-1]
+def image_for_flat_idx(files, ref_dir, i):
+    if not files:
+        raise RuntimeError(f"{ref_dir}에 원본 PNG가 하나도 없습니다.")
+    return files[i] if i < len(files) else files[-1]
 
 
 def data_uri_for(png_name):
@@ -109,17 +122,25 @@ def data_uri_for(png_name):
     return f"data:image/jpeg;base64,{b64}"
 
 
-CELLS = []
-_flat_idx = 0
-for cat_idx, t in enumerate(TYPES):
-    for num_idx in range(t["count"]):
-        CELLS.append({
-            "id": f"{t['key']}-{num_idx + 1}",
-            "catIdx": cat_idx,
-            "num": num_idx,
-            "src": data_uri_for(image_for_flat_idx(_flat_idx)),
-        })
-        _flat_idx += 1
+def build_cells(ref_dir):
+    files = load_image_files(ref_dir)
+    cells = []
+    flat_idx = 0
+    for cat_idx, t in enumerate(TYPES):
+        for num_idx in range(t["count"]):
+            cells.append({
+                "id": f"{t['key']}-{num_idx + 1}",
+                "catIdx": cat_idx,
+                "num": num_idx,
+                "src": data_uri_for(image_for_flat_idx(files, ref_dir, flat_idx)),
+            })
+            flat_idx += 1
+    return cells
+
+
+CELLS_1 = build_cells(REF_DIR_1)   # 전반
+CELLS_2 = build_cells(REF_DIR_2)   # 후반
+
 
 def box_art_data_uri(key):
     path = os.path.join(BOX_ART_DIR, f"{key}.webp")
@@ -133,7 +154,8 @@ BOX_ART = [box_art_data_uri(t["key"]) for t in TYPES]
 
 TYPES_JSON = json.dumps(TYPES, ensure_ascii=False)
 COURIERS_JSON = json.dumps(COURIERS, ensure_ascii=False)
-CELLS_JSON = json.dumps(CELLS, ensure_ascii=False)
+CELLS_1_JSON = json.dumps(CELLS_1, ensure_ascii=False)
+CELLS_2_JSON = json.dumps(CELLS_2, ensure_ascii=False)
 FLOORS_JSON = json.dumps(FLOORS, ensure_ascii=False)
 BOX_ART_JSON = json.dumps(BOX_ART, ensure_ascii=False)
 ROOMS_JSON = json.dumps(ROOMS, ensure_ascii=False)
@@ -216,7 +238,7 @@ HEAD_HTML = """<!doctype html>
   .seat-pick { position:relative; z-index:1; text-align:center; max-width:640px; width:100%; padding:1.6rem 1.8rem; }
   .seat-pick h2 { font-family:var(--font-display); font-size:1.6rem; margin:0 0 0.4rem; }
   .seat-pick p { color:var(--muted); font-size:0.9rem; margin:0 0 1.4rem; }
-  .courier-options { display:flex; gap:0.7rem; justify-content:center; flex-wrap:wrap; }
+  .courier-options { display:flex; gap:0.7rem; justify-content:center; flex-wrap:wrap; max-width:360px; margin:0 auto; }
   .courier-btn { --courier-color:var(--gold); flex:0 1 108px; display:flex; flex-direction:column; align-items:center;
     gap:0.4rem; padding:0.9rem 0.6rem; border-radius:14px; background:var(--panel);
     border:2px solid var(--panel-line); font-family:var(--font-display); color:var(--ink);
@@ -456,7 +478,11 @@ APP_JS_TEMPLATE = r"""
   "use strict";
 
   var TYPES = @@TYPES_JSON@@;
-  var CELLS = @@CELLS_JSON@@;
+  // 2026-08-28: 전반/후반이 서로 다른 21장 퍼즐 이미지 세트를 쓴다 (build_client.py의 REF_DIR_1/
+  // REF_DIR_2 참고). 보드 구조(id/catIdx/num)는 동일하고 src(이미지)만 다르므로 배열을 통째로
+  // 두 벌 두고, cellMeta(id, half)가 half에 맞는 쪽에서 찾는다.
+  var CELLS_1 = @@CELLS_1_JSON@@;
+  var CELLS_2 = @@CELLS_2_JSON@@;
   var FLOORS = @@FLOORS_JSON@@;
   var ROOMS = @@ROOMS_JSON@@;
   // 2026-08-27 신설: 좌석 선택 화면에서 고르는 가상 택배사 5종 (game-data.js와 동일 -- 서버가
@@ -464,12 +490,15 @@ APP_JS_TEMPLATE = r"""
   // 문제가 있어서 완전 창작 브랜드로 대체했다 (HANDOVER.md 3.6 참고).
   var COURIERS = @@COURIERS_JSON@@;
   // COURIERS와 순서를 맞춘 손그림 flat 아이콘 (SVG, 순수 표시용이라 서버/game-data.js엔 없음).
+  // 2026-08-28 리스킨: 사용자가 준 새 로고 세트에 맞춰 교체 (COURIERS 순서와 동일 -- 쿡방/천일배송/
+  // 한짐택배/MZ로지스틱스/우체통안). 프라이팬+계란(쿡방), 다이아몬드 직인+바코드선(천일배송),
+  // 방패+상자(한짐택배), 지그재그 화살표(MZ로지스틱스), 우편함(우체통안).
   var COURIER_ICONS = [
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M13 7l-5 6h4l-1 4 5-6h-4z" fill="currentColor" stroke="none"></path></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"></rect><circle cx="9" cy="12" r="2.3" fill="currentColor" stroke="none"></circle><circle cx="15" cy="12" r="2.3" fill="currentColor" stroke="none"></circle></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 0 1 12 0c0 4-2 7-6 7s-6-3-6-7z"></path><circle cx="9.5" cy="10" r="0.8" fill="currentColor" stroke="none"></circle><circle cx="14.5" cy="10" r="0.8" fill="currentColor" stroke="none"></circle><ellipse cx="12" cy="13.5" rx="1.6" ry="1.1" fill="currentColor" stroke="none"></ellipse><path d="M4 9l3 1M20 9l-3 1M4 13l3-.5M20 13l-3-.5"></path></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2c3 2 4 6 4 10 0 2-1 4-4 6-3-2-4-4-4-6 0-4 1-8 4-10z"></path><circle cx="12" cy="9" r="1.6"></circle><path d="M8 14l-3 4 4-1M16 14l3 4-4-1"></path></svg>',
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 15a4 4 0 0 1 .3-8 5 5 0 0 1 9.4 1.2A3.5 3.5 0 0 1 16.5 15z"></path><rect x="9.5" y="15" width="6" height="5" rx="1"></rect></svg>'
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="14" r="6"></circle><path d="M14.5 9.5L20 4"></path><circle cx="10" cy="14" r="2.1" fill="currentColor" stroke="none"></circle><path d="M6.5 8.2c.6-1.4 2-2.2 3.2-2.2"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 7-7 7-7-7z"></path><path d="M8.7 10.6h6.6M8.7 13h4.6"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"></path><rect x="9" y="10.2" width="6" height="4.6" rx="0.6"></rect><path d="M9 12.3h6"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 6h13l-8 6h8l-9 6"></path></svg>',
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10a6 6 0 0 1 12 0v6H6z"></path><path d="M4 16h16"></path><path d="M12 4v3"></path><rect x="8.5" y="11.5" width="7" height="2.4" rx="0.5" fill="currentColor" stroke="none"></rect></svg>'
   ];
   // catIdx로 인덱싱하는 종류별 보드-칸 배경 일러스트 (위 BOX_ART_DIR 참고). CELLS[].src(칸마다 다른
   // 퍼즐 이미지, 오버레이 전용)와는 별개 -- 이건 보드 위 21칸 자체의 배경으로 쓴다.
@@ -513,7 +542,12 @@ APP_JS_TEMPLATE = r"""
   var local = { openCellId: null, toast: null };
   var wsConnected = false;
 
-  function cellMeta(id) { for (var i = 0; i < CELLS.length; i++) if (CELLS[i].id === id) return CELLS[i]; return null; }
+  // half(1|2)로 전반/후반 이미지 세트를 고른다 -- id/catIdx/num은 두 세트가 동일하고 src(이미지)만 다르다.
+  function cellMeta(id, half) {
+    var arr = half === 2 ? CELLS_2 : CELLS_1;
+    for (var i = 0; i < arr.length; i++) if (arr[i].id === id) return arr[i];
+    return null;
+  }
 
   // ---------- scoring (pure display functions -- server owns deliveredRound/floorIdx/stolen, this
   // just formats them; no risk of drifting from the server since it's a pure fn of server data.
@@ -773,7 +807,7 @@ APP_JS_TEMPLATE = r"""
   function renderPuzzleOverlay(st) {
     var cellId = local.openCellId;
     if (!cellId) return '<div class="overlay hidden" id="puzzle-overlay"></div>';
-    var meta = cellMeta(cellId);
+    var meta = cellMeta(cellId, st.half);
     var t = TYPES[meta.catIdx];
     return '<div class="overlay" id="puzzle-overlay">'
       + '<div class="puzzle-frame">'
@@ -1217,7 +1251,8 @@ APP_JS_TEMPLATE = r"""
 
 APP_JS = (APP_JS_TEMPLATE
           .replace("@@TYPES_JSON@@", TYPES_JSON)
-          .replace("@@CELLS_JSON@@", CELLS_JSON)
+          .replace("@@CELLS_1_JSON@@", CELLS_1_JSON)
+          .replace("@@CELLS_2_JSON@@", CELLS_2_JSON)
           .replace("@@FLOORS_JSON@@", FLOORS_JSON)
           .replace("@@ROOMS_JSON@@", ROOMS_JSON)
           .replace("@@COURIERS_JSON@@", COURIERS_JSON)

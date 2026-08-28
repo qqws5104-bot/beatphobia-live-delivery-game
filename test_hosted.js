@@ -113,16 +113,16 @@ async function main() {
   // 서버가 정해서 돌려주므로(pick-courier) 테스트에서 미리 못 정한다. 대신 두 플레이어가 서로 다른
   // 택배사를 고르는 것, 그리고 한쪽이 고른 건 다른 쪽에서 잠기는 것(사용자가 명시적으로 확인해달라고
   // 한 요구사항)을 검증한다.
-  await clickSel(p1, '[data-action="pick-courier"][data-courier="lightning"]');
-  await waitFor(async () => (await bodyText(p1)).includes("내 좌석 · " + COURIER_NAME.lightning), { label: "p1 picked lightning courier" });
+  await clickSel(p1, '[data-action="pick-courier"][data-courier="cookbang"]');
+  await waitFor(async () => (await bodyText(p1)).includes("내 좌석 · " + COURIER_NAME.cookbang), { label: "p1 picked cookbang courier" });
   // p1이 이미 고른 택배사는 p2 화면에서 disabled여야 한다 (상태 브로드캐스트가 p2에게도 반영된 뒤).
   await waitFor(async () => (await p2.evaluate(() =>
-    document.querySelector('[data-action="pick-courier"][data-courier="lightning"]').disabled
-  )), { label: "lightning courier locked on p2's screen once p1 took it" });
+    document.querySelector('[data-action="pick-courier"][data-courier="cookbang"]').disabled
+  )), { label: "cookbang courier locked on p2's screen once p1 took it" });
   log("confirmed: courier taken by p1 is locked out on p2's picker");
-  await clickSel(p2, '[data-action="pick-courier"][data-courier="eyes"]');
-  await waitFor(async () => (await bodyText(p2)).includes("내 좌석 · " + COURIER_NAME.eyes), { label: "p2 picked eyes courier" });
-  log("p1 -> " + COURIER_NAME.lightning + ", p2 -> " + COURIER_NAME.eyes + " confirmed (서로 다른 택배사, 좌석 번호는 서버가 자동 배정)");
+  await clickSel(p2, '[data-action="pick-courier"][data-courier="cheonil"]');
+  await waitFor(async () => (await bodyText(p2)).includes("내 좌석 · " + COURIER_NAME.cheonil), { label: "p2 picked cheonil courier" });
+  log("p1 -> " + COURIER_NAME.cookbang + ", p2 -> " + COURIER_NAME.cheonil + " confirmed (서로 다른 택배사, 좌석 번호는 서버가 자동 배정)");
 
   // ---- lobby: press space on both, verify auto-start into secure phase ----
   await pressSpace(p1);
@@ -416,7 +416,7 @@ async function main() {
   if (scoreTableCountP2 !== 4) throw new Error(`end screen: expected 4 rendered score-tables on p2's view too, found ${scoreTableCountP2}`);
   log("confirmed: both halves' full itemized results are shown on the final results screen");
 
-  // 총점 칩 라벨이 이제 "플레이어 N"이 아니라 그 좌석이 고른 택배사 이름이라(예: "번개특급 총점"),
+  // 총점 칩 라벨이 이제 "플레이어 N"이 아니라 그 좌석이 고른 택배사 이름이라(예: "쿡방 총점"),
   // 좌석 번호 -> 택배사 이름 매핑을 courierPick(전체 상태에 이미 들어있음)에서 만들어 파싱한다.
   // 반환값은 예전처럼 좌석 번호("1"/"2")로 키를 유지 -- 아래 rawScores/halfHistory 비교가 전부
   // 좌석 번호 기준이라 그대로 맞춰줘야 한다.
