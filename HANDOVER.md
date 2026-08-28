@@ -451,12 +451,18 @@ thief/하프타임/종료 화면을 전부 스크린샷 찍어 눈으로 확인�
 > 가는 쪽을 선택해 최종 반영했다. 나머지 4개(쿡방/천일배송/MZ로지스틱스/우체통안)는 실제 브랜드와
 > 무관한 창작명이라 그대로 사용.
 
-> **⚠️ 이 리스킨은 로컬 커밋(`67da2c7`)까지만 되어 있고, 아직 원격(main)엔 push가 안 됐다.**
-> 이 세션이 저장소에 대한 push 권한이 없어서(git proxy 403, 원인 불명 — 세션 UI 어디에도 저장소
-> 접근 설정이 노출돼 있지 않았다) 사용자가 GitHub 웹에서 직접 업로드하기로 하고 "나중에 한번에
-> 하자"며 미뤄둔 상태다. **`game-data.js`와 `public/index.html` 둘 다 같이 올려야 한다** — 서버가
-> `COURIERS`의 key로 유효성 검사를 하므로 하나만 올리면 클라이언트/서버 이름이 어긋난다. 이 문서를
-> 이어받는 사람은 먼저 `git status`/`git log`로 로컬에 이미 반영된 미push 커밋이 있는지 확인할 것.
+> **✅ 2026-08-28: 위 리스킨 + 후반 이미지 분리(2.1절)까지 전부 원격(main)과 동기화 완료.**
+> 이 세션은 이 저장소에 대한 git push 권한이 없어서(git proxy 403 — 세션 UI 어디에도 저장소 접근
+> 설정이 노출돼 있지 않았고, GitHub 쪽 "Installed GitHub Apps"에도 관련 앱이 없었다) 로컬 커밋만
+> 만들고 사용자가 GitHub 웹 UI(파일 업로드/이름 바꾸기)로 직접 올리는 방식으로 우회했다. 중간에
+> 드래그앤드롭 업로드가 `game-data.js`를 `gamedata.js`(하이픈 소실)로 잘못 만든 사고가 있었고,
+> 삭제 후 재업로드 시도가 오히려 파일을 통째로 날려버린 적도 있었다 — 최종적으로는 GitHub 웹
+> 편집기의 **파일명 직접 수정(rename)** 기능으로 해결했다(드래그앤드롭 대신 이 방법을 우선 사용할
+> 것). 이 문서를 이어받는 사람은 여전히 `git push`가 막혀 있을 가능성이 높으니, 먼저
+> `git fetch origin main && git diff origin/main..HEAD --stat`로 로컬과 원격의 실제 차이를
+> 확인할 것 (`raw.githubusercontent.com`에 대한 WebFetch는 자체 캐시 때문에 최대 15분 정도 stale할
+> 수 있어 신뢰하지 말 것). **서버/클라이언트 양쪽이 같이 바뀌는 파일(`game-data.js` 등)은 항상
+> 세트로 같이 올려야 한다** — 하나만 올라가면 `COURIERS` key 불일치로 배포가 깨진다.
 
 **데이터**: `game-data.js`의 `COURIERS`(key/name/color, 서버도 이 key로 유효성 검사) — `TYPES`와
 같은 패턴으로 `build_client.py`가 파싱해서 `COURIERS_JSON`으로 클라이언트에 심는다. 아이콘(SVG)은
@@ -485,6 +491,28 @@ thief/하프타임/종료 화면을 전부 스크린샷 찍어 눈으로 확인�
   풀어줘서 다른 사람이 그 택배사를 다시 고를 수 있게 한다(`releaseSeatIfOrphaned`) — 단, **게임이
   이미 시작된 뒤**의 연결 끊김은 courierPick을 그대로 둔다(재접속하면 같은 좌석/택배사로 복귀해야
   하므로).
+
+  > **🐛 2026-08-28 버그 수정: "한번씩 대기 시간에 택배사 선택이 안 떠" (사용자 리포트).**
+  > 증상: 로비 단계에서 가끔 택배사 선택 화면 대신 "스페이스바를 누르면 시작" 대기 화면이
+  > (아무 택배사도 안 고른 채, "플레이어 N" 폴백으로) 바로 떠버림.
+  > **근본 원인**: `server.js`의 `ws.on("close")`가 **유예 없이 즉시** `releaseSeatIfOrphaned`를
+  > 불렀다. 그런데 클라이언트는 연결이 끊기면 1.2초 뒤 자동 재접속한다(`connectWS`의
+  > `ws.onclose`) — 그러니 와이파이 순단·탭 백그라운드·모바일 화면 잠금처럼 아주 흔한 순간적
+  > 끊김에도, 재접속하기 **전** 시점에 서버가 먼저 `courierPick[seat]`을 지워버렸다. 재접속하면
+  > `pick-seat`으로 좌석은 되찾지만(위 항목 참고) `courierPick`은 다시 안 보내므로, 결과적으로
+  > 화면엔 택배사 선택 없이 "스페이스바 대기" 화면만 남았다.
+  > **수정 (두 겹으로)**:
+  > 1. `server.js`에 `SEAT_RELEASE_GRACE_MS`(5000ms) 유예를 추가 — `ws.on("close")`에서 바로
+  >    해제하지 않고 `setTimeout`으로 미뤄서, 그 사이 같은 `clientId`가 재접속하면(재접속 지연
+  >    1.2초보다 넉넉히 길게 잡음) 해제 자체를 건너뛴다.
+  > 2. `build_client.py`의 `renderBody()`에 방어선 추가 — `seat`이 있어도(서버가 좌석을 알고
+  >    있어도) `state.courierPick[seat]`이 비어 있으면(위 1번 유예로도 못 막는 예외적 타이밍,
+  >    혹은 방이 30분 스윕으로 새로 만들어진 뒤 sessionStorage만 남아있던 경우 등) 절대 대기
+  >    화면을 보여주지 않고 택배사 선택 화면으로 폴백한다.
+  > **회귀 테스트**: `test_reconnect_lobby.js` (5.3절 참고) — `page.routeWebSocket()`으로 실제
+  > WS를 가로채 강제로 끊은 뒤 재접속을 기다려서, 이 수정 이전 코드로 되돌리면 실제로 실패하는
+  > 것까지 확인한 진짜 회귀 테스트다 (`context.setOffline()`은 이미 열린 유휴 WS를 즉시 끊지
+  > 않아서 이 시나리오 재현에 못 쓴다 — 별도로 확인함).
 
 **화면 전체에서 "플레이어 1/2" 대신 택배사 이름을 쓴다** — `build_client.py`의 `seatName(seat, st)`
 헬퍼(`st.courierPick[seat]`로 `COURIERS`에서 이름을 찾고, 아직 없으면 "플레이어 N"으로 폴백)가
@@ -581,7 +609,13 @@ node server.js          # 포트 3000
 node server.js &        # 먼저 서버가 떠 있어야 함
 node test_hosted.js     # 전체 E2E (5라운드 전부 플레이)
 node test_nudge.js      # 엘리베이터 실시간 이동
+node test_reconnect_lobby.js   # 로비 단계 WS 재접속 시 courierPick 안 날아가는지 (2026-08-28)
 ```
+
+`test_reconnect_lobby.js`는 `SECURE_PHASE_MS` 단축이 필요 없다(로비 단계에서 끝남). WS를 진짜로
+끊는 방법으로 `context.setOffline()`이 아니라 `page.routeWebSocket()`을 쓴다 — `setOffline`은
+이미 열린 유휴 WebSocket을 즉시 닫지 않아서(직접 확인함, 3초 offline에도 close 이벤트가 안 뜸)
+이 재접속 시나리오를 재현하지 못한다.
 
 **secure 페이즈가 3분이라 그냥 돌리면 테스트가 타임아웃된다.** 테스트 전에 임시로 줄인다:
 

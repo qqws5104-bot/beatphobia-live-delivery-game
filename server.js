@@ -10,6 +10,9 @@ const { GameRoom } = require("./game-room");
 const PORT = process.env.PORT || 3000;
 const PUBLIC_DIR = path.join(__dirname, "public");
 const INDEX_HTML = fs.readFileSync(path.join(PUBLIC_DIR, "index.html"), "utf-8");
+// 클라이언트의 자동 재접속 지연(1.2초, build_client.py의 connectWS)보다 넉넉히 길게 잡아서, 순간적인
+// 연결 끊김 정도는 "진짜로 나감"으로 오인하지 않도록 하는 유예 시간. ws.on("close")에서 사용.
+const SEAT_RELEASE_GRACE_MS = 5000;
 
 // ---- room registry ----
 const ROOM_CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"; // no 0/O/1/I -- avoids read-aloud ambiguity
@@ -161,8 +164,21 @@ wss.on("connection", (ws, req) => {
   ws.on("close", () => {
     entry.sockets.delete(conn);
     if (conn.seat && conn.clientId) {
-      const stillConnected = new Set(Array.from(entry.sockets).map((c) => c.clientId).filter(Boolean));
-      entry.room.releaseSeatIfOrphaned(conn.seat, conn.clientId, stillConnected);
+      const seat = conn.seat;
+      const clientId = conn.clientId;
+      // 2026-08-28 버그 수정: 예전엔 close 즉시(유예 없이) releaseSeatIfOrphaned를 불렀다. 그런데
+      // 클라이언트는 연결이 끊기면 1.2초 뒤 자동 재접속하도록 되어 있어서(build_client.py의
+      // connectWS/ws.onclose), 와이파이 순단·탭 백그라운드·모바일 화면 잠금처럼 아주 흔한 순간적
+      // 끊김에도 "재접속하기 전" 시점에 이 코드가 먼저 실행돼 로비 단계의 courierPick까지 매번
+      // 지워버렸다 -- 재접속 시 pick-seat으로 좌석은 되찾지만 courierPick은 다시 안 보내므로,
+      // 결과적으로 화면엔 "택배사 선택" 대신 (아무도 못 고른 채) "스페이스바 대기" 화면만 뜨는
+      // 버그로 이어졌다("한번씩 대기 시간에 택배사 선택이 안 떠" 리포트). 진짜로 나간 사람과
+      // 순간적 재접속을 구분하기 위해, 해제를 지연시키고 그 사이에 같은 clientId가 다시 붙으면
+      // (stillConnected를 그 시점에 다시 계산하므로) 해제를 건너뛴다.
+      setTimeout(() => {
+        const stillConnected = new Set(Array.from(entry.sockets).map((c) => c.clientId).filter(Boolean));
+        entry.room.releaseSeatIfOrphaned(seat, clientId, stillConnected);
+      }, SEAT_RELEASE_GRACE_MS);
     }
   });
 });
