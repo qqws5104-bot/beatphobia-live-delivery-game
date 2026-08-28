@@ -156,6 +156,11 @@ wss.on("connection", (ws, req) => {
         if (!conn.seat) return;
         entry.room.halftimeReady(conn.seat);
         break;
+      case "restart-ready":
+        // 2026-08-28 신설: 종료 화면의 "다시 시작" 버튼 -- 같은 방에서 좌석/택배사 유지한 채 새 게임.
+        if (!conn.seat) return;
+        entry.room.restartReady(conn.seat);
+        break;
       default:
         break;
     }

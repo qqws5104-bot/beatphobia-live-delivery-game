@@ -466,6 +466,8 @@ HEAD_HTML = """<!doctype html>
   .score-table th, .score-table td { text-align:left; padding:0.45rem 0.5rem; border-bottom:1px solid var(--panel-line); font-size:0.85rem; }
   .score-table th { color:var(--muted); font-weight:600; font-family:var(--font-display); }
   .winner-banner { text-align:center; padding:1.4rem; font-family:var(--font-display); font-size:1.6rem; font-weight:700; color:var(--gold); }
+  /* 2026-08-28: 종료 화면 "다시 시작" 게이트 -- 결과 표들 사이에서도 눈에 띄도록 가운데 정렬 + 폭 제한. */
+  .restart-gate { max-width:420px; margin:0 auto 1.4rem; text-align:center; }
   .toast { position:fixed; left:50%; bottom:1.4rem; transform:translateX(-50%); background:var(--panel); border:1px solid var(--panel-line);
     padding:0.6rem 1.1rem; border-radius:999px; font-size:0.85rem; z-index:80; box-shadow:0 10px 30px rgba(0,0,0,0.4); }
 </style>
@@ -1076,11 +1078,36 @@ APP_JS_TEMPLATE = r"""
     return html;
   }
 
+  // 2026-08-28 신설: 종료 화면에서 링크를 새로 안 받아도 같은 방에서 바로 재대결할 수 있는 버튼.
+  // halftime/lobby의 "둘 다 눌러야" 게이트와 같은 패턴이되, 스페이스바가 아니라 실제 클릭 버튼으로
+  // 만들었다(사용자 요청 -- 결과 화면은 내용이 길어서 스페이스바보다 버튼이 더 눈에 띈다). 내가 이미
+  // 누른 뒤에는 버튼을 비활성화하고 "상대방 대기 중" 문구로 바꿔서, 두 번 누르거나 아직 상대가 안
+  // 눌렀는데 눌린 것처럼 보이는 걸 방지한다.
+  function renderRestartGate(st, seat) {
+    var otherSeat = seat === "1" ? "2" : (seat === "2" ? "1" : null);
+    var mine = !!(st.restartReady && seat && st.restartReady[seat]);
+    var other = !!(st.restartReady && otherSeat && st.restartReady[otherSeat]);
+    var html = '<div class="restart-gate card">';
+    if (mine) {
+      html += '<button class="btn primary big" disabled>' + (other ? '다시 시작하는 중...' : '다시 시작 대기 중 (' + esc(seatName(otherSeat, st)) + ' 응답 대기)') + '</button>';
+    } else {
+      html += '<button class="btn primary big" data-action="restart-ready">다시 시작</button>';
+    }
+    html += '<div class="ready-row" style="margin-top:0.6rem;">'
+      + '<span class="ready-chip' + (mine ? ' is-ready' : '') + '">나 · ' + (mine ? '준비 완료' : '대기 중') + '</span>'
+      + (otherSeat ? '<span class="ready-chip' + (other ? ' is-ready' : '') + '">' + esc(seatName(otherSeat, st)) + (other ? ' · 준비 완료' : ' · 대기 중') + '</span>' : '')
+      + '</div>';
+    html += '<p style="color:var(--muted);font-size:0.85rem;margin:0.5rem 0 0;">같은 링크에서 좌석/택배사는 그대로 두고 바로 새 게임을 시작해요. 둘 다 눌러야 시작됩니다.</p>';
+    html += '</div>';
+    return html;
+  }
+
   function renderEnd(st, seat) {
     var s1 = st.scores ? st.scores["1"] : 0, s2 = st.scores ? st.scores["2"] : 0;
     var winner = s1 === s2 ? "무승부" : (s1 > s2 ? (seatName("1", st) + " 승리") : (seatName("2", st) + " 승리"));
     var html = '<main class="stage">';
     html += '<div class="winner-banner">' + winner + '</div>';
+    html += renderRestartGate(st, seat);
     // Game's over -- unlike the elevator phase (where per-round delivery info stays private so
     // players can't read each other's moves mid-game), the ending screen reveals both players'
     // full itemized results (전반 + 후반 각각, 그리고 합산) so they can compare and review the
@@ -1188,6 +1215,13 @@ APP_JS_TEMPLATE = r"""
     }
     if (action === "skip-thief") {
       send({ type: "place-thief", seat: mySeat(), floorIdx: null });
+      return;
+    }
+    if (action === "restart-ready") {
+      // 다른 ready-gate(vote-up, place-thief 등)와 동일하게 낙관적 로컬 갱신 없이 그냥 보내기만
+      // 한다 -- 서버가 다음 state 브로드캐스트로 st.restartReady[seat]를 채워서 돌려주면
+      // renderRestartGate가 그걸 보고 버튼을 비활성화한다. 두 번 눌려도 서버가 멱등하게 무시한다.
+      send({ type: "restart-ready", seat: mySeat() });
       return;
     }
   });

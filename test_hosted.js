@@ -470,6 +470,36 @@ async function main() {
   });
   log("confirmed: both halves' snapshotted scores match game-room.js's authoritative totalScore() (no client/server drift)");
 
+  // ---- 2026-08-28 신설: 종료 화면 "다시 시작" 버튼 -- 같은 방에서 좌석/택배사 유지한 채 새 게임 ----
+  await waitFor(async () => (await countSel(p1, '[data-action="restart-ready"]')) > 0, { label: "restart button rendered on end screen" });
+  await clickSel(p1, '[data-action="restart-ready"]');
+  await waitFor(async () => (await bodyText(p1)).includes("대기"), { label: "p1 shows a waiting state right after clicking restart" });
+  await p1.waitForTimeout(200);
+  if ((await bodyText(p1)).includes("택배 확보")) {
+    throw new Error("restart must NOT take effect until BOTH players click -- p1 alone flipped the phase");
+  }
+  await clickSel(p2, '[data-action="restart-ready"]');
+  await waitFor(async () => {
+    const t1 = await bodyText(p1);
+    const t2 = await bodyText(p2);
+    return t1.includes("택배 확보") && t2.includes("택배 확보");
+  }, { label: "both players enter a fresh secure phase once BOTH click restart", timeout: 5000 });
+  log("confirmed: restart button needs both players' clicks, then re-enters secure phase directly (no lobby/seat-repick)");
+
+  if (!(await bodyText(p1)).includes(COURIER_NAME.cookbang)) {
+    throw new Error("courier pick should survive a restart, but p1's courier name is missing from the new secure-phase screen");
+  }
+  log("confirmed: seat/courier assignment survives restart");
+
+  const takenAfterRestart = await countSel(p1, ".cell.taken");
+  if (takenAfterRestart !== 0) throw new Error(`expected a completely fresh board after restart, found ${takenAfterRestart} already-taken cell(s)`);
+  log("confirmed: board is completely fresh after restart");
+
+  if (lastState.p1.half !== 1) throw new Error(`expected half reset to 1 after restart, got ${lastState.p1.half}`);
+  if (lastState.p1.halfHistory.length !== 0) throw new Error(`expected halfHistory cleared after restart, found ${lastState.p1.halfHistory.length} entries`);
+  if (lastState.p1.scores !== null) throw new Error("expected scores cleared (null) after restart");
+  log("confirmed: half/halfHistory/scores fully reset after restart");
+
   if (errors.length) {
     log("!! console/page errors captured during run:");
     errors.forEach((e) => log("   " + e));

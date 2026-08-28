@@ -144,6 +144,10 @@ python3 build_client.py
 ```
 lobby → secure(3분) → elevator(5라운드) → halftime → secure(3분) → elevator(5라운드) → end
         └──────────── 전반(half 1) ────────────┘         └──────────── 후반(half 2) ────────────┘
+                                                                                          │
+                                                                     둘 다 "다시 시작" 클릭 (3.6-2 참고)
+                                                                                          ↓
+                                                                                        secure(3분) → ...
 ```
 
 **전체가 두 번(전반/후반) 연속으로 돈다** — 한 게임 세션 안에서 secure→elevator 전체 사이클이
@@ -190,6 +194,29 @@ lobby → secure(3분) → elevator(5라운드) → halftime → secure(3분) �
 
 **end (후반 끝)** — 두 플레이어의 **전반+후반 전체 송장 명세와 하프별 점수, 합산 총점**을 나란히
 공개. 승패 배너는 합산 총점 기준.
+
+> **"다시 시작" 버튼 (2026-08-28 신설, 사용자 요청).** end 화면에 `renderRestartGate()`가 그리는
+> 카드 하나가 추가돼 있다 — halftime/lobby의 "둘 다 눌러야" 게이트와 같은 패턴이지만, 스페이스바가
+> 아니라 실제 클릭 버튼(`data-action="restart-ready"`)이다(결과 화면은 내용이 길어서 버튼이 더
+> 눈에 띈다는 판단). 클릭하면 `{type:"restart-ready", seat}`를 보내고, `game-room.js`의
+> `restartReady(seat)`가 `state.restartReady[seat]=true`로 기록 → **둘 다** true가 되는 순간
+> `_restartGame()`이 실행된다:
+> - **유지되는 것**: `seatOwners`, `courierPick` — 같은 좌석/택배사로 곧장 이어서 하므로 로비
+>   화면(택배사 재선택)을 다시 거치지 않는다.
+> - **완전히 리셋되는 것**: `boards`, `players`(송장), `acquireCounter`, `elevator`(라운드/투표/
+>   우선택배/택배도둑 전부), `half`(→1), `halfHistory`(→빈 배열), `scores`(→null),
+>   `restartReady`(→다음 게임 종료 때 또 쓰도록 `{false,false}`로).
+> - `phase`는 `lobby`를 거치지 않고 **곧장 `secure`**로 간다 (`_startGame()` 재사용 — 3분 secure
+>   타이머도 새로 걸림).
+> - 한쪽만 누르면 카드에 "다시 시작 대기 중 (상대 이름 응답 대기)"만 뜨고 아무 것도 안 바뀐다 —
+>   실수로 눌러도 상대 동의 없이 화면이 안 바뀌게 하기 위함(다른 ready-gate들과 동일한 설계 원칙).
+> - 서버: `server.js`의 `"restart-ready"` 케이스가 `conn.seat`이 있을 때만 `room.restartReady()`를
+>   호출한다. 클라이언트: `build_client.py`의 `renderRestartGate()`(렌더링) + 문서 클릭 핸들러의
+>   `"restart-ready"` 분기(전송) — 다른 WS 전용 액션들과 동일하게 낙관적 로컬 상태 없이 다음
+>   `state` 브로드캐스트만 기다린다.
+> - 검증: `test_restart.js`(GameRoom을 직접 구동해 리셋/유지 항목을 결정론적으로 확인)와
+>   `test_hosted.js` 맨 끝(실제 Playwright 두 브라우저로 버튼 클릭 → 좌석/택배사 유지 + 보드 초기화
+>   + half/halfHistory/scores 리셋까지 E2E로 확인).
 
 ### 3.2 엘리베이터 (핵심)
 
@@ -564,6 +591,7 @@ Node가 싱글스레드라 두 사람의 동시 클릭도 그냥 순서대로 �
 | `choose-delivery` | `invoiceId` | 같은 층 충돌 시 먼저 보낼 송장 선택 (choosing 상태에서만) |
 | `place-thief` | `floorIdx` (또는 `null` = 건너뛰기) | 택배도둑 배치/건너뛰기 (후반, 전용 `thief` 상태에서만, **후반 전체 1회** — 3.2 참고) |
 | `halftime-ready` | — | 하프타임 게이트 통과 → 후반 secure 페이즈 시작 |
+| `restart-ready` | — | **2026-08-28 신설.** end 화면 "다시 시작" 게이트 통과 → 좌석/택배사 유지한 채 곧장 새 게임 secure 페이즈 시작 (3.1 참고) |
 
 서버 → 클라이언트: `{type:"state", state}` (전체 상태) 또는 `{type:"error", code, seat}`.
 
@@ -610,7 +638,27 @@ node server.js &        # 먼저 서버가 떠 있어야 함
 node test_hosted.js     # 전체 E2E (5라운드 전부 플레이)
 node test_nudge.js      # 엘리베이터 실시간 이동
 node test_reconnect_lobby.js   # 로비 단계 WS 재접속 시 courierPick 안 날아가는지 (2026-08-28)
+node test_theft_scoring.js     # 택배도둑 도난 채점/라벨 검증 -- GameRoom 직접 구동, 서버 로직만 (2026-08-28)
+node test_restart.js           # end 화면 "다시 시작" 버튼 리셋/유지 로직 검증 (2026-08-28)
+node test_theft_e2e.js         # 택배도둑 도난 처리 -- 진짜 브라우저+WS로 처음부터 끝까지 (2026-08-28)
 ```
+
+> **`test_theft_scoring.js`(서버 로직만) vs `test_theft_e2e.js`(진짜 브라우저 렌더링까지)**: 사용자가
+> "택배도둑이 들고간 택배를 성공처리한다"고 두 번 신고했는데, 매번 서버 쪽 로직(`scoreInvoice`/
+> `resultLabel`/round log)은 이미 정확한 것으로 확인됐다(`test_theft_scoring.js` + `git diff
+> origin/main` 대조). 그래도 재신고가 왔을 때, "클라이언트가 실제로 화면에 그리는 것"까지는
+> `test_theft_scoring.js`가 GameRoom을 직접 구동하느라 못 본다는 게 마음에 걸려서 `test_theft_e2e.js`를
+> 새로 만들었다 — 진짜 Playwright 브라우저 두 개 + 진짜 WS 서버로 로비부터 끝까지 플레이하고, 도난
+> 송장이 (1) 라운드 결과 화면, (2) 내 송장 목록의 `.sticker`(텍스트+CSS class), (3) 최종 결과 표,
+> 세 군데 모두에서 실제 렌더링 결과로 "미배송"인지 직접 확인한다. 결과: 세 군데 다 정확했다 — 즉
+> 이 시점까지 코드에서 재현되는 버그는 없었다(사용자가 실제로 목격한 화면과의 차이는 스크린샷/더
+> 구체적인 재현 조건 없이는 이 이상 좁히기 어렵다).
+>
+> 만들면서 겪은 함정: 엘리베이터 라운드는 idle/result 게이트가 "둘 다 스페이스"라야 넘어간다
+> (`game-room.js`의 `setElevatorReady` 참고) — **마지막(5번째) 라운드도 예외가 아니다.** 5라운드
+> 결과 화면이 뜬 뒤 스페이스를 누르지 않으면 `_finishHalf()`가 절대 호출되지 않아 halftime/end
+> 화면으로 안 넘어가고, "타임아웃" 에러만 애매하게 난다. 라운드 루프를 짤 때 마지막 반복 뒤에도
+> 반드시 양쪽 다 스페이스를 눌러야 한다는 걸 잊지 말 것.
 
 `test_reconnect_lobby.js`는 `SECURE_PHASE_MS` 단축이 필요 없다(로비 단계에서 끝남). WS를 진짜로
 끊는 방법으로 `context.setOffline()`이 아니라 `page.routeWebSocket()`을 쓴다 — `setOffline`은
