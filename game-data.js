@@ -5,7 +5,8 @@
 
 // 2026-08-27 개편: "신선·냉동 택배" 폐지, "확정 층수 택배"(6칸, B1~5F 각 1개씩 고정) 신설.
 // reward/penalty는 이제 추상 점수가 아니라 원(KRW) 단위 실제 금액이다.
-// count: 이 종류가 보드에서 차지하는 칸 수 (기존엔 전 종류 고정 5칸이었으나 이제 종류별로 다름 -- 총 21칸).
+// count: 이 종류가 보드에서 차지하는 칸 수. (2026-10-06: 전 종류 6칸으로 통일 -- 보드 총 24칸, 전반/후반 각각.
+//   그 전엔 5/5/5/6 = 21칸이었다. 확정 층수 택배는 층(B1~5F)이 6개라 원래도 6칸이다.)
 // pieces: 우봉고 퍼즐 조각 개수 표시용 숫자일 뿐, 보드 칸 수(count)와는 무관.
 // mini / miniLevel: (2026-10-06) 이 종류의 칸을 확보할 때 하는 미니게임과 난이도(1~3). minigames.js의
 //   "pack"(박스 포장) / "inspect"(불량 검수) / "sticker"(송장 붙이기). null이면 기존 우봉고(퍼즐 이미지 +
@@ -15,11 +16,11 @@
 // 표시 순서는 이 배열 순서 그대로 보드에 반영된다 (2026-08-27: 확정 층수 택배를 맨 아래로 이동,
 // 깨지기 쉬운 택배는 주황+흰 글씨 대신 연두+검은 글씨로 -- 주황 배경에 흰 글씨만 유독 튀어서 변경).
 const TYPES = [
-  { key: "normal", name: "일반택배", count: 5, pieces: 2, reward: 2500, penalty: 1000,
+  { key: "normal", name: "일반택배", count: 6, pieces: 2, reward: 2500, penalty: 1000,
     color: "#C9A576", ink: "#16233F", mini: "pack", miniLevel: 1 },
-  { key: "fragile", name: "깨지기 쉬운 택배", count: 5, pieces: 3, reward: 5000, penalty: 2500,
+  { key: "fragile", name: "깨지기 쉬운 택배", count: 6, pieces: 3, reward: 5000, penalty: 2500,
     color: "#C7E29A", ink: "#16233F", mini: "inspect", miniLevel: 2 },
-  { key: "valuable", name: "귀중품", count: 5, pieces: 4, reward: 10000, penalty: 5000,
+  { key: "valuable", name: "귀중품", count: 6, pieces: 4, reward: 10000, penalty: 5000,
     color: "#F0B84A", ink: "#16233F", mini: null, miniLevel: 0 },
   { key: "fixed-floor", name: "확정 층수 택배", count: 6, pieces: 3, fixedFloor: true, reward: 3000, penalty: 2500,
     color: "#6DBBFD", ink: "#16233F", mini: "sticker", miniLevel: 2 },

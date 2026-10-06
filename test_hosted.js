@@ -1,6 +1,6 @@
 // Two-player end-to-end test against the REAL local WS server (not a mock), simulating two
 // separate devices via two separate browser contexts (independent sessionStorage/clientId).
-// Covers the full 2026-08-27 rework: 21-cell board (확정 층수 택배 = 6 cells), currency scoring,
+// Covers the full 2026-08-27 rework: 24-cell board (6 cells per category), currency scoring,
 // per-round priority-package picker embedded in the elevator ready-gate (re-picked every round,
 // bonus only applies if delivered that same round), 후반-only dedicated 택배도둑 placement window
 // (its own state between each round's ready-gate and voting), and the full
@@ -151,12 +151,14 @@ async function main() {
   const hasTimer1 = await countSel(p1, "#side-timer");
   if (!hasTimer1) throw new Error("side timer missing on p1 in secure phase");
 
-  // ---- 21-cell board sanity: 4 category rows, one of them (확정 층수 택배) has 6 cells ----
+  // ---- 24-cell board sanity: 4 category rows of 6 cells each ----
   const boardRowCount = await countSel(p1, ".board-row");
-  if (boardRowCount !== 4) throw new Error(`expected 4 category rows on the 21-cell board, found ${boardRowCount}`);
+  if (boardRowCount !== 4) throw new Error(`expected 4 category rows on the 24-cell board, found ${boardRowCount}`);
   const totalCellButtons = await countSel(p1, ".board-row .cell");
-  if (totalCellButtons !== 21) throw new Error(`expected 21 total cells across all categories, found ${totalCellButtons}`);
-  log("confirmed: 21-cell board renders as 4 category rows (5/6/5/5)");
+  if (totalCellButtons !== 24) throw new Error(`expected 24 total cells across all categories, found ${totalCellButtons}`);
+  const perRow = await p1.evaluate(() => Array.from(document.querySelectorAll(".board-row")).map((r) => r.querySelectorAll(".cell").length));
+  if (perRow.join(",") !== "6,6,6,6") throw new Error(`every category must have exactly 6 cells, got ${perRow.join("/")}`);
+  log("confirmed: 24-cell board renders as 4 category rows (6/6/6/6)");
 
   // ---- give up: opening a cell and clicking give-up must NOT mark it taken ----
   await clickSel(p1, '[data-action="open-cell"][data-cell="normal-1"]');
@@ -201,7 +203,7 @@ async function main() {
   log("secured a 확정 층수 택배 cell for both players");
 
   // secure a healthy spread of cells for both players so there's real inventory for the elevator
-  // phase (including enough on p1 to make same-floor collisions likely across 21 cells)
+  // phase (including enough on p1 to make same-floor collisions likely across 24 cells)
   for (const id of [
     "normal-2", "normal-3", "normal-4",
     "fixed-floor-1", "fixed-floor-2", "fixed-floor-4", "fixed-floor-5", "fixed-floor-6",
@@ -268,7 +270,7 @@ async function main() {
   // ---- play out a full 5-round half, handling the optional "choosing" (same-floor conflict)
   // sub-state whenever it appears, plus (후반 only) a dedicated "thief" placement window that now
   // appears before every round's voting -- both players click vote-up every round, which drives
-  // the shared floor to the top and keeps it there, making same-floor collisions likely across 21
+  // the shared floor to the top and keeps it there, making same-floor collisions likely across 24
   // secured cells. ----
   async function playHalf(halfLabel, isHalf2) {
     for (let round = 1; round <= 5; round++) {
@@ -378,7 +380,7 @@ async function main() {
   // ---- 후반's board must be freshly reset (no cells pre-taken) ----
   const takenAtHalf2Start = await countSel(p1, ".cell.taken");
   if (takenAtHalf2Start !== 0) throw new Error(`후반 secure phase should start with a fresh board, but ${takenAtHalf2Start} cell(s) are already taken`);
-  log("confirmed: 후반 starts with a completely fresh 21-cell board");
+  log("confirmed: 후반 starts with a completely fresh 24-cell board");
 
   for (const id of ["normal-1", "normal-2", "fixed-floor-1", "fixed-floor-2", "fragile-1", "valuable-1"]) {
     await secureCell(p1, id);

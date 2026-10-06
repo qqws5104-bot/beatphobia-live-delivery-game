@@ -305,50 +305,102 @@
   }
 
   // ======================================================================
-  // 송장 붙이기 -- 송장을 끌어다 점선 안에 쏙 들어가게 붙이기
+  // 송장 붙이기 -- 송장에 적힌 배송코드와 같은 코드가 적힌 박스를 찾아 붙이기
   // ======================================================================
-  // 모든 좌표/크기는 스테이지(520:320) 대비 % -- 화면 크기가 달라도 같은 판정이 된다.
-  var LW = 22, LH = 18;                                   // 송장 크기
-  var SLACK = [[10, 7], [6, 5], [4, 3.5]];                // 점선 칸이 송장보다 얼마나 더 큰가(여유) -- 작을수록 어렵다
-  var STRIPS = [[5, 33], [45.5, 73]];                     // 박스 윗면에서 테이프 위/아래의 쓸 수 있는 세로 구간(%)
-  var HALVES = [[5, 50], [50, 95]];                       // 가로 구간(%)
+  // (2026-10-06 개편) 예전엔 점선 칸에 송장을 끌어다 놓는 단순 조준이라 너무 쉬웠다. 지금은 "읽고 찾는" 게임:
+  // 박스 여러 개가 작업대에 놓여 있고, 송장은 한 장씩 나온다. 송장의 배송코드(예: 1F-07)와 같은 코드가 적힌
+  // 박스에만 붙는다. 틀린 박스에 놓으면 실수 +1, 송장은 트레이로 돌아간다. 조준 자체는 관대하다(송장의
+  // 중심이 박스 위에 있으면 그 박스로 판정) -- 어려움은 손기술이 아니라 코드를 읽고 비교하는 데서 온다.
+  // 배송코드는 이 미니게임 안에서만 쓰는 값이다: 실제 송장 호수는 확보 순간 서버가 정하므로 여기서 호수를
+  // 흉내 내지 않는다(그래서 "1F-07" 같은 호수와 다른 모양의 코드). 코드의 층 부분만 그 칸의 층과 맞춘다.
+  var STK_BOXES  = [4, 5, 6];   // 레벨별 박스 수
+  var STK_LABELS = [2, 3, 4];   // 레벨별 송장 장수 (붙일 박스 수)
+  var STK_FLOORS = ["B1", "1F", "2F", "3F", "4F", "5F"];
+  var LW = 19, LH = 20.5;       // 송장 크기 (스테이지 대비 %, 스테이지 520:320)
+  var TRAY_X = (100 - LW) / 2, TRAY_Y = 76;
 
-  function sampleRoom() {
-    var floors = ["B1", "1F", "2F", "3F", "4F", "5F"];
-    var f = floors[rand(floors.length)];
-    return (f === "B1" ? "B" : f.charAt(0)) + "0" + (1 + rand(9)) + "호";
+  function pad2(n) { return (n < 10 ? "0" : "") + n; }
+
+  // 레벨별로 박스에 적을 배송코드 목록과, 송장이 나올 박스 순서를 만든다.
+  //   L1: 틀린 박스는 층이 다른 코드(눈에 띄게 다름)
+  //   L2: 같은 층 코드가 섞이고, 층만 다르고 번호가 같은 함정(2F-07 vs 1F-07)이 하나
+  //   L3: 전부 같은 층, 번호가 한 글자만 다르거나(07/17) 자리만 바뀐(07/70) 함정
+  function makeStickerPlan(level, floor, n, k) {
+    for (var attempt = 0; attempt < 50; attempt++) {
+      var used = {}, nums = [], codes = [];
+      function code(f, nn) { return f + "-" + pad2(nn); }
+      function add(f, nn) { var cd = code(f, nn); if (used[cd] || nn < 1 || nn > 99) return false; used[cd] = 1; codes.push({ code: cd, f: f, nn: nn }); return true; }
+      var others = STK_FLOORS.filter(function (x) { return x !== floor; });
+      var targets = [];
+      while (targets.length < k) {
+        var nn = 1 + rand(99);
+        if (add(floor, nn)) targets.push(nn);
+      }
+      var guard = 0;
+      while (codes.length < n && guard++ < 200) {
+        var t = targets[rand(k)], tens = Math.floor(t / 10), ones = t % 10;
+        var d = codes.length - k; // 몇 번째 틀린 박스인가
+        if (level === 1) {
+          add(others[rand(others.length)], 1 + rand(99));
+        } else if (level === 2) {
+          if (d === 0) add(others[rand(others.length)], t);                       // 층만 다른 함정
+          else if (d === 1) add(floor, 1 + rand(99));                              // 같은 층 다른 번호
+          else add(others[rand(others.length)], 1 + rand(99));
+        } else {
+          var kind = d % 3;
+          if (kind === 0) add(floor, tens * 10 + ((ones + 1 + rand(8)) % 10));    // 일의 자리만 다름
+          else if (kind === 1) add(floor, ((tens + 1 + rand(8)) % 10) * 10 + ones); // 십의 자리만 다름
+          else if (tens !== ones) add(floor, ones * 10 + tens);                    // 자리 바꿈(07 -> 70)
+          else add(others[rand(others.length)], t);
+        }
+      }
+      if (codes.length < n) continue;
+      // 목표 코드는 앞 k개. 위치는 섞는다.
+      var order = shuffle(codes.map(function (_, i) { return i; }));
+      var boxes = order.map(function (i) { return codes[i].code; });
+      var seq = shuffle(codes.slice(0, k).map(function (x) { return x.code; }));
+      return { boxes: boxes, seq: seq };
+    }
+    throw new Error("sticker plan failed");
   }
 
   function stickerGame(body, c) {
-    var count = c.level;
-    var TW = LW + SLACK[c.level - 1][0], TH = LH + SLACK[c.level - 1][1];
-    var slots = shuffle([[0, 0], [0, 1], [1, 0], [1, 1]]).slice(0, count).map(function (s) {
-      var strip = STRIPS[s[0]], half = HALVES[s[1]];
-      var x0 = half[0] + 1.5, x1 = half[1] - TW - 1.5;
-      var y0 = strip[0] + 1.5, y1 = strip[1] - TH - 1.5;
-      return { x: x0 + Math.random() * Math.max(0, x1 - x0), y: y0 + Math.random() * Math.max(0, y1 - y0) };
-    });
+    var n = STK_BOXES[c.level - 1], k = STK_LABELS[c.level - 1];
+    var floor = STK_FLOORS.indexOf(c.label) >= 0 ? c.label : STK_FLOORS[rand(STK_FLOORS.length)];
+    var plan = makeStickerPlan(c.level, floor, n, k);
 
-    body.innerHTML = '<div class="mg-stage"><div class="mg-parcel"></div><div class="mg-tray"></div>'
-      + '<div class="mg-target"></div></div>';
+    var boxHtml = plan.boxes.map(function (cd) {
+      return '<div class="mg-bx"><div class="bx-top"></div><div class="bx-front">'
+        + '<div class="bx-addr"><i>받는 곳</i><b>' + cd + '</b></div><div class="bx-slot"></div></div>'
+        + '<div class="bx-tape"></div><span class="bx-ok" aria-hidden="true">✓</span></div>';
+    }).join("");
+    body.innerHTML = '<div class="mg-stage" data-total="' + k + '"><div class="mg-bxs">' + boxHtml + '</div>'
+      + '<div class="mg-tray"><span class="mg-tray-note"></span></div></div>';
     var stage = body.querySelector(".mg-stage");
-    var target = body.querySelector(".mg-target");
+    var boxes = Array.prototype.slice.call(body.querySelectorAll(".mg-bx"));
+    var note = body.querySelector(".mg-tray-note");
     var placed = 0, current = null, dragging = false, grabDX = 0, grabDY = 0;
-    var trayX = (100 - LW) / 2, trayY = 78;
 
-    function showTarget() {
-      var s = slots[placed];
-      target.style.left = s.x + "%"; target.style.top = s.y + "%";
-      target.style.width = TW + "%"; target.style.height = TH + "%";
-      target.classList.add("is-on");
-      if (c.testHooks) { target.setAttribute("data-tx", s.x); target.setAttribute("data-ty", s.y); }
+    function boxCode(b) { return b.querySelector(".bx-addr b").textContent; }
+    // 송장 중심이 놓인 박스(이미 붙인 박스는 제외). 없으면 null.
+    function boxUnder(lb) {
+      var r = lb.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+      for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].classList.contains("is-done")) continue;
+        var b = boxes[i].getBoundingClientRect();
+        if (cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom) return boxes[i];
+      }
+      return null;
     }
+    function setHover(b) { boxes.forEach(function (x) { x.classList.toggle("is-hover", x === b); }); }
+
     function spawnLabel() {
-      var room = (c.label || sampleRoom());
+      var code = plan.seq[placed];
+      note.textContent = "남은 송장 " + (k - placed) + "장";
       var lb = el("div", "mg-label",
-        '<div class="lb-bar"></div><div class="lb-main"><div class="lb-txt"><div class="lb-cap">받는 곳</div><div class="lb-room">' + room + '</div></div><div class="lb-code"></div></div>');
+        '<div class="lb-bar"><span>송장</span></div><div class="lb-main"><i>배송코드</i><b class="lb-room">' + code + '</b></div><div class="lb-code"></div>');
       lb.style.width = LW + "%"; lb.style.height = LH + "%";
-      lb.style.left = trayX + "%"; lb.style.top = trayY + "%";
+      lb.style.left = TRAY_X + "%"; lb.style.top = TRAY_Y + "%";
       lb.setAttribute("data-label", "1");
       stage.appendChild(lb);
       current = lb;
@@ -367,38 +419,42 @@
         var r = stage.getBoundingClientRect();
         lb.style.left = clamp((e.clientX - grabDX - r.left) / r.width * 100, -4, 104 - LW) + "%";
         lb.style.top = clamp((e.clientY - grabDY - r.top) / r.height * 100, -4, 104 - LH) + "%";
+        setHover(boxUnder(lb));
       });
       function drop() {
         if (!dragging || lb !== current) return;
         dragging = false;
         lb.classList.remove("is-drag");
-        var lx = parseFloat(lb.style.left), ly = parseFloat(lb.style.top);
-        var s = slots[placed];
-        var inside = lx >= s.x && ly >= s.y && lx + LW <= s.x + TW && ly + LH <= s.y + TH;
-        if (inside) {
-          lb.style.left = (s.x + (TW - LW) / 2) + "%";
-          lb.style.top = (s.y + (TH - LH) / 2) + "%";
-          lb.classList.add("is-stuck");
-          lb.setAttribute("data-stuck", "1");
-          target.classList.remove("is-on");
-          placed++;
-          current = null;
-          if (placed === count) { c.later(c.finish, 280); }
-          else { c.later(function () { showTarget(); spawnLabel(); }, 260); }
-          return;
-        }
-        // 박스 윗면 위에서 놓쳤으면 실수, 트레이 근처에서 그냥 놓은 건 실수 아님
-        if (ly + LH / 2 < 73) { c.addMistake(); restartAnim(lb, "mg-shake"); }
+        var b = boxUnder(lb);
+        setHover(null);
+        if (b && boxCode(b) === code) { stick(lb, b); return; }
+        if (b) { c.addMistake(); restartAnim(b, "is-wrong"); } // 틀린 박스에 붙이려 함. 빈 곳에 놓은 건 실수 아님
         lb.classList.add("is-return");
-        lb.style.left = trayX + "%"; lb.style.top = trayY + "%";
+        lb.style.left = TRAY_X + "%"; lb.style.top = TRAY_Y + "%";
       }
       lb.addEventListener("pointerup", drop);
       lb.addEventListener("pointercancel", drop);
     }
 
-    showTarget();
+    // 송장이 박스 앞면의 송장 자리로 줄어들며 붙는다
+    function stick(lb, b) {
+      var sr = stage.getBoundingClientRect(), slot = b.querySelector(".bx-slot").getBoundingClientRect();
+      var lw = lb.offsetWidth, lh = lb.offsetHeight;
+      var kk = Math.min(slot.width / lw, slot.height / lh);
+      var x = slot.left - sr.left + (slot.width - lw * kk) / 2, y = slot.top - sr.top + (slot.height - lh * kk) / 2;
+      lb.classList.add("is-stuck");
+      lb.style.left = (x / sr.width * 100) + "%"; lb.style.top = (y / sr.height * 100) + "%";
+      lb.style.transform = "scale(" + kk + ")";
+      lb.setAttribute("data-stuck", "1");
+      b.classList.add("is-done");
+      placed++;
+      current = null;
+      if (placed === k) { note.textContent = "모두 붙였어요"; c.later(c.finish, 320); }
+      else { c.later(spawnLabel, 300); }
+    }
+
     spawnLabel();
-    return { hint: function () { return "송장을 끌어다 점선 안에 쏙 들어가게 놓으세요. 송장 전체가 점선 안에 들어와야 붙어요" + (count > 1 ? " (" + count + "장)." : "."); } };
+    return { hint: function () { return "송장의 배송코드와 같은 코드가 적힌 박스에 송장을 붙이세요 (" + k + "장). 코드를 잘 읽어요 -- 비슷한 코드가 섞여 있어요. 틀린 박스에 붙이면 실수!"; } };
   }
 
   var GAMES = { pack: packGame, inspect: inspectGame, sticker: stickerGame };

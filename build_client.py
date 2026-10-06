@@ -90,6 +90,7 @@ def load_shared_constants():
 # CELLS는 half별로 두 벌(CELLS_1/CELLS_2)을 만들고, 클라이언트의 cellMeta(id, half)가 그중 하나를
 # 골라 쓴다 (렌더 함수 쪽 주석 참고).
 TOTAL_CELLS = sum(t["count"] for t in TYPES)
+LEGACY_TOTAL_CELLS = 21  # 원본 PNG 한 세트의 장 수 (예전 5/5/5/6 배치)
 
 
 def load_image_files(ref_dir):
@@ -97,14 +98,8 @@ def load_image_files(ref_dir):
         f for f in os.listdir(ref_dir)
         if f.lower().endswith(".png") and f != "contact_sheet.png"
     )
-    if len(files) < TOTAL_CELLS:
-        print(
-            f"WARNING: {ref_dir} 안에 원본 PNG가 {len(files)}장뿐인데 칸은 {TOTAL_CELLS}개입니다. "
-            f"부족한 {TOTAL_CELLS - len(files)}칸은 마지막 이미지를 임시로 재사용합니다 -- "
-            "실제 플레이 전 반드시 새 이미지 세트로 교체하세요."
-        )
-    elif len(files) > TOTAL_CELLS:
-        print(f"WARNING: 원본 PNG가 {len(files)}장 있는데 칸은 {TOTAL_CELLS}개뿐입니다 ({ref_dir}). 앞에서부터 {TOTAL_CELLS}장만 사용합니다.")
+    if len(files) < LEGACY_TOTAL_CELLS:
+        print(f"WARNING: {ref_dir} 안에 원본 PNG가 {len(files)}장뿐입니다(예전 배치 기준 {LEGACY_TOTAL_CELLS}장 필요). 부족한 칸은 마지막 이미지를 재사용합니다.")
     return files
 
 
@@ -122,19 +117,38 @@ def data_uri_for(png_name):
     return f"data:image/jpeg;base64,{b64}"
 
 
+# 2026-10-06: 보드가 24칸(전 종류 6칸)이 됐다. 그런데 원본 퍼즐 이미지는 예전 21칸 배치(5/5/5/6)로
+# 번호가 매겨져 있다(1~5 일반, 6~10 깨지기, 11~15 귀중품, 16~21 확정 층수). 칸 순서대로 하나씩 배정하면
+# 귀중품 칸에 엉뚱한 종류(일반/깨지기)의 퍼즐이 들어가므로, 종류별로 "예전 배치에서의 시작 번호/개수"를
+# 따로 들고 매핑한다. 그리고 지금은 귀중품(mini == null)만 우봉고를 쓰므로 퍼즐 이미지가 필요한 칸도
+# 귀중품뿐이다 -- 나머지 종류의 칸은 src를 비워서 번들에서 이미지를 뺀다(약 4MB -> 1MB대).
+#   * 어떤 종류를 다시 우봉고로 돌리면(TYPES의 mini를 null로) 그 종류 칸은 자동으로 이미지가 실린다.
+#   * 예전 배치보다 칸이 더 많은 종류(지금 귀중품 6번째 칸)는 이미지가 없다. 임시로 "확정 층수" 묶음의
+#     첫 장(3조각짜리, 지금은 안 쓰는 이미지)을 대신 쓰고 크게 경고한다 -- 4조각짜리 새 이미지로 교체해야 한다.
+LEGACY_START = [0, 5, 10, 15]
+LEGACY_SIZE = [5, 5, 5, 6]
+PLACEHOLDER_FLAT_IDX = 15
+
+
 def build_cells(ref_dir):
     files = load_image_files(ref_dir)
     cells = []
-    flat_idx = 0
     for cat_idx, t in enumerate(TYPES):
         for num_idx in range(t["count"]):
+            src = ""
+            if t.get("mini") is None:
+                if num_idx < LEGACY_SIZE[cat_idx]:
+                    flat = LEGACY_START[cat_idx] + num_idx
+                else:
+                    flat = PLACEHOLDER_FLAT_IDX
+                    print(f"WARNING: {t['name']} {num_idx + 1}번째 칸({ref_dir})의 퍼즐 이미지가 없어 임시 이미지를 씁니다 -- 새 이미지로 교체 필요.")
+                src = data_uri_for(image_for_flat_idx(files, ref_dir, flat))
             cells.append({
                 "id": f"{t['key']}-{num_idx + 1}",
                 "catIdx": cat_idx,
                 "num": num_idx,
-                "src": data_uri_for(image_for_flat_idx(files, ref_dir, flat_idx)),
+                "src": src,
             })
-            flat_idx += 1
     return cells
 
 

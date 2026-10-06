@@ -55,23 +55,21 @@ async function playOpenGame(page) {
     const seq = (await page.getAttribute("#mg-layer .mg-body", "data-seq")).split(",");
     for (const k of seq) await page.keyboard.press(KEY[k]);
   } else if (kind === "sticker") {
-    const geom = () => page.evaluate(() => {
-      const t = document.querySelector(".mg-target.is-on");
-      const l = document.querySelector(".mg-label[data-label]:not([data-stuck])");
+    const state = () => page.evaluate(() => {
       const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
-      return { t: t ? rect(t) : null, l: l ? rect(l) : null };
+      const l = document.querySelector(".mg-label[data-label]:not([data-stuck])");
+      const boxes = Array.from(document.querySelectorAll(".mg-bx")).map((b) => ({ code: b.querySelector(".bx-addr b").textContent, done: b.classList.contains("is-done"), r: rect(b) }));
+      return { l: l ? { r: rect(l), code: l.querySelector(".lb-room").textContent } : null, boxes };
     });
-    const total = await page.evaluate(() => document.querySelectorAll(".mg-label[data-label]").length); // 시작 시점엔 1장
-    let stuck = 0;
     for (;;) {
-      await waitFor(async () => { const g = await geom(); return g.l && g.t; }, { label: "sticker label ready" });
-      const g = await geom();
-      await page.mouse.move(g.l.x + g.l.w / 2, g.l.y + g.l.h / 2);
+      await waitFor(async () => (await state()).l, { label: "sticker label ready" });
+      const st = await state();
+      const box = st.boxes.find((b) => b.code === st.l.code && !b.done);
+      await page.mouse.move(st.l.r.x + st.l.r.w / 2, st.l.r.y + st.l.r.h / 2);
       await page.mouse.down();
-      await page.mouse.move(g.t.x + g.t.w / 2, g.t.y + g.t.h / 2, { steps: 10 });
+      await page.mouse.move(box.r.x + box.r.w / 2, box.r.y + box.r.h / 2, { steps: 10 });
       await page.mouse.up();
-      stuck++;
-      await sleep(350); // 다음 송장이 나오거나(레벨 2~3) 게임이 끝나길 기다림
+      await sleep(450); // 다음 송장이 나오거나 게임이 끝나길 기다림
       if (!(await page.$("#mg-layer .mg-root")) || (await page.$(".mg-done.is-on"))) break;
     }
   }
@@ -107,6 +105,8 @@ async function main() {
   log("확보 단계 진입");
 
   // ---- a. 보드의 카테고리별 게임 이름 표시 ----
+  // (보드가 그려지는 순간과 "택배 확보" 문구가 뜨는 순간이 같은 틱이 아닐 수 있어 기다린다 -- 한 번 이 경쟁 상태로 실패함)
+  await waitFor(async () => (await bodyText(p1)).includes("우봉고"), { label: "board game names rendered" });
   const board = await bodyText(p1);
   for (const name of ["박스 포장", "이상 확인", "송장 붙이기", "우봉고"]) assert(board.includes(name), `board should name the game '${name}'`);
   log("보드에 카테고리별 게임 이름 표시: 박스 포장 / 이상 확인 / 송장 붙이기 / 우봉고");
@@ -152,7 +152,7 @@ async function main() {
   await clickSel(p1, '[data-action="open-cell"][data-cell="fixed-floor-2"]');
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-sticker")) === 1, { label: "확정 층수 = 송장 붙이기" });
   const labelText = await p1.textContent("#mg-layer .mg-label .lb-room");
-  assert(labelText === FLOORS[1], `sticker label should show this cell's floor (${FLOORS[1]}), got ${labelText}`);
+  assert(labelText.startsWith(FLOORS[1] + "-"), `sticker label code should start with this cell's floor (${FLOORS[1]}-), got ${labelText}`);
   await playOpenGame(p1);
   await waitFor(() => isTaken(p1, "fixed-floor-2"), { label: "fixed-floor-2 secured" });
   // 확보된 칸의 얼굴에는 송장 목적지(호수)가 찍힌다 -- 보드에서 1F 행 칸(fixed-floor 행의 2번째)의 .invoice-label을 읽는다.

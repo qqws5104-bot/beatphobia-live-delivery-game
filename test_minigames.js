@@ -44,7 +44,7 @@ async function main() {
       MiniGames.setMistakeRule(rule || "reset");
       window.__res = null;
       window.__ctl = MiniGames.start(document.getElementById("host"), {
-        kind, level, testHooks: true, label: "B08호", onDone: (r) => { window.__res = r; }, onCancel: () => { window.__cancelled = true; },
+        kind, level, testHooks: true, label: "1F", onDone: (r) => { window.__res = r; }, onCancel: () => { window.__cancelled = true; },
       });
     }, { kind, level, rule });
   }
@@ -204,14 +204,16 @@ async function main() {
     log("inspect: 화면 버튼(포인터)으로도 클리어");
   }
 
-  // ================= 송장 붙이기 =================
-  async function geom() {
+  // ================= 송장 붙이기 (박스 찾아 붙이기) =================
+  // 사람이 하는 것과 같은 방법: 송장의 배송코드를 읽고, 같은 코드가 적힌 박스 위로 마우스 드래그.
+  async function stickerState() {
     return page.evaluate(() => {
-      const t = document.querySelector(".mg-target.is-on");
-      const l = document.querySelector('.mg-label[data-label]:not([data-stuck])');
-      const s = document.querySelector(".mg-stage").getBoundingClientRect();
       const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
-      return { t: t ? rect(t) : null, l: l ? rect(l) : null, s: { x: s.left, y: s.top, w: s.width, h: s.height } };
+      const l = document.querySelector('.mg-label[data-label]:not([data-stuck])');
+      const boxes = Array.from(document.querySelectorAll(".mg-bx")).map((b) => ({
+        code: b.querySelector(".bx-addr b").textContent, done: b.classList.contains("is-done"), r: rect(b),
+      }));
+      return { l: l ? { r: rect(l), code: l.querySelector(".lb-room").textContent } : null, boxes };
     });
   }
   async function drag(from, to, steps = 12) {
@@ -220,38 +222,61 @@ async function main() {
     await page.mouse.move(to.x, to.y, { steps });
     await page.mouse.up();
   }
+  const ctr = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+  const BOXES = [4, 5, 6], LABELS = [2, 3, 4];
   for (let lv = 1; lv <= 3; lv++) {
     await launch("sticker", lv);
     await page.evaluate(() => window.scrollTo(0, 0));
-    for (let n = 1; n <= lv; n++) {
-      await waitFor(async () => (await geom()).l && (await geom()).t, { label: `sticker L${lv} label #${n} ready` });
-      const g = await geom();
-      if (lv === 2 && n === 1) await shot("sticker_L2_start");
-      await drag({ x: g.l.x + g.l.w / 2, y: g.l.y + g.l.h / 2 }, { x: g.t.x + g.t.w / 2, y: g.t.y + g.t.h / 2 });
+    const st0 = await stickerState();
+    assert(st0.boxes.length === BOXES[lv - 1], `sticker L${lv}: ${BOXES[lv - 1]} boxes, got ${st0.boxes.length}`);
+    assert(new Set(st0.boxes.map((b) => b.code)).size === st0.boxes.length, `sticker L${lv}: all box codes distinct`);
+    if (lv === 2) await shot("sticker_L2_start");
+    const seen = [];
+    for (let n = 1; n <= LABELS[lv - 1]; n++) {
+      await waitFor(async () => (await stickerState()).l, { label: `sticker L${lv} label #${n} ready` });
+      const st = await stickerState();
+      seen.push(st.l.code);
+      const hits = st.boxes.filter((b) => b.code === st.l.code && !b.done);
+      assert(hits.length === 1, `sticker L${lv}: label ${st.l.code} must match exactly one open box (got ${hits.length})`);
+      await drag(ctr(st.l.r), ctr(hits[0].r));
       await waitFor(async () => (await page.$$('.mg-label[data-stuck]')).length === n, { label: `sticker L${lv} #${n} stuck` });
       if (lv === 2 && n === 1) await shot("sticker_L2_one_stuck");
     }
+    assert(new Set(seen).size === seen.length, `sticker L${lv}: labels are all different codes`);
     await waitFor(result, { label: `sticker L${lv} done` });
     const r = await result();
     assert(r.ok && r.mistakes === 0, "sticker clean run: " + JSON.stringify(r));
-    log(`sticker L${lv}: 송장 ${lv}장 붙이기 클리어 (${r.ms}ms)`);
+    if (lv === 2) await shot("sticker_L2_done");
+    log(`sticker L${lv}: 박스 ${BOXES[lv - 1]}개 중 송장 ${LABELS[lv - 1]}장 붙이기 클리어 (${r.ms}ms)`);
   }
-  // 빗나간 드래그: 점선 밖(박스 위)에 놓으면 실수 +1 + 트레이로 복귀, 정상 위치로 다시 놓으면 성공
-  await launch("sticker", 3); // 가장 좁은 점선
+  // 틀린 박스에 놓으면 실수 +1, 붙지 않고 트레이로 복귀. 빈 곳이나 트레이 근처에 놓는 건 실수 아님.
+  await launch("sticker", 3);
   {
-    const g = await geom();
-    // 점선 중심에서 가로로 충분히 비껴 놓는다(어려움 난이도 여유 = 가로 ±2%) -- 박스 윗면 위의 다른 곳
-    const off = { x: g.t.x + g.t.w / 2 + g.s.w * 0.07, y: g.t.y + g.t.h / 2 };
-    await drag({ x: g.l.x + g.l.w / 2, y: g.l.y + g.l.h / 2 }, off);
-    assert((await miss()) === 1, "a drop on the parcel but outside the dashed box is a mistake");
-    assert((await page.$$('.mg-label[data-stuck]')).length === 0, "missed drop must not stick");
+    const st = await stickerState();
+    const wrong = st.boxes.find((b) => b.code !== st.l.code);
+    const right = st.boxes.find((b) => b.code === st.l.code);
+    await drag(ctr(st.l.r), ctr(wrong.r));
+    assert((await miss()) === 1, "dropping on a wrong box is a mistake");
+    assert((await page.$$('.mg-label[data-stuck]')).length === 0, "a wrong-box drop must not stick");
+    assert((await page.$$('.mg-bx.is-done')).length === 0, "a wrong-box drop must not mark the box done");
     await sleep(350);
-    const g2 = await geom();
-    assert(Math.abs(g2.l.y - g.l.y) < 4 && Math.abs(g2.l.x - g.l.x) < 4, "missed label must return to the tray");
+    const st2 = await stickerState();
+    assert(Math.abs(st2.l.r.y - st.l.r.y) < 4 && Math.abs(st2.l.r.x - st.l.r.x) < 4, "wrong-box label must return to the tray");
     // 트레이 근처에서 그냥 놓는 건 실수 아님
-    await drag({ x: g2.l.x + g2.l.w / 2, y: g2.l.y + g2.l.h / 2 }, { x: g2.l.x + g2.l.w / 2 + 30, y: g2.l.y + g2.l.h / 2 });
+    await drag(ctr(st2.l.r), { x: ctr(st2.l.r).x + 30, y: ctr(st2.l.r).y });
     assert((await miss()) === 1, "dropping near the tray must NOT count as a mistake");
-    log("sticker: 빗나간 드래그=실수+트레이 복귀, 트레이 근처에서 놓은 건 실수 아님");
+    // 박스들 사이 빈 작업대(박스 영역 밖)에 놓는 것도 실수 아님: 스테이지 왼쪽 위 모서리 근처
+    const sg = await page.evaluate(() => { const r = document.querySelector(".mg-stage").getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
+    const st3 = await stickerState();
+    await drag(ctr(st3.l.r), { x: sg.x + 4, y: sg.y + 4 });
+    assert((await miss()) === 1, "dropping on empty table must NOT count as a mistake");
+    await sleep(350);
+    // 마지막으로 정답 박스에는 붙는다 (실수 수는 그대로)
+    const st4 = await stickerState();
+    await drag(ctr(st4.l.r), ctr(right.r));
+    await waitFor(async () => (await page.$$('.mg-label[data-stuck]')).length === 1, { label: "correct box accepts the label after mistakes" });
+    assert((await miss()) === 1, "mistake count unchanged by a correct drop");
+    log("sticker: 틀린 박스=실수+복귀, 트레이/빈 작업대에 놓은 건 실수 아님, 이후 정답 박스엔 붙음");
   }
 
   // ================= destroy 정리 =================

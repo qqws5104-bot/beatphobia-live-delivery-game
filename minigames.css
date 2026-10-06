@@ -191,47 +191,82 @@
 .mg-discard { --bin: #c7402d; width: 100%; margin-top: 8px; flex-direction: row; justify-content: center; gap: 0.8rem; background: color-mix(in srgb, var(--bin) 14%, #fffcf4); }
 .mg-discard .mg-bin-k { font-size: 0.8rem; letter-spacing: 0.12em; }
 
-/* ================= 송장 붙이기 ================= */
+/* ================= 송장 붙이기 (박스 찾아 붙이기) ================= */
 .mg-stage {
-  position: relative; width: 100%; aspect-ratio: 520 / 320; container-type: inline-size;
-  background: linear-gradient(180deg, #f6ead2, #ead9b6); border-radius: 12px; border: 1px solid var(--mg-line); overflow: hidden;
+  position: relative; width: 100%; aspect-ratio: 520 / 320; container-type: inline-size; overflow: hidden;
+  border-radius: 12px; border: 1px solid var(--mg-line);
+  background: /* 위쪽 70%는 나무 작업대, 아래쪽은 송장 트레이 구역 */
+    linear-gradient(180deg, transparent 0 69.5%, rgba(43, 29, 18, 0.16) 69.5% 70.5%, rgba(43, 29, 18, 0.07) 70.5% 100%),
+    repeating-linear-gradient(90deg, rgba(122, 90, 48, 0.08) 0 1px, transparent 1px 74px),
+    linear-gradient(180deg, #ecdcb8, #e0cba2);
 }
-.mg-parcel {
-  position: absolute; left: 5%; top: 5%; width: 90%; height: 68%; border-radius: 8px;
-  background: linear-gradient(160deg, var(--mg-card-light), var(--mg-card)); border: 3px solid var(--mg-card-edge);
-  box-shadow: 0 8px 14px rgba(43, 29, 18, 0.2);
+.mg-bxs {
+  position: absolute; left: 3%; right: 3%; top: 3%; height: 66%;
+  display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 2.6cqw 3.4cqw;
 }
-.mg-parcel::after { /* 윗면 가운데 테이프 */
-  content: ""; position: absolute; left: -3px; right: -3px; top: 28.5%; height: 17.6%;
-  background: repeating-linear-gradient(90deg, var(--mg-tape) 0 5%, #e3cd9c 5% 5.6%);
-  border-top: 2px solid rgba(122, 90, 48, 0.35); border-bottom: 2px solid rgba(122, 90, 48, 0.35);
+/* --- 골판지 박스: 뚜껑(위) + 앞면 + 세로 테이프 + 송장 자리 --- */
+.mg-bx {
+  position: relative; width: 26cqw; height: 18.4cqw; transition: transform 0.14s ease;
+  filter: drop-shadow(0 1cqw 0.9cqw rgba(43, 29, 18, 0.30));
 }
-.mg-target {
-  position: absolute; display: none; border: 3px dashed var(--mg-accent); border-radius: 6px;
-  background: rgba(226, 105, 26, 0.12); z-index: 1;
-  animation: mg-blink 1.1s ease-in-out infinite alternate;
+.bx-top {
+  position: absolute; left: 0; right: 0; top: 0; height: 31%;
+  clip-path: polygon(9% 0, 91% 0, 100% 100%, 0 100%);
+  background:
+    linear-gradient(90deg, transparent calc(50% - 0.18cqw), rgba(110, 78, 38, 0.6) calc(50% - 0.18cqw) calc(50% + 0.18cqw), transparent calc(50% + 0.18cqw)),
+    linear-gradient(180deg, #ecd5a2, #dcc08a);
 }
-.mg-target.is-on { display: block; }
-@keyframes mg-blink { to { background: rgba(226, 105, 26, 0.28); } }
+.bx-front {
+  position: absolute; left: 0; right: 0; top: 29%; bottom: 0; border-radius: 0 0 0.7cqw 0.7cqw;
+  border: 0.28cqw solid #8a6a3a; border-top-width: 0.2cqw;
+  background:
+    repeating-linear-gradient(90deg, rgba(110, 78, 38, 0.10) 0 0.45cqw, transparent 0.45cqw 0.95cqw), /* 골판지 결 */
+    linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(60, 38, 14, 0.22)),
+    linear-gradient(180deg, #d4b27c, #bd9560);
+}
+.bx-tape {
+  position: absolute; left: 43.5%; width: 13%; top: 0; height: 63%;
+  clip-path: polygon(0 0, 100% 0, 100% 93%, 83% 100%, 66% 93%, 50% 100%, 33% 93%, 16% 100%, 0 93%);
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.35), transparent 30%, rgba(255, 255, 255, 0.22) 70%, transparent), #efdfb8;
+  opacity: 0.96;
+}
+.bx-addr { position: absolute; left: 5%; top: 14%; width: 34%; line-height: 1.1; font-family: var(--mg-font-display); color: #3a2812; transform: rotate(-2deg); }
+.bx-addr i { display: block; font-style: normal; font-size: 1.55cqw; letter-spacing: 0.06em; opacity: 0.75; font-family: var(--mg-font-body); font-weight: 700; }
+.bx-addr b { display: block; font-size: 3.3cqw; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+.bx-slot { /* 송장 자리 -- 모든 박스에 똑같이 있어서 힌트가 되지 않는다 */
+  position: absolute; left: 57%; top: 38%; width: 38%; height: 46%; border: 0.3cqw dashed rgba(60, 38, 14, 0.38); border-radius: 0.5cqw;
+  background: rgba(255, 252, 240, 0.12);
+}
+.bx-ok {
+  position: absolute; right: -1.2cqw; top: -1.2cqw; width: 5cqw; height: 5cqw; border-radius: 50%; z-index: 4;
+  background: var(--mg-ok); color: #fff; font-weight: 800; font-size: 3.2cqw; line-height: 5cqw; text-align: center;
+  transform: scale(0); transition: transform 0.2s ease 0.12s; box-shadow: 0 0.3cqw 0.6cqw rgba(0, 0, 0, 0.3);
+}
+.mg-bx.is-hover { transform: translateY(-1cqw); }
+.mg-bx.is-hover .bx-front { box-shadow: 0 0 0 0.6cqw var(--mg-accent); }
+.mg-bx.is-done .bx-ok { transform: scale(1); }
+.mg-bx.is-done .bx-slot { border-color: transparent; background: none; }
+.mg-bx.is-wrong { animation: mg-shake 0.32s ease; }
+.mg-bx.is-wrong .bx-front { box-shadow: 0 0 0 0.6cqw var(--mg-danger); }
 .mg-tray {
-  position: absolute; left: 3%; right: 3%; top: 76%; height: 22%; border-radius: 10px;
+  position: absolute; left: 3%; right: 3%; top: 74%; height: 23%; border-radius: 10px;
   background: rgba(43, 29, 18, 0.07); border: 1px dashed var(--mg-line);
 }
+.mg-tray-note { position: absolute; right: 2.4cqw; bottom: 1cqw; font-size: 2.3cqw; font-weight: 800; color: var(--mg-muted); letter-spacing: 0.04em; }
+/* --- 송장 스티커 --- */
 .mg-label {
-  position: absolute; z-index: 3; cursor: grab; touch-action: none; border-radius: 4px; overflow: hidden;
-  background: #fffefa; border: 1.5px solid #8a7256; box-shadow: 0 3px 6px rgba(43, 29, 18, 0.28);
-  display: flex; flex-direction: column; font-size: 2.6cqw; line-height: 1.15;
+  position: absolute; z-index: 3; cursor: grab; touch-action: none; border-radius: 0.8cqw; overflow: hidden;
+  background: #fffefa; border: 0.3cqw solid #9a8460; box-shadow: 0 0.7cqw 1.3cqw rgba(43, 29, 18, 0.30);
+  display: flex; flex-direction: column; transform-origin: 0 0;
 }
-.mg-label.is-drag { cursor: grabbing; box-shadow: 0 10px 18px rgba(43, 29, 18, 0.34); z-index: 6; transform: scale(1.04); }
+.mg-label.is-drag { cursor: grabbing; box-shadow: 0 2cqw 3cqw rgba(43, 29, 18, 0.34); z-index: 6; }
 .mg-label.is-return { transition: left 0.22s ease, top 0.22s ease; }
-.mg-label.is-stuck { cursor: default; box-shadow: 0 1px 2px rgba(43, 29, 18, 0.25); animation: mg-stick 0.24s ease; }
-@keyframes mg-stick { 0% { transform: scale(1.12); } 100% { transform: scale(1); } }
-.mg-label .lb-bar { flex: 0 0 auto; height: 1.5cqw; background: var(--mg-accent); }
-.mg-label .lb-main { flex: 1 1 auto; min-height: 0; display: flex; align-items: center; gap: 1.2cqw; padding: 0 1.6cqw; }
-.mg-label .lb-txt { flex: 1 1 auto; min-width: 0; }
-.mg-label .lb-cap { font-size: 0.74em; color: var(--mg-muted); letter-spacing: 0.08em; white-space: nowrap; }
-.mg-label .lb-room { font-family: var(--mg-font-display); font-weight: 700; font-size: 1.5em; line-height: 1.05; white-space: nowrap; }
-.mg-label .lb-code { flex: 0 0 24%; align-self: stretch; margin: 1.1cqw 0; background: repeating-linear-gradient(90deg, #2b1d12 0 2px, transparent 2px 4px, #2b1d12 4px 5px, transparent 5px 8px); opacity: 0.85; }
+.mg-label.is-stuck { cursor: default; box-shadow: 0 0.2cqw 0.4cqw rgba(43, 29, 18, 0.35); transition: left 0.26s ease, top 0.26s ease, transform 0.26s ease; z-index: 5; }
+.mg-label .lb-bar { flex: 0 0 auto; background: var(--mg-accent); color: var(--mg-accent-ink); font-size: 1.9cqw; font-weight: 800; letter-spacing: 0.3em; padding: 0.35cqw 1.4cqw; line-height: 1.2; }
+.mg-label .lb-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 1.4cqw; }
+.mg-label .lb-main i { font-style: normal; font-size: 1.7cqw; color: var(--mg-muted); font-weight: 700; letter-spacing: 0.06em; line-height: 1.1; }
+.mg-label .lb-room { font-family: var(--mg-font-display); font-weight: 700; font-size: 3.9cqw; line-height: 1.05; white-space: nowrap; color: #2b1d12; }
+.mg-label .lb-code { flex: 0 0 1.9cqw; margin: 0 1.4cqw 1cqw; background: repeating-linear-gradient(90deg, #2b1d12 0 0.25cqw, transparent 0.25cqw 0.5cqw, #2b1d12 0.5cqw 0.65cqw, transparent 0.65cqw 1.05cqw); opacity: 0.85; }
 
 @media (prefers-reduced-motion: reduce) {
   .mg-root * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
