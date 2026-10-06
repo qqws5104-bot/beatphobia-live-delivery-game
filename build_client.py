@@ -56,6 +56,7 @@ def load_shared_constants():
     same_floor_choice_ms = eval(grab("SAME_FLOOR_CHOICE_MS"))
     halves = eval(grab("HALVES"))
     thief_place_ms = eval(grab("THIEF_PLACE_MS"))
+    priority_pick_ms = eval(grab("PRIORITY_PICK_MS"))
 
     # TYPES uses plain (unquoted) JS object keys -- not valid JSON as-is. Quote bare
     # identifier keys before parsing (FLOORS/ROOMS are already flat string arrays, so this
@@ -71,11 +72,11 @@ def load_shared_constants():
     floors = json.loads(js_object_to_json(floors_js))
     rooms = json.loads(js_object_to_json(rooms_js))
     return (types, couriers, floors, rooms, elevator_rounds, secure_phase_ms, vote_ms,
-            priority_multiplier, same_floor_choice_ms, halves, thief_place_ms)
+            priority_multiplier, same_floor_choice_ms, halves, thief_place_ms, priority_pick_ms)
 
 
 (TYPES, COURIERS, FLOORS, ROOMS, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
- PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS) = load_shared_constants()
+ PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, PRIORITY_PICK_MS) = load_shared_constants()
 
 # 2026-08-27 개편: 보드가 20칸(4종류x5개 고정)에서 21칸(종류별 count가 다름, 확정 층수 택배만 6개)으로
 # 바뀌면서, 예전의 스와치 개수(2/3/4조각) 기준 이미지 그룹핑은 더 이상 종류별 칸 수와 맞물리지 않는다
@@ -90,7 +91,7 @@ def load_shared_constants():
 # CELLS는 half별로 두 벌(CELLS_1/CELLS_2)을 만들고, 클라이언트의 cellMeta(id, half)가 그중 하나를
 # 골라 쓴다 (렌더 함수 쪽 주석 참고).
 TOTAL_CELLS = sum(t["count"] for t in TYPES)
-LEGACY_TOTAL_CELLS = 21  # 원본 PNG 한 세트의 장 수 (예전 5/5/5/6 배치)
+LEGACY_TOTAL_CELLS = 21  # 원본 PNG 한 세트의 장 수 (예전 5/5/5/6 배치) -- PUZZLE_SRC의 번호는 이 번호 체계를 따른다
 
 
 def load_image_files(ref_dir):
@@ -117,32 +118,42 @@ def data_uri_for(png_name):
     return f"data:image/jpeg;base64,{b64}"
 
 
-# 2026-10-06: 보드가 24칸(전 종류 6칸)이 됐다. 그런데 원본 퍼즐 이미지는 예전 21칸 배치(5/5/5/6)로
-# 번호가 매겨져 있다(1~5 일반, 6~10 깨지기, 11~15 귀중품, 16~21 확정 층수). 칸 순서대로 하나씩 배정하면
-# 귀중품 칸에 엉뚱한 종류(일반/깨지기)의 퍼즐이 들어가므로, 종류별로 "예전 배치에서의 시작 번호/개수"를
-# 따로 들고 매핑한다. 그리고 지금은 귀중품(mini == null)만 우봉고를 쓰므로 퍼즐 이미지가 필요한 칸도
-# 귀중품뿐이다 -- 나머지 종류의 칸은 src를 비워서 번들에서 이미지를 뺀다(약 4MB -> 1MB대).
-#   * 어떤 종류를 다시 우봉고로 돌리면(TYPES의 mini를 null로) 그 종류 칸은 자동으로 이미지가 실린다.
-#   * 예전 배치보다 칸이 더 많은 종류(지금 귀중품 6번째 칸)는 이미지가 없다. 임시로 "확정 층수" 묶음의
-#     첫 장(3조각짜리, 지금은 안 쓰는 이미지)을 대신 쓰고 크게 경고한다 -- 4조각짜리 새 이미지로 교체해야 한다.
-LEGACY_START = [0, 5, 10, 15]
-LEGACY_SIZE = [5, 5, 5, 6]
-PLACEHOLDER_FLAT_IDX = 15
+# 2026-10-06: 우봉고 퍼즐 이미지는 "귀중품" 칸에만 필요하다(나머지 종류는 미니게임). 퍼즐의 색(조각) 개수는 하프마다
+# 다르다 -- 전반 3색, 후반 4색(사용자 요청, game-data.js의 valuable.pieces = [3, 4]와 맞출 것). 원본 이미지 세트는
+# 예전 21칸 배치(1~5: 2색, 6~10: 3색, 11~15: 4색, 16~21: 3색)로 번호가 매겨져 있으므로, 색 개수에 맞는 이미지를 골라
+# 명시적으로 지정한다. (세트, 번호): 세트 1 = REF_DIR_1(전반 원본), 2 = REF_DIR_2(후반 원본), 번호는 1부터.
+#   * 전반 귀중품 6칸 = 3색짜리 6장 (전반 세트의 6~10번 + 16번) -- 더는 안 쓰는 깨지기/확정 층수용 이미지를 재활용.
+#   * 후반 귀중품 6칸 = 4색짜리 6장 (후반 세트의 11~15번 + 전반 세트의 11번). 후반용 4색 이미지는 5장뿐이라 6번째는
+#     전반에서 안 쓰게 된 전반 세트의 4색 이미지를 가져온다 -- 전반에는 4색 이미지가 안 나오므로 한 판 안에서 겹치지 않는다.
+# 귀중품이 아닌 종류(mini가 있는 종류)의 칸은 src를 비워서 번들에서 이미지를 뺀다(약 4MB -> 1.4MB). 어떤 종류를 다시
+# 우봉고로 돌리려면(TYPES의 mini를 null로) 아래 PUZZLE_SRC에 그 종류의 (세트, 번호) 6개를 하프별로 적어야 한다 -- 없으면
+# 빌드가 실패한다(빈 퍼즐 이미지가 실전에 나가는 걸 막기 위함).
+PUZZLE_SRC = {
+    1: {"valuable": [(1, 6), (1, 7), (1, 8), (1, 9), (1, 10), (1, 16)]},
+    2: {"valuable": [(2, 11), (2, 12), (2, 13), (2, 14), (2, 15), (1, 11)]},
+}
+REF_DIRS = {1: REF_DIR_1, 2: REF_DIR_2}
+_FILES_BY_SET = {}
 
 
-def build_cells(ref_dir):
-    files = load_image_files(ref_dir)
+def _files_for_set(set_no):
+    if set_no not in _FILES_BY_SET:
+        _FILES_BY_SET[set_no] = load_image_files(REF_DIRS[set_no])
+    return _FILES_BY_SET[set_no]
+
+
+def build_cells(half):
     cells = []
     for cat_idx, t in enumerate(TYPES):
+        picks = PUZZLE_SRC[half].get(t["key"]) if t.get("mini") is None else None
+        if t.get("mini") is None and (picks is None or len(picks) < t["count"]):
+            raise RuntimeError(f"{t['name']}은(는) 우봉고인데 PUZZLE_SRC[{half}]에 퍼즐 이미지 {t['count']}장이 지정되어 있지 않습니다.")
         for num_idx in range(t["count"]):
             src = ""
-            if t.get("mini") is None:
-                if num_idx < LEGACY_SIZE[cat_idx]:
-                    flat = LEGACY_START[cat_idx] + num_idx
-                else:
-                    flat = PLACEHOLDER_FLAT_IDX
-                    print(f"WARNING: {t['name']} {num_idx + 1}번째 칸({ref_dir})의 퍼즐 이미지가 없어 임시 이미지를 씁니다 -- 새 이미지로 교체 필요.")
-                src = data_uri_for(image_for_flat_idx(files, ref_dir, flat))
+            if picks is not None:
+                set_no, n = picks[num_idx]
+                files = _files_for_set(set_no)
+                src = data_uri_for(image_for_flat_idx(files, REF_DIRS[set_no], n - 1))
             cells.append({
                 "id": f"{t['key']}-{num_idx + 1}",
                 "catIdx": cat_idx,
@@ -152,8 +163,8 @@ def build_cells(ref_dir):
     return cells
 
 
-CELLS_1 = build_cells(REF_DIR_1)   # 전반
-CELLS_2 = build_cells(REF_DIR_2)   # 후반
+CELLS_1 = build_cells(1)   # 전반
+CELLS_2 = build_cells(2)   # 후반
 
 
 def box_art_data_uri(key):
@@ -298,87 +309,68 @@ HEAD_HTML = """<!doctype html>
     letter-spacing:0.08em; color:var(--muted); }
   .key-hint { margin-top:0.6rem; color:var(--muted); font-size:0.78rem; }
 
-  /* Board is now 21 cells split unevenly across 4 category rows (5/6/5/5 -- 확정 층수 택배 has 6,
-     one per floor). A single monolithic CSS grid can't hold rows of different lengths without the
-     shorter rows' cells drifting into the next row's slots, so each category is its own row-level
-     grid (repeat(6,1fr) so columns still line up visually across rows even when a row only fills
-     5 of them) stacked in a flex column. */
-  .board-grid { display:flex; flex-direction:column; gap:0.5rem; flex:1; min-height:0; overflow-y:auto; }
-  .board-row { display:grid; grid-template-columns:minmax(110px,150px) repeat(6,1fr); gap:0.4rem; align-items:stretch; }
-  /* 2026-08-27 리스킨: 참고 포스터("택배 요금표")의 카드 스타일을 그대로 옮겨왔다 -- 크림색 카드,
-     종류별 색을 두른 테두리, 위에 플랫 라인 아이콘 + 이름, 아래에 오렌지 헤더가 달린 "구분/요금"
-     미니 표. 실제 <table> 대신 grid로 짠 것은 이 칸(110~150px 폭, 보드 4행 높이에 맞춰야 함)이 너무
-     좁고 낮아서 표 레이아웃 엔진의 기본 여백을 이길 필요가 있었기 때문 -- 시각적으로는 표와 동일하게
-     읽힌다. 카드 자체는 var(--panel)(크림)에 앉고 카테고리 색은 테두리 + 아이콘 틴트로만 쓴다 (이전
-     버전처럼 배경 전체를 칠하지 않음 -- 그건 남색 테마에서의 방식이었고, 지금은 포스터의 "흰 카드 +
-     색 테두리" 언어를 따른다). */
-  .board-label { display:flex; flex-direction:column; gap:0.3rem; padding:0.45rem 0.55rem; border-radius:10px;
-    background:var(--panel); border:2px solid var(--panel-line); box-shadow:0 2px 7px rgba(43,29,18,0.1); }
-  .board-label .cat-head { display:flex; align-items:center; gap:0.32rem; }
-  .board-label .cat-icon { width:17px; height:17px; flex-shrink:0; }
-  .board-label .cat-icon svg { width:100%; height:100%; display:block; }
-  .board-label .cat-name { font-family:var(--font-display); font-size:0.76rem; font-weight:800; letter-spacing:0.005em;
-    line-height:1.15; color:var(--ink); }
-  .board-label .price-grid { display:grid; grid-template-columns:1fr 1fr; gap:2px 4px; margin-top:0.2rem; }
-  .board-label .price-grid .pk { font-family:var(--font-display); font-size:0.64rem; color:var(--muted); font-weight:600; }
-  .board-label .price-grid .pv { font-family:var(--font-display); font-size:0.64rem; color:var(--ink); font-weight:700;
-    text-align:right; font-variant-numeric:tabular-nums; }
-  /* each cell reads as a soft, rounded 3D delivery box. Base layer is still the category's flat
-     color (set inline per-cell, see renderBoard) -- on top of that (2026-08-27) sits the user-
-     supplied box illustration (.cell-art, one image per category, shared by all cells of that
-     category) as a blurred backdrop, then the glossy highlight + diagonal "strap" band (still
-     drawn with black/white overlays so they work over any art), then the a/b/c/d/e or floor label
-     on top of all of it. aspect-ratio is intentionally NOT set -- the cell stretches to fill its
-     grid row/column exactly (board-grid's grid-template-rows:1fr above), which is what makes the
-     whole board fit any viewport height without scrolling. */
-  .cell { position:relative; min-height:0; border-radius:16px; border:none; display:flex; align-items:center; justify-content:center;
-    font-family:var(--font-display); font-weight:700; font-size:1.25rem; overflow:hidden;
-    box-shadow: inset 0 3px 0 rgba(255,255,255,0.38), inset 0 -12px 16px rgba(0,0,0,0.22), 0 6px 14px rgba(0,0,0,0.22); }
-  /* box illustration backdrop (2026-08-27, user-supplied art per category -- see box_art/ and
-     BOX_ART in renderBoard). Cells are small (21 of them fit on one screen) and the source art has
-     its own baked-in label text, so it's deliberately BLURRED and lets the a/b/c/d/e or floor
-     label (z-index 3, its own opaque chip below) stay the thing you actually read -- the art is
-     ambient texture/color, not something meant to be legible at this size. Oversized inset (not
-     0) so the blur has room to sample past the cell's own edge instead of fading to transparent
-     there; .cell's overflow:hidden clips it back to the rounded shape. */
-  .cell .cell-art { position:absolute; inset:-20% -20%; z-index:0; background-repeat:no-repeat;
-    background-position:center; background-size:cover; filter:blur(6px); opacity:0.92; }
-  /* glossy sheen, upper-left */
-  .cell::before { content:""; position:absolute; inset:0; z-index:1; border-radius:inherit;
-    background: radial-gradient(120% 90% at 28% 14%, rgba(255,255,255,0.4), transparent 55%); }
-  /* the wrap-around strap: a diagonal darkened band across the box's own color -- reads as a
-     slightly darker sash/ribbon without needing a separate strap color per category. */
-  .cell::after { content:""; position:absolute; inset:-15% -15%; z-index:1;
-    background: linear-gradient(112deg, transparent 39%, rgba(0,0,0,0.15) 44%, rgba(0,0,0,0.15) 60%, transparent 65%); }
-  /* the a/b/c/d/e or floor label is styled as its own little shipping-label plate -- cream fill +
-     navy border -- echoing the white label-plate-with-navy-outline that's already part of the box
-     art itself, so it reads as "that thing on the box" rather than a generic floating text overlay
-     (2026-08-27, to go with the box art backdrop above). Same treatment as .invoice-label below,
-     just without the rotation (that one reads as a sticker slapped on after the fact; this one
-     reads as printed on the box). */
-  .cell .cell-num { position:relative; z-index:3; background:#f4f1ea; color:#20180f;
-    border:2px solid #16233f; font-family:var(--font-display); font-weight:700; font-size:1.05rem;
-    letter-spacing:0.02em; padding:0.26rem 0.6rem; border-radius:6px; box-shadow:0 3px 8px rgba(0,0,0,0.3); }
-  .cell .box-tag { position:absolute; z-index:3; right:8px; bottom:7px; display:flex; align-items:center; gap:4px; opacity:0.55; }
-  .cell .box-tag .chip { width:9px; height:9px; border-radius:2px; background:currentColor; }
-  .cell .box-tag .lines { display:flex; flex-direction:column; gap:2px; }
-  .cell .box-tag .lines span { display:block; width:15px; height:2px; border-radius:1px; background:currentColor; }
-  /* a secured cell keeps its category color (it reads as "this box's contents"), it just gets a
-     shipping-label sticker slapped on with the invoice's destination room code instead of the
-     plain index number -- the box stays identifiable, not just greyed into a blank "used" tile. */
-  .cell.taken { cursor:default; }
-  .cell.taken::before, .cell.taken::after { opacity:0.5; }
-  .cell.taken .cell-art { opacity:0.45; }
-  .cell.taken .box-tag { opacity:0.3; }
-  /* 상대가 가져간 칸 (공유 보드, 2026-10-06): 더 흐리게, 내용은 안 보이고 "상대"만 */
-  .cell.theirs { opacity:0.5; filter:grayscale(0.55); }
-  .cell.theirs .cell-num { font-size:0.8rem; letter-spacing:0.08em; }
-  .board-label .cat-left { margin-top:0.15rem; font-family:var(--font-display); font-size:0.7rem; color:var(--muted); font-weight:700; }
-  .board-label .cat-left b { color:var(--ink); font-size:0.86rem; }
-  .cell .invoice-label { position:relative; z-index:3; background:#f4f1ea; color:#20180f;
-    border:2px solid #16233f; font-family:var(--font-display); font-weight:700; font-size:1.05rem; letter-spacing:0.02em;
-    padding:0.3rem 0.63rem; border-radius:6px; box-shadow:0 3px 8px rgba(0,0,0,0.3); transform:rotate(-2deg); }
-  .cell:not(.taken):hover { filter:brightness(1.06); transform:translateY(-1px); }
+  /* 2026-10-06 레일 화면: 확보 보드는 "레일 위의 택배 4종". 종류마다 한 줄이고, 줄 가운데에 택배 상자(남은 개수 점 6개),
+     내 자리 쪽(1번 = 왼쪽, 2번 = 오른쪽)에 내 버튼이 있다. 버튼을 누르면 내 화면에 그 종류의 미니게임이 뜬다.
+     상대 쪽은 비워 둔다(상대가 뭘 하는지는 안 보인다 -- 남은 개수만 공유). 확정 층수 택배는 층이 곧 칸이라 버튼 대신 층 버튼 6개. */
+  .board-grid { display:flex; flex-direction:column; gap:0; flex:1; min-height:0; overflow-y:auto; }
+  .board-row { flex:1 1 0; min-height:96px; display:grid; grid-template-columns:minmax(0,1fr) minmax(210px,300px) minmax(0,1fr); align-items:stretch; padding:0.28rem 0; }
+  .rail-side { display:flex; flex-direction:column; justify-content:center; gap:0.4rem; min-width:0; padding:0 0.7rem; }
+  .rail-side.mine { align-items:stretch; }
+  .rail-side.theirs { align-items:center; color:var(--muted); font-size:0.7rem; opacity:0.55; }
+  .rail-mid { position:relative; display:flex; align-items:center; justify-content:center; padding:0.4rem 0.5rem;
+    background:repeating-linear-gradient(180deg,#3b4049 0 14px,#2d3139 14px 18px); box-shadow:inset 0 0 0 3px #1f232b; }
+  .rail-head + .board-row .rail-mid { border-radius:12px 12px 0 0; }
+  .board-row:last-child .rail-mid { border-radius:0 0 12px 12px; }
+  .rail-box { position:relative; width:100%; height:100%; min-height:78px; border-radius:12px; overflow:hidden; border:2px solid rgba(22,35,63,0.55);
+    box-shadow:0 5px 10px rgba(0,0,0,0.4); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:0.2rem; padding:0.3rem 0.4rem; text-align:center; }
+  .rail-box .cell-art { position:absolute; inset:-25% -25%; z-index:0; background-repeat:no-repeat; background-position:center; background-size:cover; opacity:0.55; filter:blur(1px); }
+  .rail-box::before { content:""; position:absolute; inset:0; z-index:1; background:linear-gradient(180deg,rgba(255,255,255,0.28),rgba(0,0,0,0.12)); }
+  .rail-box > * { position:relative; z-index:2; }
+  .rail-box .rb-name { display:inline-flex; align-items:center; gap:0.3rem; background:#f4f1ea; color:#20180f; border:2px solid #16233f; border-radius:6px;
+    padding:0.12rem 0.5rem; font-family:var(--font-display); font-weight:800; font-size:0.8rem; line-height:1.15; }
+  .rail-box .rb-name .cat-icon { width:15px; height:15px; flex:none; }
+  .rail-box .rb-name .cat-icon svg { width:100%; height:100%; display:block; }
+  .rail-box .rb-game { font-size:0.68rem; font-weight:700; color:#16233f; background:rgba(255,255,255,0.7); border-radius:999px; padding:0 0.45rem; }
+  .rail-box .cat-left { font-family:var(--font-display); font-size:0.7rem; color:#16233f; font-weight:700; }
+  .rail-box .cat-left b { font-size:0.9rem; }
+  .rail-box .pips { display:flex; gap:4px; background:rgba(255,252,244,0.9); padding:3px 7px; border-radius:999px; }
+  .rail-box .pip { width:10px; height:10px; border-radius:50%; background:var(--c); border:1.5px solid rgba(22,35,63,0.55); }
+  .rail-box .pip.gone { background:transparent; border-style:dashed; opacity:0.45; }
+  .rail-box .stamp { position:absolute; z-index:3; top:50%; left:50%; transform:translate(-50%,-50%) rotate(-8deg); background:var(--danger); color:#fff;
+    font-family:var(--font-display); font-weight:800; padding:0.15rem 0.8rem; border-radius:6px; white-space:nowrap; }
+  .board-row.is-empty .rail-box { filter:grayscale(1); opacity:0.7; }
+  .rail-btn { font:inherit; cursor:pointer; border:2px solid var(--c); border-bottom-width:5px; border-radius:12px; background:var(--panel); color:var(--ink);
+    padding:0.5rem 0.6rem; display:flex; flex-direction:column; align-items:center; gap:0.1rem; font-family:var(--font-display); }
+  .rail-btn:hover:not(:disabled) { background:#fff6df; }
+  .rail-btn:active:not(:disabled) { transform:translateY(3px); border-bottom-width:2px; }
+  .rail-btn:disabled { opacity:0.45; cursor:default; }
+  .rail-btn .rbt { font-weight:800; font-size:0.9rem; }
+  .rail-btn .rbp { font-size:0.7rem; color:var(--muted); font-weight:700; font-variant-numeric:tabular-nums; }
+  .floor-btns { display:grid; grid-template-columns:repeat(3,1fr); gap:0.3rem; }
+  .floor-btn { font:inherit; font-family:var(--font-display); font-weight:800; font-size:0.85rem; cursor:pointer; border:2px solid var(--c); border-bottom-width:4px; border-radius:9px;
+    background:var(--panel); color:var(--ink); padding:0.28rem 0.1rem; }
+  .floor-btn:hover:not(.is-gone) { background:#fff6df; }
+  .floor-btn.is-gone { cursor:default; opacity:0.4; border-style:dashed; background:transparent; }
+  .floor-btn.mine { opacity:1; background:var(--c); border-style:solid; display:flex; flex-direction:column; align-items:center; line-height:1.1; }
+  .floor-btn.mine small { font-size:0.62rem; font-weight:700; }
+  .my-chips { display:flex; flex-wrap:wrap; gap:0.25rem; justify-content:center; min-height:1.3rem; }
+  .my-chip { background:#f4f1ea; color:#20180f; border:2px solid #16233f; border-radius:6px; font-family:var(--font-display); font-weight:700; font-size:0.74rem; padding:0 0.4rem; }
+  .rail-side .mine-count { font-size:0.7rem; color:var(--muted); font-weight:700; text-align:center; }
+  .rail-head { display:grid; grid-template-columns:minmax(0,1fr) minmax(210px,300px) minmax(0,1fr); font-family:var(--font-display); font-weight:700; font-size:0.78rem; color:var(--muted); padding-bottom:0.3rem; text-align:center; }
+  .rail-head .me { color:var(--ink); }
+  /* 2026-10-06: 폰/좁은 화면 -- 3열(내 자리|레일|상대 자리)은 안 들어가므로 한 줄을 2열(레일 상자 | 내 버튼)로 줄인다.
+     상대 자리 열과 3열 머리글은 숨기고(어차피 비어 있음), 1번/2번 자리 모두 상자가 왼쪽, 내 버튼이 오른쪽. 세로로 길어지면 보드가 스크롤. */
+  @media (max-width:860px) {
+    .rail-head { display:none; }
+    .board-grid { overflow-y:auto; }
+    .board-row { flex:none; min-height:0; grid-template-columns:minmax(0,1fr) minmax(0,1.1fr); gap:0.3rem; padding:0.2rem 0; }
+    .board-row .rail-side.theirs { display:none; }
+    .board-row .rail-mid { order:1; border-radius:12px; padding:0.35rem 0.4rem; }
+    .board-row .rail-side.mine { order:2; padding:0 0.2rem; }
+    .rail-box { min-height:92px; }
+    .rail-btn { padding:0.6rem 0.4rem; }
+    .rail-btn .rbt { font-size:0.85rem; }
+  }
 
   /* on genuinely short viewports, shrink the chrome around the board (topbar + side-timer) too --
      the board itself already fills whatever's left via grid-template-rows:1fr, but a smaller
@@ -392,13 +384,16 @@ HEAD_HTML = """<!doctype html>
   .overlay { position:fixed; inset:0; background:rgba(6,10,18,0.92); display:flex; align-items:center; justify-content:center;
     z-index:50; padding:1.2rem; }
   .overlay.hidden { display:none; }
-  .puzzle-frame { max-width:960px; width:100%; }
+  /* 2026-10-06: 화면 높이가 낮아도 그림 + 포기/완료 버튼이 한 화면에 들어오도록 폭을 높이 기준으로도 제한(그림 비율 16:9). */
+  .puzzle-frame { max-width:960px; width:min(100%, calc((100vh - 8.5rem) * 16 / 9)); }
   .puzzle-frame img { width:100%; border-radius:12px; display:block; box-shadow:0 20px 60px rgba(0,0,0,0.5); }
   .puzzle-actions { display:flex; gap:0.8rem; margin-top:1rem; }
   .puzzle-actions .btn { flex:1; }
 
   .elev-layout { display:grid; grid-template-columns:220px 1fr; gap:1.2rem; align-items:start; }
-  @media (max-width:820px) { .elev-layout { grid-template-columns:1fr; } }
+  /* 2026-10-06: 폰/좁은 화면에서는 지금 해야 할 일(우선 택배 10초 창, 이동 버튼, 준비)이 담긴 오른쪽 카드를 위로 올린다 --
+     안 그러면 층 게이지/내 택배 목록 밑으로 밀려서 10초 타이머가 도는 걸 화면 밖에서 놓친다. */
+  @media (max-width:820px) { .elev-layout { grid-template-columns:1fr; } .elev-layout > div:last-child { order:-1; } }
   /* left column: gauge + my own package list stacked underneath it, so "what I'm carrying" reads
      right off the same glance as "where the car is" instead of living at the bottom of the far
      wider right-hand panel. */
@@ -456,8 +451,16 @@ HEAD_HTML = """<!doctype html>
   .invoice.is-priority { border-color:var(--gold); background:rgba(226,105,26,0.1); }
   .invoice .priority-flag { font-family:var(--font-display); font-size:0.68rem; font-weight:700; color:var(--gold);
     border:1px solid rgba(226,105,26,0.5); border-radius:999px; padding:0.15rem 0.45rem; white-space:nowrap; }
-  .priority-picker { margin-top:0.75rem; padding-top:0.75rem; border-top:1px dashed var(--panel-line); }
-  .priority-picker h4 { margin:0 0 0.5rem; font-family:var(--font-display); font-size:0.9rem; color:var(--gold); }
+  /* 2026-10-06: 우선 택배 지정은 게이트에 끼워 넣던 방식에서 전용 10초 창("priority" 상태)으로 분리됐다. */
+  .priority-window { background:rgba(226,105,26,0.08); border:1px solid rgba(226,105,26,0.35); border-radius:12px;
+    padding:0.9rem 1rem; margin-top:0.75rem; }
+  .priority-window h4 { margin:0 0 0.3rem; font-family:var(--font-display); font-size:1rem; color:var(--gold); }
+  .priority-window .pw-sub { color:var(--muted); font-size:0.85rem; margin-bottom:0.6rem; }
+  .priority-window .pw-clock { display:flex; align-items:baseline; gap:0.6rem; margin-top:0.2rem; }
+  .priority-window .pw-clock .time-left-big { margin-top:0; font-size:1.9rem; }
+  .priority-window .timer-bar { margin:0.45rem 0 0.8rem; }
+  .priority-window .pw-actions { margin-top:0.7rem; display:flex; gap:0.6rem; align-items:center; flex-wrap:wrap; }
+  .priority-window .pw-actions .key-hint { margin:0; }
 
   /* same-floor 선택 (같은 층에 배송 대기 중인 내 택배가 2개 이상일 때, SAME_FLOOR_CHOICE_MS 동안) */
   .choice-box { background:rgba(226,105,26,0.08); border:1px solid rgba(226,105,26,0.3); border-radius:12px;
@@ -550,6 +553,7 @@ APP_JS_TEMPLATE = r"""
   var SAME_FLOOR_CHOICE_MS = @@SAME_FLOOR_CHOICE_MS@@;
   var HALVES = @@HALVES@@;
   var THIEF_PLACE_MS = @@THIEF_PLACE_MS@@;
+  var PRIORITY_PICK_MS = @@PRIORITY_PICK_MS@@;
   // 확정 층수 택배를 제외한 나머지 종류는 칸 번호 대신 A/B/C/D/E로 표기한다 (사용자 요청, 2026-08-27: 대문자로 변경).
   var CELL_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
@@ -577,7 +581,9 @@ APP_JS_TEMPLATE = r"""
   function setMySeat(s) { try { sessionStorage.setItem("bp-seat", s); } catch (e) {} }
 
   var state = null; // populated by the first "state" message from the server
-  var local = { openCellId: null, toast: null };
+  var local = { openCellId: null, toast: null, pending: {} };
+  // 방금 완료 신호를 보낸 칸(서버 브로드캐스트가 오기 전) -- 종류 버튼이 같은 칸을 또 골라 중복 완료로 무시되는 걸 막는다.
+  function markPending(id) { local.pending[id] = Date.now(); }
   var wsConnected = false;
 
   // half(1|2)로 전반/후반 이미지 세트를 고른다 -- id/catIdx/num은 두 세트가 동일하고 src(이미지)만 다르다.
@@ -811,7 +817,7 @@ APP_JS_TEMPLATE = r"""
   }
 
   function renderBoard(st, seat) {
-    var msLeft = st.secureEndsAt ? (st.secureEndsAt - Date.now()) : SECURE_PHASE_MS;
+    var msLeft = st.secureEndsAt ? (st.secureEndsAt - nowMs()) : SECURE_PHASE_MS;
     var pct = Math.max(0, Math.min(100, (msLeft / SECURE_PHASE_MS) * 100));
     var html = '<main class="stage stage--secure">';
     html += '<div class="side-timer" id="side-timer">'
@@ -820,49 +826,67 @@ APP_JS_TEMPLATE = r"""
       + '<div class="timer-bar"><i style="width:' + pct + '%"></i></div></div>';
 
     html += '<div class="card"><div class="board-grid">';
-    // 2026-10-06: 보드는 두 플레이어가 공유한다 -- 종류별 6칸이 두 사람 합쳐서 6개다. 내가 확보한 칸은
-    // 내 송장(호수)이 찍히고, 상대가 확보한 칸은 흐리게 "상대"로만 보인다(그 칸의 송장 내용은 안 보임).
-    // 칸은 id로 찾는다 (종류별 count가 달라질 수 있어 고정 stride를 가정하지 않는다).
-    var myBoard = st.board;
+    // 2026-10-06 레일 화면: 종류마다 한 줄 -- 가운데 레일 위에 택배 상자(남은 개수), 내 자리 쪽에 내 버튼.
+    // 1번 자리는 왼쪽, 2번 자리는 오른쪽. 보드는 두 플레이어가 공유한다(종류별 6개 합계) -- 남은 개수만 같이 보이고
+    // 상대 쪽 칸은 비워 둔다. 버튼은 "그 종류의 아직 안 가져간 칸"을 열어 준다(칸끼리 구별이 없어서 서버가 어차피 대체함).
+    // 확정 층수 택배만 층(칸)이 곧 배송 층이라 버튼 대신 층 버튼 6개를 둔다.
     var myInvoices = st.players[seat].invoices;
     var boardById = {};
-    myBoard.forEach(function (c) { boardById[c.id] = c; });
+    st.board.forEach(function (c) { boardById[c.id] = c; });
+    var meLeft = seat === "1";
+    html += '<div class="rail-head">'
+      + '<span class="' + (meLeft ? 'me' : '') + '">' + (meLeft ? '내 자리' : '상대 자리') + '</span><span>레일</span>'
+      + '<span class="' + (meLeft ? '' : 'me') + '">' + (meLeft ? '상대 자리' : '내 자리') + '</span></div>';
     TYPES.forEach(function (t, catIdx) {
-      html += '<div class="board-row">';
-      html += '<div class="board-label" style="border-color:' + t.color + ';">'
-        + '<div class="cat-head"><span class="cat-icon" style="color:' + t.color + '">' + CAT_ICONS[catIdx] + '</span>'
-        + '<span class="cat-name">' + esc(t.name) + '</span></div>'
-        + '<div class="cat-game">' + esc(MINI_NAME[t.mini] || "우봉고") + '</div>'
-        + '<div class="cat-left">남은 <b>' + boardLeft(st, catIdx) + '</b> / ' + t.count + '</div>'
-        + '<div class="price-grid">'
-        + '<span class="pk">성공</span><span class="pv">' + fmtWon(t.reward) + '</span>'
-        + '<span class="pk">실패</span><span class="pv">' + fmtWon(-t.penalty) + '</span>'
-        + '</div></div>';
-      for (var num = 0; num < t.count; num++) {
-        var cell = boardById[t.key + "-" + (num + 1)];
-        var taken = !!cell.taken;
-        var theirs = taken && cell.takenBy !== seat;
-        // 확정 층수 택배는 칸의 num이 곧 배송 층이므로 지금 표기(층 이름) 그대로 유지하고,
-        // 나머지 종류는 숫자 대신 A/B/C/D/E로 표기한다 (사용자 요청, 2026-08-27; 같은 날 다시 대문자로 변경).
-        var faceHtml = t.fixedFloor
-          ? '<span class="cell-num">' + esc(FLOORS[num]) + '</span>'
-          : '<span class="cell-num">' + esc(CELL_LETTERS[num] || String(num + 1)) + '</span>';
-        if (theirs) {
-          faceHtml = '<span class="cell-num">상대</span>'; // 상대가 가져간 칸 -- 어떤 송장인지는 안 보인다
-        } else if (taken) {
-          // the invoice created at securing time shares this cell's acquiredSeq -- look it up to
-          // show its destination as a shipping-label sticker instead of the plain index number.
-          var inv = null;
-          for (var i = 0; i < myInvoices.length; i++) { if (myInvoices[i].acquiredSeq === cell.acquiredSeq) { inv = myInvoices[i]; break; } }
-          faceHtml = inv ? ('<span class="invoice-label">' + esc(roomCode(inv.floorIdx, inv.room)) + '</span>') : faceHtml;
-        }
-        html += '<button class="cell' + (taken ? ' taken' : '') + (theirs ? ' theirs' : '') + '" style="background:' + t.color + ';color:' + t.ink + ';"'
-          + (taken ? '' : (' data-action="open-cell" data-cell="' + cell.id + '"'))
-          + '>' + '<span class="cell-art" style="background-image:url(\'' + BOX_ART[catIdx] + '\')"></span>' + faceHtml
-          + '<span class="box-tag"><span class="chip"></span><span class="lines"><span></span><span></span><span></span></span></span>'
-          + '</button>';
+      var left = boardLeft(st, catIdx);
+      var invFor = function (cell) {
+        for (var i = 0; i < myInvoices.length; i++) { if (myInvoices[i].acquiredSeq === cell.acquiredSeq) return myInvoices[i]; }
+        return null;
+      };
+      var myCells = [];
+      for (var n = 0; n < t.count; n++) {
+        var c = boardById[t.key + "-" + (n + 1)];
+        if (c && c.taken && c.takenBy === seat) myCells.push(c);
       }
-      html += '</div>';
+      // --- 내 쪽 ---
+      var mine = '<div class="rail-side mine" style="--c:' + t.color + '">';
+      if (t.fixedFloor) {
+        mine += '<div class="floor-btns">';
+        for (var num = 0; num < t.count; num++) {
+          var cell = boardById[t.key + "-" + (num + 1)];
+          if (!cell.taken) mine += '<button class="floor-btn" data-action="open-cell" data-cell="' + cell.id + '">' + esc(FLOORS[num]) + '</button>';
+          else if (cell.takenBy === seat) {
+            var fInv = invFor(cell);
+            mine += '<button class="floor-btn is-gone mine" disabled><span>' + esc(FLOORS[num]) + '</span>' + (fInv ? '<small>' + esc(roomCode(fInv.floorIdx, fInv.room)) + '</small>' : '') + '</button>';
+          }
+          else mine += '<button class="floor-btn is-gone" disabled title="상대가 먼저 가져갔어요">' + esc(FLOORS[num]) + '</button>';
+        }
+        mine += '</div>';
+        mine += '<div class="mine-count">내 택배 ' + myCells.length + '개 · 층 버튼을 눌러 송장 붙이기</div>';
+      } else {
+        mine += '<button class="rail-btn" data-action="open-type" data-cat="' + catIdx + '"' + (left === 0 ? ' disabled' : '') + '>'
+          + '<span class="rbt">' + (left === 0 ? '소진' : esc(MINI_NAME[t.mini] || '우봉고') + ' 시작') + '</span>'
+          + '<span class="rbp">성공 ' + fmtWon(t.reward) + ' · 실패 ' + fmtWon(-t.penalty) + '</span></button>';
+        mine += '<div class="my-chips">' + myCells.map(function (c) {
+          var inv = invFor(c);
+          return '<span class="my-chip">' + (inv ? esc(roomCode(inv.floorIdx, inv.room)) : '확보') + '</span>';
+        }).join('') + '</div>';
+      }
+      mine += '</div>';
+      // --- 가운데 레일 위 상자 ---
+      var pips = '';
+      for (var k = 0; k < t.count; k++) pips += '<span class="pip' + (k < left ? '' : ' gone') + '"></span>';
+      var mid = '<div class="rail-mid"><div class="rail-box" style="background:' + t.color + ';--c:' + t.color + '">'
+        + '<span class="cell-art" style="background-image:url(\'' + BOX_ART[catIdx] + '\')"></span>'
+        + '<span class="rb-name"><span class="cat-icon">' + CAT_ICONS[catIdx] + '</span>' + esc(t.name) + '</span>'
+        + '<span class="rb-game">' + esc(MINI_NAME[t.mini] || '우봉고') + '</span>'
+        + '<span class="pips">' + pips + '</span>'
+        + '<span class="cat-left">남은 <b>' + left + '</b> / ' + t.count + '</span>'
+        + (left === 0 ? '<span class="stamp">소진</span>' : '')
+        + '</div></div>';
+      var theirs = '<div class="rail-side theirs"></div>';
+      html += '<div class="board-row' + (left === 0 ? ' is-empty' : '') + '" data-cat="' + catIdx + '">'
+        + (meLeft ? mine + mid + theirs : theirs + mid + mine) + '</div>';
     });
     html += '</div></div>';
     html += '</main>';
@@ -878,6 +902,8 @@ APP_JS_TEMPLATE = r"""
   var TEST_HOOKS = /[?&]mgtest=1(&|$)/.test(location.search);
   var mg = null; // { cellId, ctl }
 
+  // 값이 숫자 하나면 그대로, [전반, 후반] 배열이면 지금 하프 것 (TYPES의 miniLevel/pieces).
+  function perHalf(v) { return Array.isArray(v) ? v[(state && state.half === 2) ? 1 : 0] : v; }
   function closeMiniGame() {
     if (mg) { try { mg.ctl.destroy(); } catch (e) { /* ignore */ } mg = null; }
     var layer = document.getElementById("mg-layer");
@@ -893,11 +919,11 @@ APP_JS_TEMPLATE = r"""
     mg = {
       cellId: cellId,
       ctl: MiniGames.start(document.getElementById("mg-host"), {
-        kind: t.mini, level: t.miniLevel,
+        kind: t.mini, level: perHalf(t.miniLevel),
         // 확정 층수 택배는 칸이 곧 배송 층이라 송장에 그 층을 그대로 찍는다 (호수는 확보 순간 서버가 정하므로 표기 안 함).
         label: t.fixedFloor ? FLOORS[meta.num] : null,
         testHooks: TEST_HOOKS,
-        onDone: function () { var id = cellId; closeMiniGame(); send({ type: "secure-cell", seat: mySeat(), cellId: id }); },
+        onDone: function () { var id = cellId; markPending(id); closeMiniGame(); send({ type: "secure-cell", seat: mySeat(), cellId: id }); },
         onCancel: function () { closeMiniGame(); },
       }),
     };
@@ -908,6 +934,7 @@ APP_JS_TEMPLATE = r"""
       window.__mgFinish = function () {
         if (!mg) return false;
         var id = mg.cellId;
+        markPending(id);
         closeMiniGame();
         send({ type: "secure-cell", seat: mySeat(), cellId: id });
         return true;
@@ -918,7 +945,7 @@ APP_JS_TEMPLATE = r"""
   function updateMiniClock() {
     var el = document.getElementById("mg-clock");
     if (!el || !state || state.phase !== "secure" || !state.secureEndsAt) return;
-    var left = state.secureEndsAt - Date.now();
+    var left = state.secureEndsAt - nowMs();
     el.textContent = fmtClock(Math.max(0, left));
     el.parentNode.classList.toggle("low", left < 30000);
   }
@@ -936,7 +963,7 @@ APP_JS_TEMPLATE = r"""
     var t = TYPES[meta.catIdx];
     return '<div class="overlay" id="puzzle-overlay">'
       + '<div class="puzzle-frame">'
-      + '<div style="margin-bottom:0.6rem;color:var(--muted);font-family:var(--font-display);font-size:0.85rem;">' + esc(t.name) + ' · 조각 ' + t.pieces + '개</div>'
+      + '<div style="margin-bottom:0.6rem;color:var(--muted);font-family:var(--font-display);font-size:0.85rem;">' + esc(t.name) + ' · 조각 ' + perHalf(t.pieces) + '개</div>'
       + '<img src="' + meta.src + '" alt="우봉고 문제">'
       + '<div class="puzzle-actions">'
       + '<button class="btn danger" data-action="give-up">포기</button>'
@@ -996,25 +1023,44 @@ APP_JS_TEMPLATE = r"""
     }).join('') + '</div>';
   }
 
-  // 라운드 게이트("idle"/"result")에 내장된 우선 택배 지정 -- 매 라운드 다시 골라야 한다(라운드가
-  // 끝나면 서버가 el.priorityPick을 비운다). 그 라운드 안에 배송까지 성공해야만 점수가
-  // PRIORITY_MULTIPLIER배가 된다 -- 나중 라운드로 넘어가면 보너스는 사라진다(사용자 확인 사항).
-  function renderPriorityPicker(st, seat) {
+  // 우선 택배 지정 전용 시간 ("priority" 상태, PRIORITY_PICK_MS = 10초 -- 2026-10-06 신설; 그 전에는 라운드
+  // 게이트에 끼워져 있었고 타이머가 없었다). 매 라운드 다시 골라야 하고(라운드가 끝나면 서버가
+  // el.priorityPick을 비운다), 그 라운드 안에 배송까지 성공해야만 점수가 PRIORITY_MULTIPLIER배가 된다
+  // -- 나중 라운드로 넘어가면 보너스는 사라진다(사용자 확인 사항). 내가 "확정"하면 이후엔 바꿀 수 없고,
+  // 둘 다 확정하면 10초를 다 기다리지 않고 넘어간다. 시간이 다 되면 확정 여부와 무관하게 그 시점의 지정값이 적용된다.
+  function renderPriorityWindow(st, seat) {
+    var el = st.elevator;
     var undelivered = st.players[seat].invoices.filter(function (inv) { return inv.deliveredRound === null; })
       .sort(function (a, b) { return a.acquiredSeq - b.acquiredSeq; });
-    if (!undelivered.length) return '';
-    var pickedId = st.elevator.priorityPick[seat];
-    var html = '<div class="priority-picker"><h4>이번 라운드 우선 택배 (성공 시 점수 ' + PRIORITY_MULTIPLIER + '배 · 그 라운드 안에 배송해야 적용돼요)</h4>';
+    var confirmed = !!el.priorityConfirmed[seat];
+    var otherSeat = seat === "1" ? "2" : "1";
+    var pickedId = el.priorityPick[seat];
+    var html = '<div class="priority-window">';
+    html += '<h4>우선 택배 지정 (성공 시 점수 ' + PRIORITY_MULTIPLIER + '배)</h4>';
+    html += '<div class="pw-sub">이번 라운드 안에 배송해야만 적용돼요. 안 보내면 보너스는 사라져요.</div>';
+    html += '<div class="pw-clock"><span style="color:var(--muted);font-size:0.85rem;">남은 시간</span>'
+      + '<span class="time-left-big" id="priority-clock">' + fmtClock(Math.max(0, (el.priorityWindowEndsAt || 0) - nowMs())) + '</span></div>';
+    html += '<div class="timer-bar"><i id="priority-bar" style="width:100%"></i></div>';
     html += '<div class="invoice-list">' + undelivered.map(function (inv) {
       var t = TYPES[inv.catIdx];
       var picked = inv.id === pickedId;
-      return '<div class="invoice pickable' + (picked ? ' is-priority' : '') + '" data-action="pick-priority" data-inv="' + inv.id + '">'
+      return '<div class="invoice' + (confirmed ? ' delivered' : ' pickable') + (picked ? ' is-priority' : '') + '"'
+        + (confirmed ? '' : (' data-action="pick-priority" data-inv="' + (picked ? '' : inv.id) + '"')) + '>'
         + '<span class="swatch" style="background:' + t.color + '"></span>'
         + '<div class="meta"><div class="t">' + esc(t.name) + '</div><div class="d">' + roomCode(inv.floorIdx, inv.room) + ' · 성공 시 ' + fmtWon(t.reward) + '</div></div>'
         + '<span class="sticker' + (picked ? '' : ' pending') + '">' + (picked ? ('우선 x' + PRIORITY_MULTIPLIER) : '선택') + '</span>'
         + '</div>';
     }).join('') + '</div>';
-    html += '<div style="margin-top:0.5rem;"><button class="btn ghost" data-action="pick-priority" data-inv="">지정 안 함</button></div>';
+    if (confirmed) {
+      html += '<div class="pw-actions"><span class="ready-chip is-ready">'
+        + (pickedId ? '우선 택배 확정' : '지정 안 함으로 확정') + '</span>'
+        + '<span class="ready-chip' + (el.priorityConfirmed[otherSeat] ? ' is-ready' : '') + '">' + seatName(otherSeat, st)
+        + (el.priorityConfirmed[otherSeat] ? ' · 확정' : ' · 고르는 중') + '</span></div>';
+    } else {
+      html += '<div class="pw-actions"><button class="btn primary" data-action="confirm-priority">'
+        + (pickedId ? '이걸로 확정' : '지정 안 함으로 확정') + '</button>'
+        + '<span class="key-hint">Space로도 확정 · 고른 택배를 다시 누르면 선택 해제</span></div>';
+    }
     html += '</div>';
     return html;
   }
@@ -1039,15 +1085,21 @@ APP_JS_TEMPLATE = r"""
       var otherSeat0 = seat === "1" ? "2" : "1";
       var myReady0 = !!st.elevator.readyNext[seat];
       var otherReady0 = !!st.elevator.readyNext[otherSeat0];
-      html += '<div style="margin-top:0.75rem;color:var(--muted);font-size:0.9rem;">확보한 택배를 확인하고, 준비가 되면 스페이스바를 눌러주세요.</div>';
+      html += '<div style="margin-top:0.75rem;color:var(--muted);font-size:0.9rem;">확보한 택배를 확인하고, 준비가 되면 스페이스바를 눌러주세요. 이어서 우선 택배 지정 시간(' + (PRIORITY_PICK_MS / 1000) + '초)이 열려요.</div>';
       html += '<div class="ready-row" style="margin-top:0.75rem;">'
         + '<span class="ready-chip' + (myReady0 ? ' is-ready' : '') + '">나 · ' + seatName(seat, st) + (myReady0 ? ' · 준비 완료' : ' · 스페이스바 대기') + '</span>'
         + '<span class="ready-chip' + (otherReady0 ? ' is-ready' : '') + '">' + seatName(otherSeat0, st) + (otherReady0 ? ' · 준비 완료' : ' · 대기 중') + '</span>'
         + '</div>'
         + '<div class="space-hint">Space · 엘리베이터 이동 시작</div>';
-      html += renderPriorityPicker(st, seat);
       html += '</div>';
 
+      html += '</div></div></main>';
+      return html;
+    }
+
+    // 우선 택배 지정 전용 시간 (매 라운드 맨 처음, PRIORITY_PICK_MS) -- 독립된 상태 화면.
+    if (st.elevator.state === "priority") {
+      html += renderPriorityWindow(st, seat);
       html += '</div></div></main>';
       return html;
     }
@@ -1151,7 +1203,6 @@ APP_JS_TEMPLATE = r"""
         + '<span class="ready-chip' + (otherReady ? ' is-ready' : '') + '">' + seatName(otherSeat, st) + (otherReady ? ' · 준비 완료' : ' · 대기 중') + '</span>'
         + '</div>'
         + '<div class="space-hint">Space · ' + nextLabel + '</div>';
-      html += renderPriorityPicker(st, seat);
     }
     html += '</div>';
 
@@ -1361,6 +1412,7 @@ APP_JS_TEMPLATE = r"""
       var el = st.elevator, floorIdx = el.floorIdx;
       var stateLabel = "", ends = null, wait = "";
       if (el.state === "idle") { stateLabel = "출발 준비 중"; wait = "두 플레이어가 준비하면 출발해요"; }
+      else if (el.state === "priority") { stateLabel = "우선 택배 지정 시간"; ends = el.priorityWindowEndsAt; }
       else if (el.state === "thief") { stateLabel = "택배도둑 배치 시간"; ends = el.thiefWindowEndsAt; }
       else if (el.state === "voting") { stateLabel = "엘리베이터 이동 중!"; ends = el.votingEndsAt; }
       else if (el.state === "choosing") { stateLabel = "같은 층 택배 선택 중"; ends = el.pendingChoice && el.pendingChoice.endsAt; }
@@ -1459,9 +1511,25 @@ APP_JS_TEMPLATE = r"""
       if (openMeta && TYPES[openMeta.catIdx].mini && window.MiniGames) { openMiniGame(openId); return; }
       local.openCellId = openId; render(); return;
     }
+    if (action === "open-type") {
+      // 레일 화면의 종류 버튼: 그 종류의 아직 안 가져간 칸 중 첫 번째를 연다 (칸끼리 구별이 없는 종류 전용)
+      var typeIdx = parseInt(t.getAttribute("data-cat"), 10);
+      var tt = TYPES[typeIdx];
+      var freeCell = null, sawPending = false;
+      for (var fi = 0; fi < state.board.length; fi++) {
+        var bc = state.board[fi];
+        if (bc.catIdx !== typeIdx || bc.taken) continue;
+        if (local.pending[bc.id] && Date.now() - local.pending[bc.id] < 2000) { sawPending = true; continue; } // 방금 내가 끝낸 칸(브로드캐스트 대기 중)
+        freeCell = bc; break;
+      }
+      if (!freeCell) { if (!sawPending) showToast(tt.name + "은(는) 이미 소진됐어요"); return; }
+      if (tt.mini && window.MiniGames) { openMiniGame(freeCell.id); return; }
+      local.openCellId = freeCell.id; render(); return;
+    }
     if (action === "give-up") { local.openCellId = null; render(); return; }
     if (action === "complete-cell") {
       var cid = t.getAttribute("data-cell");
+      markPending(cid);
       local.openCellId = null;
       send({ type: "secure-cell", seat: mySeat(), cellId: cid });
       render();
@@ -1474,6 +1542,10 @@ APP_JS_TEMPLATE = r"""
     if (action === "pick-priority") {
       var invId = t.getAttribute("data-inv");
       send({ type: "set-priority", seat: mySeat(), invoiceId: invId ? invId : null });
+      return;
+    }
+    if (action === "confirm-priority") {
+      send({ type: "confirm-priority", seat: mySeat() });
       return;
     }
     if (action === "choose-delivery") {
@@ -1507,6 +1579,9 @@ APP_JS_TEMPLATE = r"""
       } else if (seat && state && state.phase === "elevator" && (state.elevator.state === "result" || state.elevator.state === "idle") && !e.repeat && !state.elevator.readyNext[seat]) {
         e.preventDefault();
         send({ type: "elevator-ready", seat: seat });
+      } else if (seat && state && state.phase === "elevator" && state.elevator.state === "priority" && !e.repeat && !state.elevator.priorityConfirmed[seat]) {
+        e.preventDefault();
+        send({ type: "confirm-priority", seat: seat });
       } else if (seat && state && state.phase === "halftime" && !e.repeat && !state.halftimeReady[seat]) {
         e.preventDefault();
         send({ type: "halftime-ready", seat: seat });
@@ -1529,30 +1604,36 @@ APP_JS_TEMPLATE = r"""
     if (MAIN) { mainTick(); return; }
     updateMiniClock();
     if (state.phase === "secure" && state.secureEndsAt) {
-      var msLeft = state.secureEndsAt - Date.now();
+      var msLeft = state.secureEndsAt - nowMs();
       var barI = document.querySelector(".timer-bar > i");
       var numEl = document.querySelector(".timer-num");
       if (numEl) numEl.textContent = fmtClock(msLeft);
       if (barI) barI.style.width = Math.max(0, Math.min(100, (msLeft / SECURE_PHASE_MS) * 100)) + "%";
     } else if (state.phase === "elevator" && state.elevator.state === "voting" && state.elevator.votingEndsAt) {
-      var left = state.elevator.votingEndsAt - Date.now();
+      var left = state.elevator.votingEndsAt - nowMs();
       var clockEl = document.getElementById("round-clock");
       if (clockEl) clockEl.textContent = "남은 시간 " + fmtClock(Math.max(0, left));
     } else if (state.phase === "elevator" && state.elevator.state === "choosing" && state.elevator.pendingChoice) {
       var seatNow = mySeat();
       var alreadyChosen = seatNow && state.elevator.pendingChoice.chosen[seatNow];
       if (!alreadyChosen) {
-        var leftC = state.elevator.pendingChoice.endsAt - Date.now();
+        var leftC = state.elevator.pendingChoice.endsAt - nowMs();
         var choiceClockEl = document.getElementById("choice-clock");
         if (choiceClockEl) choiceClockEl.textContent = "남은 시간 " + fmtClock(Math.max(0, leftC));
       }
+    } else if (state.phase === "elevator" && state.elevator.state === "priority" && state.elevator.priorityWindowEndsAt) {
+      var leftP = state.elevator.priorityWindowEndsAt - nowMs();
+      var priClockEl = document.getElementById("priority-clock");
+      if (priClockEl) priClockEl.textContent = fmtClock(Math.max(0, leftP));
+      var priBarEl = document.getElementById("priority-bar");
+      if (priBarEl) priBarEl.style.width = Math.max(0, Math.min(100, (leftP / PRIORITY_PICK_MS) * 100)) + "%";
     } else if (state.phase === "elevator" && state.elevator.state === "thief" && state.elevator.thiefWindowEndsAt) {
       var seatNow2 = mySeat();
       var placedNow = seatNow2 && state.elevator.thieves.placedThisRound[seatNow2];
       var skippedNow = seatNow2 && state.elevator.thieves.skipped[seatNow2];
       var doneNow = (placedNow !== null && placedNow !== undefined) || skippedNow;
       if (!doneNow) {
-        var leftT = state.elevator.thiefWindowEndsAt - Date.now();
+        var leftT = state.elevator.thiefWindowEndsAt - nowMs();
         var thiefClockEl = document.getElementById("thief-clock");
         if (thiefClockEl) thiefClockEl.textContent = "남은 시간 " + fmtClock(Math.max(0, leftT));
       }
@@ -1577,7 +1658,8 @@ APP_JS = (APP_JS_TEMPLATE
           .replace("@@PRIORITY_MULTIPLIER@@", str(PRIORITY_MULTIPLIER))
           .replace("@@SAME_FLOOR_CHOICE_MS@@", str(SAME_FLOOR_CHOICE_MS))
           .replace("@@HALVES@@", str(HALVES))
-          .replace("@@THIEF_PLACE_MS@@", str(THIEF_PLACE_MS)))
+          .replace("@@THIEF_PLACE_MS@@", str(THIEF_PLACE_MS))
+          .replace("@@PRIORITY_PICK_MS@@", str(PRIORITY_PICK_MS)))
 
 # 2026-10-06: 확보 미니게임(박스 포장/불량 검수/송장 붙이기) 모듈을 그대로 인라인한다. 단독 시험장
 # (build_minigame_proto.py)이 쓰는 것과 같은 파일이라, 시험장에서 확인한 동작이 게임에서도 똑같다.

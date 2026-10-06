@@ -194,6 +194,7 @@
 /* ================= 송장 붙이기 (박스 찾아 붙이기) ================= */
 .mg-stage {
   position: relative; width: 100%; aspect-ratio: 520 / 320; container-type: inline-size; overflow: hidden;
+  --bw: 26cqw; --u: calc(var(--bw) / 26); /* 박스 한 개의 폭, 그리고 박스 안 모든 치수의 단위(박스가 7개 이상이면 JS가 --bw를 줄인다) */
   border-radius: 12px; border: 1px solid var(--mg-line);
   background: /* 위쪽 70%는 나무 작업대, 아래쪽은 송장 트레이 구역 */
     linear-gradient(180deg, transparent 0 69.5%, rgba(43, 29, 18, 0.16) 69.5% 70.5%, rgba(43, 29, 18, 0.07) 70.5% 100%),
@@ -202,25 +203,25 @@
 }
 .mg-bxs {
   position: absolute; left: 3%; right: 3%; top: 3%; height: 66%;
-  display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: 2.6cqw 3.4cqw;
+  display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: var(--ggap, 2.6cqw 3.4cqw);
 }
 /* --- 골판지 박스: 뚜껑(위) + 앞면 + 세로 테이프 + 송장 자리 --- */
 .mg-bx {
-  position: relative; width: 26cqw; height: 18.4cqw; transition: transform 0.14s ease;
-  filter: drop-shadow(0 1cqw 0.9cqw rgba(43, 29, 18, 0.30));
+  position: relative; width: calc(26 * var(--u)); height: calc(18.4 * var(--u)); transition: transform 0.14s ease;
+  filter: drop-shadow(0 calc(1 * var(--u)) calc(0.9 * var(--u)) rgba(43, 29, 18, 0.30));
 }
 .bx-top {
   position: absolute; left: 0; right: 0; top: 0; height: 31%;
   clip-path: polygon(9% 0, 91% 0, 100% 100%, 0 100%);
   background:
-    linear-gradient(90deg, transparent calc(50% - 0.18cqw), rgba(110, 78, 38, 0.6) calc(50% - 0.18cqw) calc(50% + 0.18cqw), transparent calc(50% + 0.18cqw)),
+    linear-gradient(90deg, transparent calc(50% - calc(0.18 * var(--u))), rgba(110, 78, 38, 0.6) calc(50% - calc(0.18 * var(--u))) calc(50% + calc(0.18 * var(--u))), transparent calc(50% + calc(0.18 * var(--u)))),
     linear-gradient(180deg, #ecd5a2, #dcc08a);
 }
 .bx-front {
-  position: absolute; left: 0; right: 0; top: 29%; bottom: 0; border-radius: 0 0 0.7cqw 0.7cqw;
-  border: 0.28cqw solid #8a6a3a; border-top-width: 0.2cqw;
+  position: absolute; left: 0; right: 0; top: 29%; bottom: 0; border-radius: 0 0 calc(0.7 * var(--u)) calc(0.7 * var(--u));
+  border: calc(0.28 * var(--u)) solid #8a6a3a; border-top-width: calc(0.2 * var(--u));
   background:
-    repeating-linear-gradient(90deg, rgba(110, 78, 38, 0.10) 0 0.45cqw, transparent 0.45cqw 0.95cqw), /* 골판지 결 */
+    repeating-linear-gradient(90deg, rgba(110, 78, 38, 0.10) 0 calc(0.45 * var(--u)), transparent calc(0.45 * var(--u)) calc(0.95 * var(--u))), /* 골판지 결 */
     linear-gradient(180deg, rgba(255, 255, 255, 0.10), rgba(60, 38, 14, 0.22)),
     linear-gradient(180deg, #d4b27c, #bd9560);
 }
@@ -231,23 +232,23 @@
   opacity: 0.96;
 }
 .bx-addr { position: absolute; left: 5%; top: 14%; width: 34%; line-height: 1.1; font-family: var(--mg-font-display); color: #3a2812; transform: rotate(-2deg); }
-.bx-addr i { display: block; font-style: normal; font-size: 1.55cqw; letter-spacing: 0.06em; opacity: 0.75; font-family: var(--mg-font-body); font-weight: 700; }
-.bx-addr b { display: block; font-size: 3.3cqw; font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+.bx-addr i { display: block; font-style: normal; font-size: calc(1.55 * var(--u)); letter-spacing: 0.06em; opacity: 0.75; font-family: var(--mg-font-body); font-weight: 700; }
+.bx-addr b { display: block; font-size: calc(3.3 * var(--u)); font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
 .bx-slot { /* 송장 자리 -- 모든 박스에 똑같이 있어서 힌트가 되지 않는다 */
-  position: absolute; left: 57%; top: 38%; width: 38%; height: 46%; border: 0.3cqw dashed rgba(60, 38, 14, 0.38); border-radius: 0.5cqw;
+  position: absolute; left: 57%; top: 38%; width: 38%; height: 46%; border: calc(0.3 * var(--u)) dashed rgba(60, 38, 14, 0.38); border-radius: calc(0.5 * var(--u));
   background: rgba(255, 252, 240, 0.12);
 }
 .bx-ok {
-  position: absolute; right: -1.2cqw; top: -1.2cqw; width: 5cqw; height: 5cqw; border-radius: 50%; z-index: 4;
-  background: var(--mg-ok); color: #fff; font-weight: 800; font-size: 3.2cqw; line-height: 5cqw; text-align: center;
-  transform: scale(0); transition: transform 0.2s ease 0.12s; box-shadow: 0 0.3cqw 0.6cqw rgba(0, 0, 0, 0.3);
+  position: absolute; right: calc(-1.2 * var(--u)); top: calc(-1.2 * var(--u)); width: calc(5 * var(--u)); height: calc(5 * var(--u)); border-radius: 50%; z-index: 4;
+  background: var(--mg-ok); color: #fff; font-weight: 800; font-size: calc(3.2 * var(--u)); line-height: calc(5 * var(--u)); text-align: center;
+  transform: scale(0); transition: transform 0.2s ease 0.12s; box-shadow: 0 calc(0.3 * var(--u)) calc(0.6 * var(--u)) rgba(0, 0, 0, 0.3);
 }
-.mg-bx.is-hover { transform: translateY(-1cqw); }
-.mg-bx.is-hover .bx-front { box-shadow: 0 0 0 0.6cqw var(--mg-accent); }
+.mg-bx.is-hover { transform: translateY(calc(-1 * var(--u))); }
+.mg-bx.is-hover .bx-front { box-shadow: 0 0 0 calc(0.6 * var(--u)) var(--mg-accent); }
 .mg-bx.is-done .bx-ok { transform: scale(1); }
 .mg-bx.is-done .bx-slot { border-color: transparent; background: none; }
 .mg-bx.is-wrong { animation: mg-shake 0.32s ease; }
-.mg-bx.is-wrong .bx-front { box-shadow: 0 0 0 0.6cqw var(--mg-danger); }
+.mg-bx.is-wrong .bx-front { box-shadow: 0 0 0 calc(0.6 * var(--u)) var(--mg-danger); }
 .mg-tray {
   position: absolute; left: 3%; right: 3%; top: 74%; height: 23%; border-radius: 10px;
   background: rgba(43, 29, 18, 0.07); border: 1px dashed var(--mg-line);
@@ -274,4 +275,21 @@
 @media (max-width: 480px) {
   .mg-root { padding: 0.8rem 0.7rem 0.9rem; }
   .mg-box { transform: scale(0.86); transform-origin: top center; margin-bottom: -26px; }
+}
+/* 2026-10-06: 노트북처럼 화면 높이가 낮을 때(브라우저 주소창/북마크바 빼고 ~650px) 박스 포장 창이 화면보다 커져서
+   아래쪽이 잘렸다 -> 낮은 화면에서는 박스 그림을 줄이고 화면 방향키를 한 줄로 눕힌다. */
+@media (max-height: 820px) {
+  .mg-box { transform: scale(0.72); transform-origin: top center; margin-bottom: -58px; }
+  .mg-pack-stage { padding-bottom: 0.2rem; }
+  .mg-freeze-note { margin-bottom: 0.2rem; }
+  .mg-seq { margin-bottom: 0.6rem; }
+  .mg-pad { grid-template-columns: repeat(4, 1fr) 2.4fr; grid-template-rows: 46px; width: min(100%, 440px); margin: 0 auto; }
+  .mg-key[data-k="left"]  { grid-column: 1; grid-row: 1; }
+  .mg-key[data-k="down"]  { grid-column: 2; grid-row: 1; }
+  .mg-key[data-k="up"]    { grid-column: 3; grid-row: 1; }
+  .mg-key[data-k="right"] { grid-column: 4; grid-row: 1; }
+  .mg-key[data-k="space"] { grid-column: 5; grid-row: 1; }
+}
+@media (max-height: 700px) {
+  .mg-stage { width: 88%; margin-left: auto; margin-right: auto; } /* 송장 붙이기 작업대: 아주 낮은 화면에서 조금 줄인다(cqw 단위라 내용도 같이 줄어듦) */
 }

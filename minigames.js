@@ -313,7 +313,7 @@
   // 중심이 박스 위에 있으면 그 박스로 판정) -- 어려움은 손기술이 아니라 코드를 읽고 비교하는 데서 온다.
   // 배송코드는 이 미니게임 안에서만 쓰는 값이다: 실제 송장 호수는 확보 순간 서버가 정하므로 여기서 호수를
   // 흉내 내지 않는다(그래서 "1F-07" 같은 호수와 다른 모양의 코드). 코드의 층 부분만 그 칸의 층과 맞춘다.
-  var STK_BOXES  = [4, 5, 6];   // 레벨별 박스 수
+  var STK_BOXES  = [4, 5, 7];   // 레벨별 박스 수 (2026-10-06: 어려움 6 -> 7)
   var STK_LABELS = [2, 3, 4];   // 레벨별 송장 장수 (붙일 박스 수)
   var STK_FLOORS = ["B1", "1F", "2F", "3F", "4F", "5F"];
   var LW = 19, LH = 20.5;       // 송장 크기 (스테이지 대비 %, 스테이지 520:320)
@@ -377,6 +377,7 @@
     body.innerHTML = '<div class="mg-stage" data-total="' + k + '"><div class="mg-bxs">' + boxHtml + '</div>'
       + '<div class="mg-tray"><span class="mg-tray-note"></span></div></div>';
     var stage = body.querySelector(".mg-stage");
+    if (n > 6) { stage.style.setProperty("--bw", "21cqw"); stage.style.setProperty("--ggap", "2.2cqw 2.2cqw"); } // 7~8개는 한 줄에 4개씩 두 줄
     var boxes = Array.prototype.slice.call(body.querySelectorAll(".mg-bx"));
     var note = body.querySelector(".mg-tray-note");
     var placed = 0, current = null, dragging = false, grabDX = 0, grabDY = 0;

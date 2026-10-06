@@ -223,7 +223,7 @@ async function main() {
     await page.mouse.up();
   }
   const ctr = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
-  const BOXES = [4, 5, 6], LABELS = [2, 3, 4];
+  const BOXES = [4, 5, 7], LABELS = [2, 3, 4];
   for (let lv = 1; lv <= 3; lv++) {
     await launch("sticker", lv);
     await page.evaluate(() => window.scrollTo(0, 0));

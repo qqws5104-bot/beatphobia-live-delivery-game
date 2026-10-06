@@ -87,7 +87,8 @@ async function main() {
 
   // p1이 일반택배 1개, p2가 일반택배 1개 + 귀중품 1개를 확보 -> 메인의 남은 수가 따라 줄어든다
   async function secure(p, id) {
-    await clickSel(p, `[data-action="open-cell"][data-cell="${id}"]`);
+    const kind = id.replace(/-\d+$/, ""), CAT = { normal: 0, fragile: 1, valuable: 2 };
+    await clickSel(p, kind === "fixed-floor" ? `[data-action="open-cell"][data-cell="${id}"]` : `.rail-btn[data-action="open-type"][data-cat="${CAT[kind]}"]`);
     await waitFor(async () => (await countSel(p, "#mg-layer .mg-root")) === 1 || (await countSel(p, ".puzzle-frame")) === 1, { label: "opened " + id });
     if ((await countSel(p, "#mg-layer .mg-root")) === 1) await p.evaluate(() => window.__mgFinish());
     else await clickSel(p, '[data-action="complete-cell"]');
@@ -123,6 +124,15 @@ async function main() {
   assert(ei.floor === "1F" && /라운드 1 \/ 5/.test(ei.round) && ei.state.includes("출발 준비"), "elevator starts at 1F, round 1/5, waiting: " + JSON.stringify(ei));
   await shot(main, "main_5_elevator_idle");
   await pressSpace(p1); await pressSpace(p2);
+  // 2026-10-06: 준비가 끝나면 우선 택배 지정 10초 창이 먼저 -- 메인에도 상태 이름과 남은 시간(~10초)이 보인다.
+  await waitFor(async () => (await elevInfo()).state.includes("우선 택배 지정"), { label: "main shows priority-pick window" });
+  await sleep(250);
+  ei = await elevInfo();
+  const pSec = parseInt(ei.time, 10);
+  assert(pSec >= 8 && pSec <= 10, `priority window timer should show ~10s (server time), got "${ei.time}"`);
+  await shot(main, "main_5b_priority");
+  await clickSel(p1, '[data-action="confirm-priority"]'); await clickSel(p2, '[data-action="confirm-priority"]');
+  log(`우선 택배 지정 시간: 메인에 "우선 택배 지정 시간" + ${pSec}초 표시, 둘 다 확정하면 이동 단계로`);
   await waitFor(async () => (await elevInfo()).state.includes("이동 중"), { label: "main shows moving state" });
   await sleep(250);
   ei = await elevInfo();

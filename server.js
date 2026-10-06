@@ -146,6 +146,10 @@ wss.on("connection", (ws, req) => {
         if (!conn.seat || (msg.invoiceId !== null && typeof msg.invoiceId !== "string")) return;
         entry.room.setPriorityPick(conn.seat, msg.invoiceId);
         break;
+      case "confirm-priority":
+        if (!conn.seat) return;
+        entry.room.confirmPriority(conn.seat);
+        break;
       case "choose-delivery":
         if (!conn.seat || typeof msg.invoiceId !== "string") return;
         entry.room.chooseDelivery(conn.seat, msg.invoiceId);

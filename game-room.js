@@ -7,7 +7,7 @@
 
 const {
   TYPES, COURIERS, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
-  PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS,
+  PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, PRIORITY_PICK_MS,
 } = require("./game-data");
 
 // 2026-10-06: 보드는 두 플레이어가 "같이 쓰는" 하나다 (종류별 6칸 = 두 사람 합쳐서 6개). 한 사람이 확보하면
@@ -87,7 +87,9 @@ function freshPlayers() {
 }
 function freshElevator() {
   return {
-    // state: "idle" | "thief" | "voting" | "choosing" | "result" | "done"
+    // state: "idle" | "priority" | "thief" | "voting" | "choosing" | "result" | "done"
+    // "priority": 매 라운드 게이트(idle/result)에서 둘 다 준비하면 맨 먼저 열리는 우선 택배 지정 전용 시간
+    // (PRIORITY_PICK_MS = 10초, 2026-10-06 신설). 둘 다 "확정"하면 조기 종료. 이후 후반이면 thief, 전반이면 voting.
     // "thief": 후반(half===2)에서만 등장 -- voting 시작 전, 택배도둑을 놓을지 말지 THIEF_PLACE_MS
     // 동안 따로 주어지는 전용 시간 (2026-08-27 신설). 전반에는 이 상태를 아예 거치지 않는다.
     // "choosing": 이번 라운드에 같은 층에 배송 대기 중인 내 택배가 2개 이상인 플레이어가 있을 때,
@@ -105,6 +107,10 @@ function freshElevator() {
     // 1회 -> 매 라운드 새로 지정으로 변경). idle/result 게이트(다음 라운드 시작 전 대기 화면)에서만
     // 바꿀 수 있고, 그 라운드 배송이 확정되는 순간(_finishRound) 다음 게이트를 위해 다시 비워진다.
     priorityPick: { "1": null, "2": null },
+    // 우선 택배 지정 전용 시간("priority" 상태)의 종료 시각과 좌석별 "확정" 여부 (2026-10-06 신설).
+    // 미배송 택배가 하나도 없는 플레이어는 지정할 게 없으니 자동으로 확정 처리된다.
+    priorityWindowEndsAt: null,
+    priorityConfirmed: { "1": false, "2": false },
     // thieves: 후반(half===2) 전용. placedThisRound는 "이번 라운드 전용 시간에 배치를 썼는가"(1인당
     // 라운드당 1회), skipped는 "이번 라운드엔 안 놓기로 명시적으로 넘겼는가" (둘 다 하면 그 즉시
     // THIEF_PLACE_MS를 기다리지 않고 voting으로 넘어감 -- choosing의 조기-진행 패턴과 동일), active는
@@ -251,14 +257,15 @@ class GameRoom {
   }
 
   // ---- elevator phase ----
-  // 우선 택배 지정 (2026-08-27: 게임/하프 전체 1회 -> 매 라운드 새로 지정으로 변경). idle(라운드1
-  // 시작 전)/result(다음 라운드 시작 전) 게이트에서만 바꿀 수 있다 -- 그 라운드가 실제로 진행되는
-  // 동안(voting/choosing)은 고정. 최대 1개, 선택 사항이며 언제든 null로 되돌려 지정 해제 가능.
+  // 우선 택배 지정 (2026-08-27: 게임/하프 전체 1회 -> 매 라운드 새로 지정으로 변경). 2026-10-06부터는
+  // 게이트가 아니라 전용 "priority" 시간(PRIORITY_PICK_MS)에서만, 그리고 내가 아직 "확정"하지 않았을 때만
+  // 바꿀 수 있다 -- 그 라운드가 실제로 진행되는 동안(voting/choosing)은 고정. 최대 1개, 선택 사항이며
+  // 확정 전에는 null로 되돌려 지정 해제 가능.
   // 그 라운드에 정확히 그 송장이 배송돼야만 PRIORITY_MULTIPLIER가 적용된다 (다음 라운드로 안 넘어감).
   setPriorityPick(seat, invoiceId) {
     if (this.state.phase !== "elevator") return;
     const el = this.state.elevator;
-    if (el.state !== "idle" && el.state !== "result") return;
+    if (el.state !== "priority" || el.priorityConfirmed[seat]) return;
     if (invoiceId !== null) {
       const inv = this.state.players[seat].invoices.find((v) => v.id === invoiceId);
       if (!inv || inv.deliveredRound !== null) return; // 내 것이면서 아직 미배송인 송장만 지정 가능
@@ -281,9 +288,51 @@ class GameRoom {
   }
 
   // Used both for the pre-round-1 "idle" gate and the between-round "result" gate, once both
-  // players are ready: in 후반(half===2) a dedicated THIEF_PLACE_MS window comes first (see
-  // _startThiefWindow); in 전반 there's no thief mechanic at all, so it goes straight to voting.
+  // players are ready: the 10s priority-pick window (_startPriorityWindow) comes first, then in 후반
+  // (half===2) the THIEF_PLACE_MS window (_startThiefWindow); in 전반 there's no thief mechanic, so voting.
   _enterNextRound() {
+    this._startPriorityWindow();
+  }
+
+  // 우선 택배 지정 전용 시간 (2026-10-06 신설). 매 라운드 맨 처음 PRIORITY_PICK_MS(10초) 동안 열리고,
+  // 둘 다 "확정"(지정하거나 "지정 안 함")하면 시간을 다 기다리지 않고 곧장 다음 단계로 넘어간다.
+  // 지정할 미배송 택배가 없는 플레이어는 자동 확정이고, 둘 다 그렇다면 창 자체를 열지 않는다
+  // (thief 창과 같은 패턴). 지난 라운드의 지정값은 _finishRound에서 이미 비워져 있다.
+  _startPriorityWindow() {
+    const el = this.state.elevator;
+    el.priorityPick = { "1": null, "2": null };
+    ["1", "2"].forEach((s) => {
+      el.priorityConfirmed[s] = !this.state.players[s].invoices.some((v) => v.deliveredRound === null);
+    });
+    if (el.priorityConfirmed["1"] && el.priorityConfirmed["2"]) { this._afterPriorityWindow(); return; }
+    el.state = "priority";
+    const endsAt = Date.now() + PRIORITY_PICK_MS;
+    el.priorityWindowEndsAt = endsAt;
+    this._scheduleAt(endsAt, () => this._endPriorityWindow(endsAt));
+    this.emit();
+  }
+
+  confirmPriority(seat) {
+    if (this.state.phase !== "elevator") return;
+    const el = this.state.elevator;
+    if (el.state !== "priority" || el.priorityConfirmed[seat]) return;
+    this.touch();
+    el.priorityConfirmed[seat] = true;
+    if (el.priorityConfirmed["1"] && el.priorityConfirmed["2"]) { this._afterPriorityWindow(); return; }
+    this.emit();
+  }
+
+  // expectedEndsAt: 이전 라운드의 (조기 종료돼서 이미 쓸모없어진) 타이머가 이번 라운드의 새 창을
+  // 중간에 끊지 못하도록, 이 타이머가 연 바로 그 창일 때만 동작한다.
+  _endPriorityWindow(expectedEndsAt) {
+    const el = this.state.elevator;
+    if (this.state.phase !== "elevator" || el.state !== "priority") return;
+    if (expectedEndsAt !== undefined && el.priorityWindowEndsAt !== expectedEndsAt) return;
+    this._afterPriorityWindow();
+  }
+
+  _afterPriorityWindow() {
+    this.state.elevator.priorityWindowEndsAt = null;
     if (this.state.half === 2) this._startThiefWindow();
     else this._startVotingRound();
   }
