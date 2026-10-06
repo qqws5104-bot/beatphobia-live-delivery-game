@@ -172,18 +172,23 @@ async function main() {
   if (takenCountAfterGiveUp !== 0) throw new Error(`giving up should not take any cell, but ${takenCountAfterGiveUp} cell(s) show as taken`);
   log("give-up confirmed: cell stays untaken, no invoice granted");
 
-  // ---- per-player independent boards: BOTH players secure the identical cell id with zero conflict ----
+  // ---- 공유 보드(2026-10-06): 종류별 6개를 두 사람이 나눠 가진다. 둘 다 같은 칸(normal-1)을 열어 끝내면 한 사람은 그 칸을,
+  // 다른 사람은 같은 종류의 다른 빈 칸을 받는다 -- 합쳐서 2개가 줄어든다 ----
   await Promise.all([
     clickSel(p1, '[data-action="open-cell"][data-cell="normal-1"]'),
     clickSel(p2, '[data-action="open-cell"][data-cell="normal-1"]'),
   ]);
   await p1.waitForTimeout(150);
   await Promise.all([finishOpenCell(p1), finishOpenCell(p2)]);
-  await p1.waitForTimeout(200);
-  const p1Normal1Taken = (await countSel(p1, '.cell.taken')) >= 1;
-  const p2Normal1Taken = (await countSel(p2, '.cell.taken')) >= 1;
-  if (!p1Normal1Taken || !p2Normal1Taken) throw new Error("both players should independently secure the same cell id -- one or both failed");
-  log("per-player independent boards confirmed: both players secured the identical cell id with no cross-player blocking");
+  await waitFor(async () => (await countSel(p1, '.board-row:nth-child(1) .cell.taken')) === 2, { label: "두 사람이 각각 일반택배 1개씩 확보 (공유 보드에서 2칸 줄어듦)" });
+  const mine1 = await countSel(p1, '.cell.taken:not(.theirs)');
+  const mine2 = await countSel(p2, '.cell.taken:not(.theirs)');
+  if (mine1 !== 1 || mine2 !== 1) throw new Error(`each player should own exactly one taken cell (mine1=${mine1}, mine2=${mine2})`);
+  const theirs1 = await countSel(p1, '.cell.theirs');
+  if (theirs1 !== 1) throw new Error(`p1 should see exactly one cell taken by the opponent, saw ${theirs1}`);
+  const leftTxt = await p1.textContent('.board-row:nth-child(1) .cat-left');
+  if (!/남은\s*4\s*\/\s*6/.test(leftTxt)) throw new Error(`일반택배 should show 남은 4 / 6, got "${leftTxt}"`);
+  log("공유 보드 확인: 같은 칸을 동시에 끝내도 각자 1개씩 확보, 남은 개수 6 -> 4");
 
   async function secureCell(p, cellId) {
     const sel = `[data-action="open-cell"][data-cell="${cellId}"]`;
@@ -199,21 +204,23 @@ async function main() {
   const fixedFloorFace = await countSel(p1, '[data-cell="fixed-floor-3"] .cell-num');
   if (fixedFloorFace !== 1) throw new Error("fixed-floor cell face did not render");
   await secureCell(p1, "fixed-floor-3"); // num index 2 -> FLOORS[2] = "2F"
-  await secureCell(p2, "fixed-floor-3");
-  log("secured a 확정 층수 택배 cell for both players");
+  // 이미 p1이 선점한 층은 p2 화면에서 열 수 없다 (선점자 우선)
+  if ((await countSel(p2, '[data-action="open-cell"][data-cell="fixed-floor-3"]')) !== 0) throw new Error("a floor already taken by the opponent must not be openable");
+  await secureCell(p2, "fixed-floor-6");
+  log("확정 층수 택배: p1이 2F를 선점하면 p2는 열 수 없고, p2는 다른 층(5F)을 확보");
 
   // secure a healthy spread of cells for both players so there's real inventory for the elevator
   // phase (including enough on p1 to make same-floor collisions likely across 24 cells)
   for (const id of [
-    "normal-2", "normal-3", "normal-4",
-    "fixed-floor-1", "fixed-floor-2", "fixed-floor-4", "fixed-floor-5", "fixed-floor-6",
+    "normal-3", "normal-4",
+    "fixed-floor-1", "fixed-floor-2", "fixed-floor-4", "fixed-floor-5",
     "fragile-1", "fragile-2", "fragile-3",
     "valuable-1", "valuable-2", "valuable-3",
   ]) {
     await secureCell(p1, id);
   }
-  await secureCell(p2, "fragile-1");
-  await secureCell(p2, "valuable-1");
+  await secureCell(p2, "fragile-4");
+  await secureCell(p2, "valuable-4");
   log("secured additional cells for both players");
 
   // ---- wait out the secure phase (server override, shortened for this test run) -> straight into
@@ -385,8 +392,8 @@ async function main() {
   for (const id of ["normal-1", "normal-2", "fixed-floor-1", "fixed-floor-2", "fragile-1", "valuable-1"]) {
     await secureCell(p1, id);
   }
-  await secureCell(p2, "normal-1");
-  await secureCell(p2, "fixed-floor-1");
+  await secureCell(p2, "normal-3");
+  await secureCell(p2, "fixed-floor-4");
 
   // ---- secure phase ends straight into elevator's idle gate again, same as half 1 -- no
   // standalone priority phase. Pick a priority invoice here too (light touch -- the full

@@ -10,11 +10,9 @@ const {
   PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS,
 } = require("./game-data");
 
-// Secure phase is per-player now: each seat has its own independent copy of the 21-cell board,
-// so there is no cross-player contention (both players can secure "the same" cell id -- they're
-// really securing their own separate copy of it). cellById therefore needs to know which seat's
-// board to look in.
-function cellById(state, seat, id) { return state.boards[seat].find((c) => c.id === id) || null; }
+// 2026-10-06: 보드는 두 플레이어가 "같이 쓰는" 하나다 (종류별 6칸 = 두 사람 합쳐서 6개). 한 사람이 확보하면
+// 그 칸은 상대에게서도 사라진다. 그 전(2026-08-27~10-05)에는 플레이어별로 독립된 보드 사본이었다.
+function cellById(state, id) { return state.board.find((c) => c.id === id) || null; }
 function cellMeta(id) { return CELLS.find((c) => c.id === id) || null; }
 
 // 호수(ROOMS, "1"~"9")는 플레이어별로 겹치지 않게 뽑는다 -- 완전 무작위 복원추출이면 같은 플레이어
@@ -78,7 +76,9 @@ function totalScore(seat, state) {
 }
 
 function freshBoard() {
-  return CELLS.map((c) => ({ id: c.id, catIdx: c.catIdx, num: c.num, taken: false, acquiredSeq: null }));
+  // takenBy: 이 칸을 확보한 좌석("1"/"2"). acquiredSeq는 그 좌석 안에서의 확보 순번이다(송장과 연결하는 키 --
+  // 좌석이 다르면 같은 번호가 있을 수 있으니 항상 takenBy와 함께 본다).
+  return CELLS.map((c) => ({ id: c.id, catIdx: c.catIdx, num: c.num, taken: false, takenBy: null, acquiredSeq: null }));
 }
 function freshPlayers() {
   // roomBag: 이 플레이어의 이번 하프용 "안 겹치는 호수" 셔플 가방 (drawRoom() 참고). 하프가 바뀌면
@@ -130,7 +130,7 @@ function initialState() {
     // 없음). 2026-08-27 신설.
     courierPick: { "1": null, "2": null },
     secureEndsAt: null,
-    boards: { "1": freshBoard(), "2": freshBoard() },
+    board: freshBoard(), // 두 플레이어가 공유하는 보드 (종류별 6칸 합계)
     acquireCounter: { "1": 0, "2": 0 },
     players: freshPlayers(),
     elevator: freshElevator(),
@@ -217,22 +217,29 @@ class GameRoom {
   }
 
   // ---- secure phase ----
-  // Each seat has its own independent board (see freshBoard/state.boards), so there is no
-  // cross-player race here anymore -- player 1 securing "fragile-1" has zero effect on whether
-  // player 2 can also secure their own "fragile-1". Giving up (the client just closes the puzzle
-  // overlay without sending this message) never reaches here, so a given-up cell never gets
-  // touched -- it stays exactly as untaken as it was before the attempt.
+  // 보드는 두 플레이어가 공유한다(종류별 6칸 = 합계 6개). 누가 미니게임을 "먼저 끝내느냐"가 곧 선착순이다
+  // (여는 순간 잠그지 않는다 -- 사용자 결정 2026-10-06: "한 사람이 완료해서 박스를 만들면 총 개수에서 줄어든다").
+  //  * 일반/깨지기/귀중품: 칸은 서로 구별이 없다(그냥 개수). 클라이언트가 보낸 칸이 이미 남이 가져갔어도
+  //    같은 종류의 빈 칸 아무거나를 대신 준다. 종류 전체가 소진됐으면 그냥 무시(= 늦은 사람은 허탕).
+  //  * 확정 층수 택배: 칸이 곧 배송 층이라 서로 대체가 안 된다. 그 층을 이미 남이 가져갔으면 무시(선점자 우선).
+  // 포기(클라이언트가 이 메시지를 안 보내고 게임만 닫음)는 여기까지 오지 않으므로 보드는 그대로다.
   secureCell(seat, cellId) {
     if (this.state.phase !== "secure") return;
-    const cell = cellById(this.state, seat, cellId);
-    if (!cell || cell.taken) return; // already taken by this same seat (or unknown id) -- silent no-op
+    let cell = cellById(this.state, cellId);
+    if (!cell) return; // 모르는 id
+    if (cell.taken) {
+      if (cell.takenBy === seat) return; // 내가 이미 가진 칸에 대한 중복 메시지 -- 무시 (대체 칸을 또 주면 안 된다)
+      if (TYPES[cell.catIdx].fixedFloor) return;
+      cell = this.state.board.find((c) => c.catIdx === cell.catIdx && !c.taken) || null;
+      if (!cell) return;
+    }
     this.touch();
     cell.taken = true;
+    cell.takenBy = seat;
     this.state.acquireCounter[seat] += 1;
     cell.acquiredSeq = this.state.acquireCounter[seat];
-    const meta = cellMeta(cellId);
     const room = drawRoom(this.state.players[seat]);
-    this.state.players[seat].invoices.push(randomInvoice(seat, meta.catIdx, meta.num, cell.acquiredSeq, room));
+    this.state.players[seat].invoices.push(randomInvoice(seat, cell.catIdx, cell.num, cell.acquiredSeq, room));
     this.emit();
   }
 
@@ -490,7 +497,7 @@ class GameRoom {
 
   // Ends the current half: snapshots this half's per-player invoices + score into halfHistory.
   // After half 1, moves to a "halftime" transition screen (both press space to start half 2 --
-  // fresh boards/invoices, thief mechanic unlocked). After half 2, sums both halves' scores into
+  // fresh board/invoices, thief mechanic unlocked). After half 2, sums both halves' scores into
   // the grand total and moves to "end".
   _finishHalf() {
     const scores = this._computeHalfScores();
@@ -529,7 +536,7 @@ class GameRoom {
   }
 
   _restartGame() {
-    this.state.boards = { "1": freshBoard(), "2": freshBoard() };
+    this.state.board = freshBoard();
     this.state.acquireCounter = { "1": 0, "2": 0 };
     this.state.players = freshPlayers();
     this.state.elevator = freshElevator();
@@ -545,7 +552,7 @@ class GameRoom {
     this.touch();
     this.state.halftimeReady[seat] = true;
     if (!(this.state.halftimeReady["1"] && this.state.halftimeReady["2"])) { this.emit(); return; }
-    this.state.boards = { "1": freshBoard(), "2": freshBoard() };
+    this.state.board = freshBoard();
     this.state.acquireCounter = { "1": 0, "2": 0 };
     this.state.players = freshPlayers();
     this._startGame(); // phase="secure" again, fresh secure timer; also emits

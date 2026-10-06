@@ -8,7 +8,7 @@
 //     (render()가 #app을 통째로 갈아엎기 때문에, 미니게임을 #app 안에 두면 이게 깨진다)
 //   - 확보 시간이 끝나면 열려 있던 게임이 닫히는가
 //
-// 사전 준비: game-data.js의 SECURE_PHASE_MS를 임시로 25초로 줄이고(`25 * 1000`) build_client.py 재빌드 +
+// 사전 준비: game-data.js의 SECURE_PHASE_MS를 임시로 40초로 줄이고(`40 * 1000`) build_client.py 재빌드 +
 // 서버 재시작. 끝나면 반드시 원복 (HANDOVER 5.3).
 "use strict";
 const { chromium } = require("playwright");
@@ -135,7 +135,7 @@ async function main() {
   for (let i = 2; i < seq.length; i++) await p1.keyboard.press(KEY[seq[i]]);
   await p1.keyboard.press("Space");
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "pack closes after completion" });
-  await waitFor(async () => (await countSel(p1, '.cell.taken')) === 1, { label: "normal-1 secured on p1" });
+  await waitFor(async () => (await countSel(p1, '.cell.taken:not(.theirs)')) === 1, { label: "normal-1 secured on p1" });
   assert(await isTaken(p1, "normal-1"), "normal-1 must be the taken cell");
   assert(await isOpenable(p1, "normal-3"), "other cells stay untaken");
   log("박스 포장 완주 -> 레이어 닫힘 + normal-1 확보");
@@ -180,6 +180,39 @@ async function main() {
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "give-up closes" });
   assert(await isOpenable(p1, "fixed-floor-3"), "giving up must not secure the cell");
   log("포기 -> 레이어 닫힘, 칸 미확보");
+
+  // ---- h2. 공유 보드: 내가 게임을 하는 동안 상대가 먼저 끝내면 (2026-10-06) ----
+  // p2가 테스트 훅(__mgFinish)으로 칸을 "푼 것으로" 확보한다. 열어 둔 칸은 잠기지 않으므로 상대가 그 칸을 가져갈 수도 있다.
+  async function p2Finish(cellId) {
+    await clickSel(p2, `[data-action="open-cell"][data-cell="${cellId}"]`);
+    await waitFor(async () => (await countSel(p2, "#mg-layer .mg-root")) === 1, { label: `p2 opened ${cellId}` });
+    assert(await p2.evaluate(() => window.__mgFinish()), "p2 __mgFinish");
+    await waitFor(() => isTaken(p2, cellId).then((t) => t || countSel(p2, "#mg-layer .mg-root").then((n) => n === 0)), { label: `p2 finished ${cellId}` });
+  }
+  const toastText = (pg) => pg.evaluate(() => { const t = document.getElementById("toast"); return t ? t.textContent : ""; });
+  // (1) 확정 층수: 내가 하던 그 층을 상대가 먼저 확보 -> 내 게임이 닫히고 안내가 뜬다 (선점자 우선)
+  await clickSel(p1, '[data-action="open-cell"][data-cell="fixed-floor-4"]');
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-sticker")) === 1, { label: "p1 sticker for fixed-floor-4" });
+  await p2Finish("fixed-floor-4");
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "p1 game closes when the opponent takes the floor first" });
+  assert((await toastText(p1)).includes("먼저 확보"), "p1 should be told the floor was taken first, got: " + (await toastText(p1)));
+  assert((await countSel(p1, '.cell.theirs')) >= 1, "cells taken by the opponent are shown as 'theirs'");
+  assert((await countSel(p1, '[data-action="open-cell"][data-cell="fixed-floor-4"]')) === 0, "the floor taken by the opponent is no longer openable");
+  log("확정 층수: 상대가 먼저 확보하면 내 게임이 닫히고 안내(선점자 우선), 그 칸은 '상대'로 표시");
+  // (2) 일반 종류: 같은 종류 빈 칸이 남아 있으면 내 게임은 그대로, 마지막 개수까지 소진되면 닫힌다
+  await clickSel(p1, '[data-action="open-cell"][data-cell="fragile-2"]');
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-inspect")) === 1, { label: "p1 inspect for fragile-2" });
+  await p2Finish("fragile-2"); // p1이 열어 둔 칸 자체를 상대가 가져가도, 같은 종류 빈 칸이 있으니 내 게임은 유지
+  await sleep(400);
+  assert((await countSel(p1, "#mg-layer .mg-kind-inspect")) === 1, "my game must stay open while the category still has free cells");
+  for (const id of ["fragile-3", "fragile-4", "fragile-5"]) await p2Finish(id); // 이제 1개 남음 (fragile 6칸 - p1이 1, p2가 4 = 5 -> 남은 1)
+  assert((await countSel(p1, "#mg-layer .mg-kind-inspect")) === 1, "still one cell left -> game stays open");
+  await p2Finish("fragile-6"); // 마지막 1개까지 소진
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "p1 game closes when the category is exhausted" });
+  assert((await toastText(p1)).includes("소진"), "p1 should be told the category ran out, got: " + (await toastText(p1)));
+  const fragLeft = await p1.textContent('.board-row:nth-child(2) .cat-left');
+  assert(/남은\s*0\s*\/\s*6/.test(fragLeft), "깨지기 shows 남은 0 / 6, got " + fragLeft);
+  log("일반 종류: 같은 종류 빈 칸이 있는 동안은 게임 유지, 마지막 개수가 소진되면 닫히고 안내 + 남은 0 / 6 표시");
 
   // ---- i. 확보 시간이 끝나면 열려 있던 게임이 닫힌다 ----
   await clickSel(p1, '[data-action="open-cell"][data-cell="normal-3"]');

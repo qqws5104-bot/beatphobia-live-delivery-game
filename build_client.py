@@ -370,6 +370,11 @@ HEAD_HTML = """<!doctype html>
   .cell.taken::before, .cell.taken::after { opacity:0.5; }
   .cell.taken .cell-art { opacity:0.45; }
   .cell.taken .box-tag { opacity:0.3; }
+  /* 상대가 가져간 칸 (공유 보드, 2026-10-06): 더 흐리게, 내용은 안 보이고 "상대"만 */
+  .cell.theirs { opacity:0.5; filter:grayscale(0.55); }
+  .cell.theirs .cell-num { font-size:0.8rem; letter-spacing:0.08em; }
+  .board-label .cat-left { margin-top:0.15rem; font-family:var(--font-display); font-size:0.7rem; color:var(--muted); font-weight:700; }
+  .board-label .cat-left b { color:var(--ink); font-size:0.86rem; }
   .cell .invoice-label { position:relative; z-index:3; background:#f4f1ea; color:#20180f;
     border:2px solid #16233f; font-family:var(--font-display); font-weight:700; font-size:1.05rem; letter-spacing:0.02em;
     padding:0.3rem 0.63rem; border-radius:6px; box-shadow:0 3px 8px rgba(0,0,0,0.3); transform:rotate(-2deg); }
@@ -775,6 +780,28 @@ APP_JS_TEMPLATE = r"""
       + '</div></div></main>';
   }
 
+  // ---------- 공유 보드 헬퍼 (2026-10-06) ----------
+  function boardCell(st, id) {
+    var b = st.board || [];
+    for (var i = 0; i < b.length; i++) if (b[i].id === id) return b[i];
+    return null;
+  }
+  function boardLeft(st, catIdx) {
+    var n = 0, b = st.board || [];
+    for (var i = 0; i < b.length; i++) if (b[i].catIdx === catIdx && !b[i].taken) n++;
+    return n;
+  }
+  // 이 칸을 지금 눌러서 확보할 수 있는가. 확정 층수 택배는 그 층(칸)이 비어 있어야 하고, 나머지 종류는 같은 종류
+  // 빈 칸이 하나라도 있으면 된다(서버가 대신 빈 칸을 준다). 반환: null이면 가능, 아니면 사유 문구.
+  function cellBlockedReason(st, cellId) {
+    if (!st || st.phase !== "secure") return "확보 시간이 끝났어요";
+    var c = boardCell(st, cellId);
+    if (!c) return "확보 시간이 끝났어요";
+    var t = TYPES[c.catIdx];
+    if (t.fixedFloor) return c.taken ? "다른 사람이 먼저 확보한 층이에요" : null;
+    return boardLeft(st, c.catIdx) > 0 ? null : "이 종류 택배가 모두 소진됐어요";
+  }
+
   function renderBoard(st, seat) {
     var msLeft = st.secureEndsAt ? (st.secureEndsAt - Date.now()) : SECURE_PHASE_MS;
     var pct = Math.max(0, Math.min(100, (msLeft / SECURE_PHASE_MS) * 100));
@@ -785,12 +812,10 @@ APP_JS_TEMPLATE = r"""
       + '<div class="timer-bar"><i style="width:' + pct + '%"></i></div></div>';
 
     html += '<div class="card"><div class="board-grid">';
-    // each seat has its own independent board -- what I secure has zero effect on the other
-    // player's copy of the same cell id, so this is purely my own view, no cross-player state.
-    // Cells are grouped by type but the group offsets are no longer a fixed "x5" -- each type has
-    // its own `count` (확정 층수 택배 has 6, the rest have 5), so we look each cell up by id
-    // instead of assuming a fixed stride.
-    var myBoard = st.boards[seat];
+    // 2026-10-06: 보드는 두 플레이어가 공유한다 -- 종류별 6칸이 두 사람 합쳐서 6개다. 내가 확보한 칸은
+    // 내 송장(호수)이 찍히고, 상대가 확보한 칸은 흐리게 "상대"로만 보인다(그 칸의 송장 내용은 안 보임).
+    // 칸은 id로 찾는다 (종류별 count가 달라질 수 있어 고정 stride를 가정하지 않는다).
+    var myBoard = st.board;
     var myInvoices = st.players[seat].invoices;
     var boardById = {};
     myBoard.forEach(function (c) { boardById[c.id] = c; });
@@ -800,6 +825,7 @@ APP_JS_TEMPLATE = r"""
         + '<div class="cat-head"><span class="cat-icon" style="color:' + t.color + '">' + CAT_ICONS[catIdx] + '</span>'
         + '<span class="cat-name">' + esc(t.name) + '</span></div>'
         + '<div class="cat-game">' + esc(MINI_NAME[t.mini] || "우봉고") + '</div>'
+        + '<div class="cat-left">남은 <b>' + boardLeft(st, catIdx) + '</b> / ' + t.count + '</div>'
         + '<div class="price-grid">'
         + '<span class="pk">성공</span><span class="pv">' + fmtWon(t.reward) + '</span>'
         + '<span class="pk">실패</span><span class="pv">' + fmtWon(-t.penalty) + '</span>'
@@ -807,19 +833,22 @@ APP_JS_TEMPLATE = r"""
       for (var num = 0; num < t.count; num++) {
         var cell = boardById[t.key + "-" + (num + 1)];
         var taken = !!cell.taken;
+        var theirs = taken && cell.takenBy !== seat;
         // 확정 층수 택배는 칸의 num이 곧 배송 층이므로 지금 표기(층 이름) 그대로 유지하고,
         // 나머지 종류는 숫자 대신 A/B/C/D/E로 표기한다 (사용자 요청, 2026-08-27; 같은 날 다시 대문자로 변경).
         var faceHtml = t.fixedFloor
           ? '<span class="cell-num">' + esc(FLOORS[num]) + '</span>'
           : '<span class="cell-num">' + esc(CELL_LETTERS[num] || String(num + 1)) + '</span>';
-        if (taken) {
+        if (theirs) {
+          faceHtml = '<span class="cell-num">상대</span>'; // 상대가 가져간 칸 -- 어떤 송장인지는 안 보인다
+        } else if (taken) {
           // the invoice created at securing time shares this cell's acquiredSeq -- look it up to
           // show its destination as a shipping-label sticker instead of the plain index number.
           var inv = null;
           for (var i = 0; i < myInvoices.length; i++) { if (myInvoices[i].acquiredSeq === cell.acquiredSeq) { inv = myInvoices[i]; break; } }
           faceHtml = inv ? ('<span class="invoice-label">' + esc(roomCode(inv.floorIdx, inv.room)) + '</span>') : faceHtml;
         }
-        html += '<button class="cell' + (taken ? ' taken' : '') + '" style="background:' + t.color + ';color:' + t.ink + ';"'
+        html += '<button class="cell' + (taken ? ' taken' : '') + (theirs ? ' theirs' : '') + '" style="background:' + t.color + ';color:' + t.ink + ';"'
           + (taken ? '' : (' data-action="open-cell" data-cell="' + cell.id + '"'))
           + '>' + '<span class="cell-art" style="background-image:url(\'' + BOX_ART[catIdx] + '\')"></span>' + faceHtml
           + '<span class="box-tag"><span class="chip"></span><span class="lines"><span></span><span></span><span></span></span></span>'
@@ -888,16 +917,8 @@ APP_JS_TEMPLATE = r"""
   // 상태가 바뀔 때마다 호출: 확보 시간이 끝났거나 그 칸이 이미 확보됐으면(재접속 등) 열려 있던 게임을 닫는다.
   function syncMiniGame() {
     if (!mg) return;
-    var seat = mySeat();
-    var cell = null;
-    if (state && state.phase === "secure" && seat && state.boards && state.boards[seat]) {
-      cell = state.boards[seat].filter(function (c) { return c.id === mg.cellId; })[0] || null;
-    }
-    if (!cell || cell.taken) {
-      var ended = !state || state.phase !== "secure";
-      closeMiniGame();
-      if (ended) showToast("확보 시간이 끝났어요");
-    }
+    var why = cellBlockedReason(state, mg.cellId);
+    if (why) { closeMiniGame(); showToast(why); }
   }
 
   function renderPuzzleOverlay(st) {
@@ -1243,7 +1264,14 @@ APP_JS_TEMPLATE = r"""
       // 안 떠" 버그 리포트). 내 택배사가 실제로 정해져 있을 때만 대기 화면, 아니면 선택 화면.
       body += (state.courierPick && state.courierPick[seat]) ? renderLobby(state, seat) : renderSeatPicker();
     }
-    else if (state.phase === "secure") body += renderBoard(state, seat) + renderPuzzleOverlay(state);
+    else if (state.phase === "secure") {
+      // 우봉고 오버레이를 열어둔 사이 그 칸(또는 그 종류)이 상대에게 다 넘어갔으면 오버레이를 닫는다 (공유 보드).
+      if (local.openCellId) {
+        var blocked = cellBlockedReason(state, local.openCellId);
+        if (blocked) { local.openCellId = null; setTimeout(function () { showToast(blocked); }, 0); }
+      }
+      body += renderBoard(state, seat) + renderPuzzleOverlay(state);
+    }
     else if (state.phase === "elevator") body += renderElevator(state, seat);
     else if (state.phase === "halftime") body += renderHalftime(state, seat);
     else if (state.phase === "end") body += renderEnd(state, seat);
