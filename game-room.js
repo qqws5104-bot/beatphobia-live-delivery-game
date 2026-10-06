@@ -122,7 +122,7 @@ function freshElevator() {
 
 function initialState() {
   return {
-    phase: "lobby", // lobby -> secure -> elevator -> halftime -> secure -> elevator -> end
+    phase: "lobby", // lobby -> secure -> elevator -> halftime -> secure -> elevator -> end -> (재시작 시) secure ...
     ready: { "1": false, "2": false },
     seatOwners: { "1": null, "2": null },
     // courierPick: 좌석당 고른 가상 택배사 key(COURIERS 참고, null이면 아직 미선택). 좌석 배정과
@@ -138,6 +138,10 @@ function initialState() {
     halftimeReady: { "1": false, "2": false },
     halfHistory: [], // [{half, players, scores}, ...] -- snapshot taken at the end of each half
     scores: null, // grand total across both halves, set once phase becomes "end"
+    // restartReady: 종료 화면의 "다시 시작" 버튼용 준비 게이트 (2026-08-28 신설). phase가 "end"일
+    // 때만 의미가 있고, 그 외엔 항상 비어 있는 상태({false,false})로 둔다 -- restartGame()이 매번
+    // 리셋하므로 다음 재시작 때도 깨끗하게 시작한다.
+    restartReady: { "1": false, "2": false },
   };
 }
 
@@ -508,6 +512,32 @@ class GameRoom {
       this.state.phase = "end";
       this.emit();
     }
+  }
+
+  // ---- 2026-08-28 신설: 종료 화면의 "다시 시작" 버튼 -- 같은 방(같은 링크)에서 좌석/택배사를 다시
+  // 고를 필요 없이 곧바로 새 게임을 시작한다. halftimeReady와 같은 "둘 다 눌러야" 게이트 패턴이다
+  // (한쪽이 실수로 눌러도 상대 동의 없이 화면이 바뀌지 않도록). seatOwners/courierPick은 그대로
+  // 유지하고(같은 택배사로 계속 플레이), 그 외 게임 진행 상태(보드/송장/엘리베이터/하프/스코어
+  // 이력)만 완전히 초기값으로 되돌린 뒤 _startGame()으로 바로 전반 secure 페이즈에 진입한다 --
+  // 로비 화면(택배사 재선택)을 다시 거치지 않는다.
+  restartReady(seat) {
+    if (this.state.phase !== "end") return;
+    this.touch();
+    this.state.restartReady[seat] = true;
+    if (!(this.state.restartReady["1"] && this.state.restartReady["2"])) { this.emit(); return; }
+    this._restartGame();
+  }
+
+  _restartGame() {
+    this.state.boards = { "1": freshBoard(), "2": freshBoard() };
+    this.state.acquireCounter = { "1": 0, "2": 0 };
+    this.state.players = freshPlayers();
+    this.state.elevator = freshElevator();
+    this.state.half = 1;
+    this.state.halfHistory = [];
+    this.state.scores = null;
+    this.state.restartReady = { "1": false, "2": false };
+    this._startGame(); // phase -> "secure", secure 타이머 새로 시작, emit까지 포함
   }
 
   halftimeReady(seat) {
