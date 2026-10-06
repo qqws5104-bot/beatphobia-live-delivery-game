@@ -468,11 +468,21 @@ HEAD_HTML = """<!doctype html>
   .winner-banner { text-align:center; padding:1.4rem; font-family:var(--font-display); font-size:1.6rem; font-weight:700; color:var(--gold); }
   /* 2026-08-28: 종료 화면 "다시 시작" 게이트 -- 결과 표들 사이에서도 눈에 띄도록 가운데 정렬 + 폭 제한. */
   .restart-gate { max-width:420px; margin:0 auto 1.4rem; text-align:center; }
+  /* 2026-10-06: 확보 미니게임 레이어. #app 바깥(body 직속)에 둔다 -- render()가 상태 브로드캐스트마다
+     #app 전체를 innerHTML로 갈아엎기 때문에, 미니게임을 #app 안에 넣으면 상대가 택배를 확보하는 것 같은
+     아무 브로드캐스트만 와도 진행 중이던 게임이 통째로 날아간다. 게임 자체의 스타일은 minigames.css. */
+  #mg-layer { overflow-y:auto; align-items:flex-start; }
+  #mg-layer .mg-wrap { margin:auto; width:100%; max-width:640px; }
+  #mg-layer .mg-clock { text-align:center; margin:0 0 0.6rem; color:var(--bg); font-family:var(--font-display); font-size:0.9rem; letter-spacing:0.04em; }
+  #mg-layer .mg-clock b { margin-left:0.35rem; font-size:1.15rem; color:var(--gold); font-variant-numeric:tabular-nums; }
+  #mg-layer .mg-clock.low b { color:#ff7a66; }
+  .cat-game { margin-top:0.15rem; font-size:0.68rem; font-weight:600; color:var(--muted); letter-spacing:0.02em; }
   .toast { position:fixed; left:50%; bottom:1.4rem; transform:translateX(-50%); background:var(--panel); border:1px solid var(--panel-line);
     padding:0.6rem 1.1rem; border-radius:999px; font-size:0.85rem; z-index:80; box-shadow:0 10px 30px rgba(0,0,0,0.4); }
 </style>
 </head><body>
 <div id="app"></div>
+<div class="overlay hidden" id="mg-layer"></div>
 """
 
 APP_JS_TEMPLATE = r"""
@@ -614,6 +624,7 @@ APP_JS_TEMPLATE = r"""
           ["1", "2"].forEach(function (s) { if (state.seatOwners[s] === CLIENT_ID) setMySeat(s); });
         }
         render();
+        syncMiniGame();
       }
       else if (msg.type === "error") { handleWsError(msg); }
     };
@@ -774,6 +785,7 @@ APP_JS_TEMPLATE = r"""
       html += '<div class="board-label" style="border-color:' + t.color + ';">'
         + '<div class="cat-head"><span class="cat-icon" style="color:' + t.color + '">' + CAT_ICONS[catIdx] + '</span>'
         + '<span class="cat-name">' + esc(t.name) + '</span></div>'
+        + '<div class="cat-game">' + esc(MINI_NAME[t.mini] || "우봉고") + '</div>'
         + '<div class="price-grid">'
         + '<span class="pk">성공</span><span class="pv">' + fmtWon(t.reward) + '</span>'
         + '<span class="pk">실패</span><span class="pv">' + fmtWon(-t.penalty) + '</span>'
@@ -804,6 +816,74 @@ APP_JS_TEMPLATE = r"""
     html += '</div></div>';
     html += '</main>';
     return html;
+  }
+
+  // ---------- 확보 미니게임 (2026-10-06) ----------
+  // TYPES[catIdx].mini(game-data.js)가 있는 종류의 칸은 우봉고 대신 minigames.js의 게임을 띄운다
+  // (null이면 기존 우봉고 이미지 + "완료" 버튼). 게임은 #app이 아니라 #mg-layer에 mount한다 -- 이유는 CSS 주석 참고.
+  // 서버는 이 게임을 모른다: 클라이언트가 끝까지 풀었다고 판정하면 예전과 똑같은 secure-cell 하나만 보낸다.
+  var MINI_NAME = { pack: "박스 포장", inspect: "이상 확인", sticker: "송장 붙이기" };
+  // ?mgtest=1 이면 불량 검수의 정답 칸에 data-defect를 노출한다 (자동 테스트 전용 -- 일반 플레이엔 안 붙음).
+  var TEST_HOOKS = /[?&]mgtest=1(&|$)/.test(location.search);
+  var mg = null; // { cellId, ctl }
+
+  function closeMiniGame() {
+    if (mg) { try { mg.ctl.destroy(); } catch (e) { /* ignore */ } mg = null; }
+    var layer = document.getElementById("mg-layer");
+    if (layer) { layer.classList.add("hidden"); layer.innerHTML = ""; }
+  }
+  function openMiniGame(cellId) {
+    var meta = cellMeta(cellId, state.half);
+    var t = TYPES[meta.catIdx];
+    closeMiniGame();
+    var layer = document.getElementById("mg-layer");
+    layer.innerHTML = '<div class="mg-wrap"><div class="mg-clock">확보 시간<b id="mg-clock">--:--</b></div><div id="mg-host"></div></div>';
+    layer.classList.remove("hidden");
+    mg = {
+      cellId: cellId,
+      ctl: MiniGames.start(document.getElementById("mg-host"), {
+        kind: t.mini, level: t.miniLevel,
+        // 확정 층수 택배는 칸이 곧 배송 층이라 송장에 그 층을 그대로 찍는다 (호수는 확보 순간 서버가 정하므로 표기 안 함).
+        label: t.fixedFloor ? FLOORS[meta.num] : null,
+        testHooks: TEST_HOOKS,
+        onDone: function () { var id = cellId; closeMiniGame(); send({ type: "secure-cell", seat: mySeat(), cellId: id }); },
+        onCancel: function () { closeMiniGame(); },
+      }),
+    };
+    // 자동 테스트 전용(?mgtest=1): 게임을 실제로 풀지 않고 "풀었다"로 처리 -- 많은 칸을 한꺼번에 확보해야 하는
+    // 엘리베이터 단계 테스트가 확보 시간 안에 끝나게 하려는 용도다. 미니게임 자체는 test_minigames.js와
+    // test_minigames_live.js가 실제로 플레이하며 검증한다. 일반 접속에는 이 함수가 생기지 않는다.
+    if (TEST_HOOKS) {
+      window.__mgFinish = function () {
+        if (!mg) return false;
+        var id = mg.cellId;
+        closeMiniGame();
+        send({ type: "secure-cell", seat: mySeat(), cellId: id });
+        return true;
+      };
+    }
+    updateMiniClock();
+  }
+  function updateMiniClock() {
+    var el = document.getElementById("mg-clock");
+    if (!el || !state || state.phase !== "secure" || !state.secureEndsAt) return;
+    var left = state.secureEndsAt - Date.now();
+    el.textContent = fmtClock(Math.max(0, left));
+    el.parentNode.classList.toggle("low", left < 30000);
+  }
+  // 상태가 바뀔 때마다 호출: 확보 시간이 끝났거나 그 칸이 이미 확보됐으면(재접속 등) 열려 있던 게임을 닫는다.
+  function syncMiniGame() {
+    if (!mg) return;
+    var seat = mySeat();
+    var cell = null;
+    if (state && state.phase === "secure" && seat && state.boards && state.boards[seat]) {
+      cell = state.boards[seat].filter(function (c) { return c.id === mg.cellId; })[0] || null;
+    }
+    if (!cell || cell.taken) {
+      var ended = !state || state.phase !== "secure";
+      closeMiniGame();
+      if (ended) showToast("확보 시간이 끝났어요");
+    }
   }
 
   function renderPuzzleOverlay(st) {
@@ -1187,7 +1267,12 @@ APP_JS_TEMPLATE = r"""
       send({ type: "pick-courier", courier: t.getAttribute("data-courier") });
       return;
     }
-    if (action === "open-cell") { local.openCellId = t.getAttribute("data-cell"); render(); return; }
+    if (action === "open-cell") {
+      var openId = t.getAttribute("data-cell");
+      var openMeta = cellMeta(openId, state.half);
+      if (openMeta && TYPES[openMeta.catIdx].mini && window.MiniGames) { openMiniGame(openId); return; }
+      local.openCellId = openId; render(); return;
+    }
     if (action === "give-up") { local.openCellId = null; render(); return; }
     if (action === "complete-cell") {
       var cid = t.getAttribute("data-cell");
@@ -1254,6 +1339,7 @@ APP_JS_TEMPLATE = r"""
   // via its own timers, so there is nothing for the client to "submit" or auto-advance here ----------
   setInterval(function () {
     if (!state) return;
+    updateMiniClock();
     if (state.phase === "secure" && state.secureEndsAt) {
       var msLeft = state.secureEndsAt - Date.now();
       var barI = document.querySelector(".timer-bar > i");
@@ -1305,11 +1391,20 @@ APP_JS = (APP_JS_TEMPLATE
           .replace("@@HALVES@@", str(HALVES))
           .replace("@@THIEF_PLACE_MS@@", str(THIEF_PLACE_MS)))
 
+# 2026-10-06: 확보 미니게임(박스 포장/불량 검수/송장 붙이기) 모듈을 그대로 인라인한다. 단독 시험장
+# (build_minigame_proto.py)이 쓰는 것과 같은 파일이라, 시험장에서 확인한 동작이 게임에서도 똑같다.
+_here = os.path.dirname(os.path.abspath(__file__))
+MINIGAMES_CSS = open(os.path.join(_here, "minigames.css"), encoding="utf-8").read()
+MINIGAMES_JS = open(os.path.join(_here, "minigames.js"), encoding="utf-8").read()
+assert "</script" not in MINIGAMES_JS and "</style" not in MINIGAMES_CSS
+
 full_html = (
-    HEAD_HTML
+    HEAD_HTML.replace("</style>\n</head>", MINIGAMES_CSS + "\n</style>\n</head>", 1)
+    + '<script>' + MINIGAMES_JS + "</script>\n"
     + '<script>' + APP_JS + "</script>\n"
     + "</body></html>\n"
 )
+assert MINIGAMES_CSS in full_html, "minigames.css가 HTML에 들어가지 않았다 (HEAD_HTML의 </style></head> 자리를 못 찾음)"
 
 os.makedirs(os.path.dirname(OUT_HTML), exist_ok=True)
 with open(OUT_HTML, "w", encoding="utf-8") as f:

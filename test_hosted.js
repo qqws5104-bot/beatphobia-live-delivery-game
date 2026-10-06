@@ -51,6 +51,17 @@ async function waitFor(fn, { timeout = 10000, interval = 100, label = "condition
   }
 }
 
+// 방금 연 칸을 "풀었다"로 처리한다: 미니게임 칸(박스 포장/이상 확인/송장 붙이기)은 테스트 훅으로,
+// 우봉고 칸(귀중품)은 기존 "완료" 버튼으로.
+async function finishOpenCell(page) {
+  return page.evaluate(() => {
+    if (document.querySelector(".mg-root") && window.__mgFinish) return window.__mgFinish();
+    const b = document.querySelector('[data-action="complete-cell"]');
+    if (b) { b.click(); return true; }
+    return false;
+  });
+}
+
 async function main() {
   const browser = await chromium.launch({ executablePath: "/opt/pw-browsers/chromium" });
 
@@ -64,7 +75,9 @@ async function main() {
   log("room code:", room);
   await seedCtx.close();
 
-  const roomUrl = BASE + "/?room=" + room;
+  // 2026-10-06: ?mgtest=1 -- 미니게임 칸을 실제로 풀지 않고 window.__mgFinish()로 "풀었다" 처리할 수 있게 하는
+  // 테스트 전용 훅 (확보 시간이 6초라 17개 칸을 진짜로 풀 수 없다). 실제 플레이는 test_minigames_live.js 담당.
+  const roomUrl = BASE + "/?room=" + room + "&mgtest=1";
 
   // ---- two separate "devices" ----
   const ctx1 = await browser.newContext();
@@ -148,7 +161,8 @@ async function main() {
   // ---- give up: opening a cell and clicking give-up must NOT mark it taken ----
   await clickSel(p1, '[data-action="open-cell"][data-cell="normal-1"]');
   await waitFor(async () => (await countSel(p1, ".overlay:not(.hidden)")) > 0, { label: "p1 puzzle overlay opens" });
-  await clickSel(p1, '[data-action="give-up"]');
+  // 일반택배 칸은 이제 미니게임(박스 포장) -- 포기 버튼은 .mg-giveup
+  await clickSel(p1, '.mg-giveup');
   await p1.waitForTimeout(200);
   const normal1StillOpen = await countSel(p1, '[data-action="open-cell"][data-cell="normal-1"]');
   const takenCountAfterGiveUp = await countSel(p1, '.cell.taken');
@@ -162,10 +176,7 @@ async function main() {
     clickSel(p2, '[data-action="open-cell"][data-cell="normal-1"]'),
   ]);
   await p1.waitForTimeout(150);
-  await Promise.all([
-    clickSel(p1, '[data-action="complete-cell"]'),
-    clickSel(p2, '[data-action="complete-cell"]'),
-  ]);
+  await Promise.all([finishOpenCell(p1), finishOpenCell(p2)]);
   await p1.waitForTimeout(200);
   const p1Normal1Taken = (await countSel(p1, '.cell.taken')) >= 1;
   const p2Normal1Taken = (await countSel(p2, '.cell.taken')) >= 1;
@@ -178,9 +189,7 @@ async function main() {
     if (count === 0) return false;
     await clickSel(p, sel);
     await p.waitForTimeout(150);
-    const has = await countSel(p, '[data-action="complete-cell"]');
-    if (has) { await clickSel(p, '[data-action="complete-cell"]'); return true; }
-    return false;
+    return finishOpenCell(p);
   }
 
   // ---- 확정 층수 택배(fixed-floor) cells must show their bound floor label even before securing,

@@ -50,7 +50,7 @@ async function main() {
   const room = new URL(seedPage.url()).searchParams.get("room");
   await seedCtx.close();
   log("room:", room);
-  const roomUrl = BASE + "/?room=" + room;
+  const roomUrl = BASE + "/?room=" + room + "&mgtest=1"; // 미니게임 칸 빠른 처리용 테스트 훅
 
   const ctx1 = await browser.newContext(), ctx2 = await browser.newContext();
   const p1 = await ctx1.newPage(), p2 = await ctx2.newPage();
@@ -98,8 +98,8 @@ async function main() {
 
   // p2가 확정 층수 택배의 B1칸(fixed-floor-1)을 확보 -- floorIdx가 확정적으로 0(B1)이 된다.
   await clickSel(p2, '[data-action="open-cell"][data-cell="fixed-floor-1"]');
-  await waitFor(async () => (await countSel(p2, ".overlay:not(.hidden)")) > 0, { label: "p2 퍼즐 오버레이" });
-  await clickSel(p2, '[data-action="complete-cell"]');
+  await waitFor(async () => (await countSel(p2, ".mg-root")) > 0, { label: "p2 확정 층수 미니게임(송장 붙이기) 열림" });
+  await p2.evaluate(() => window.__mgFinish());
   await waitFor(async () => (await countSel(p2, ".cell.taken")) > 0, { label: "p2 fixed-floor-1 확보 확인" });
   log("p2가 B1행 확정 층수 택배 확보 완료");
 

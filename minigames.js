@@ -1,4 +1,4 @@
-/* minigames.js -- 택배 확보 미니게임 3종 (박스 포장 / 불량 검수 / 송장 붙이기)
+/* minigames.js -- 택배 확보 미니게임 3종 (박스 포장 / 이상 확인 / 송장 붙이기)
  *
  * 바닐라 JS, 의존성 없음. 게임 본체(build_client.py)에 그대로 인라인하거나, 단독 시험장 페이지에서
  * 똑같이 쓸 수 있게 만들었다.
@@ -19,7 +19,7 @@
 
   var KINDS = {
     pack:    { name: "박스 포장" },
-    inspect: { name: "불량 검수" },
+    inspect: { name: "이상 확인" },
     sticker: { name: "송장 붙이기" },
   };
   var LEVEL_NAME = ["쉬움", "보통", "어려움"];
@@ -172,79 +172,136 @@
   }
 
   // ======================================================================
-  // 불량 검수 -- 상자들 중 깨지거나 찌그러진 것을 전부 찾아 클릭
+  // 이상 확인 (택배 검수) -- 벨트로 들어오는 택배를 종류에 맞는 칸으로 보내고, 이상한 건 폐기
+  //   ← 일반   ↓ 깨지기   → 귀중품   SPACE 이상 폐기(찌그러지거나 갈라진 택배)
+  // 2026-10-06: 처음엔 "여러 상자 중 불량 찾기" 격자였는데, 사용자가 레퍼런스(빵공장 아르바이트 영상)를
+  // 주면서 "각자 맞는 분류로 누르고 이상한 택배는 지우는 느낌"으로 바꾸라고 해서 벨트 방식으로 다시 만들었다.
+  // 분류 3종은 게임의 실제 카테고리(일반/깨지기/귀중품)와 같은 색을 쓴다.
+  // 내부 kind 키는 그대로 "inspect" (game-data.js의 TYPES.mini와 시험장이 이 이름을 쓴다).
   // ======================================================================
   var INSPECT_CFG = [
-    { cols: 3, rows: 3, defects: 2, crack: 3.4, dent: 0.42, decoy: 0 },
-    { cols: 4, rows: 3, defects: 3, crack: 2.4, dent: 0.3, decoy: 0.3 },
-    { cols: 5, rows: 4, defects: 4, crack: 1.7, dent: 0.2, decoy: 0.4 },
+    { n: 6,  bad: 1, crack: 3.4, dent: 0.42, decoy: 0 },
+    { n: 8,  bad: 2, crack: 2.4, dent: 0.30, decoy: 0.3 },
+    { n: 10, bad: 3, crack: 1.7, dent: 0.20, decoy: 0.4 },
   ];
-  var TONES = [["#c9a576", "#ddc08f"], ["#c19a68", "#d6b684"], ["#d2b183", "#e4c99c"]];
+  var CLASSES = [
+    { key: "left",  name: "일반",   tag: "일반",   color: "#C9A576", light: "#ddc08f", keyGlyph: "←" },
+    { key: "down",  name: "깨지기", tag: "깨짐주의", color: "#C7E29A", light: "#dcefb8", keyGlyph: "↓" },
+    { key: "right", name: "귀중품", tag: "귀중품", color: "#F0B84A", light: "#f7d37e", keyGlyph: "→" },
+  ];
+  var ACT_CLASS = { left: 0, down: 1, right: 2 };
 
-  function boxSvg(isDefect, cfg) {
-    var tone = TONES[rand(TONES.length)];
-    var tapeX = 20 + rand(46);
-    var lx = 56 + rand(8), ly = 58 + rand(5);
+  // 택배 하나를 그린다: 종류별 색/테이프(일반=베이지, 깨지기=빨강 줄무늬, 귀중품=금색 리본) + 이름표.
+  // 이상 택배는 같은 종류 그림 위에 균열과 찌그러진 모서리를 얹는다(난이도가 오를수록 균열이 얇아진다).
+  function pkgSvg(clsIdx, isBad, cfg) {
+    var C = CLASSES[clsIdx];
+    var tapeX = 22 + rand(40);
     var s = '<svg viewBox="0 0 100 100" aria-hidden="true">'
-      + '<ellipse cx="50" cy="88" rx="34" ry="5" fill="rgba(43,29,18,.18)"/>'
-      + '<rect x="14" y="30" width="72" height="54" rx="3" fill="' + tone[0] + '" stroke="#7a5a30" stroke-width="1.6"/>'
-      + '<rect x="14" y="30" width="72" height="12" rx="3" fill="' + tone[1] + '" stroke="#7a5a30" stroke-width="1.6"/>'
-      + '<rect x="' + tapeX + '" y="30" width="12" height="26" fill="#ead8b0" opacity=".92"/>'
-      + '<rect x="' + lx + '" y="' + ly + '" width="22" height="14" rx="1.5" fill="#fffcf4" stroke="#8a7256" stroke-width="1"/>'
-      + '<path d="M' + (lx + 3) + ' ' + (ly + 4) + 'h16M' + (lx + 3) + ' ' + (ly + 8) + 'h11M' + (lx + 3) + ' ' + (ly + 11) + 'h14" stroke="#8a7256" stroke-width="1" fill="none"/>';
-    if (isDefect) {
-      var cx = 22 + rand(52), corner = rand(4);
-      s += '<path d="M' + cx + ' 30 l5 9 l-7 8 l6 9 l-4 7" stroke="#4a2d12" stroke-width="' + cfg.crack + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
-      var dent = [
-        "14,30 32,30 14,48", "86,30 68,30 86,48", "14,84 32,84 14,66", "86,84 68,84 86,66",
-      ][corner];
-      s += '<polygon points="' + dent + '" fill="rgba(60,35,10,' + cfg.dent + ')"/>';
+      + '<ellipse cx="50" cy="90" rx="36" ry="5" fill="rgba(43,29,18,.2)"/>'
+      + '<rect x="12" y="26" width="76" height="60" rx="3" fill="' + C.color + '" stroke="#6b4e26" stroke-width="1.8"/>'
+      + '<rect x="12" y="26" width="76" height="13" rx="3" fill="' + C.light + '" stroke="#6b4e26" stroke-width="1.8"/>';
+    if (clsIdx === 0) {
+      s += '<rect x="' + tapeX + '" y="26" width="13" height="30" fill="#ead8b0" opacity=".95"/>';
+    } else if (clsIdx === 1) {
+      s += '<rect x="' + tapeX + '" y="26" width="13" height="30" fill="#d6452f"/>'
+        + '<path d="M' + tapeX + ' 34l13-6M' + tapeX + ' 42l13-6M' + tapeX + ' 50l13-6" stroke="#fff" stroke-width="2.4"/>';
+    } else {
+      s += '<rect x="45" y="26" width="10" height="60" fill="#b8841f"/><rect x="12" y="52" width="76" height="9" fill="#b8841f"/>'
+        + '<circle cx="50" cy="56" r="6.5" fill="#e0a82e" stroke="#8a5f12" stroke-width="1.4"/>';
+    }
+    s += '<rect x="22" y="68" width="56" height="15" rx="2.5" fill="#fffcf4" stroke="#6b4e26" stroke-width="1.2"/>'
+      + '<text x="50" y="79.5" text-anchor="middle" font-size="11" font-weight="800" fill="#2b1d12">' + C.tag + '</text>';
+    if (isBad) {
+      var cx = 24 + rand(50), corner = rand(4);
+      s += '<path d="M' + cx + ' 26 l5 10 l-8 9 l7 10 l-5 8" stroke="#3b210a" stroke-width="' + cfg.crack + '" fill="none" stroke-linecap="round" stroke-linejoin="round"/>';
+      var dent = ["12,26 34,26 12,48", "88,26 66,26 88,48", "12,86 34,86 12,64", "88,86 66,86 88,64"][corner];
+      s += '<polygon points="' + dent + '" fill="rgba(60,25,10,' + cfg.dent + ')"/>';
     } else if (cfg.decoy && Math.random() < cfg.decoy) {
-      // 멀쩡한 상자에도 가벼운 스크래치를 넣어서 "선 하나 있으면 불량"으로 찍지 못하게 한다
-      var sy = 50 + rand(24), sx = 20 + rand(40);
-      s += '<path d="M' + sx + ' ' + sy + 'h' + (8 + rand(8)) + '" stroke="rgba(74,45,18,.38)" stroke-width="1.1" stroke-linecap="round" fill="none"/>';
+      // 멀쩡한 택배에도 가벼운 스크래치를 넣어서 "선이 보이면 폐기"로 찍지 못하게 한다
+      var sy = 46 + rand(16), sx = 18 + rand(46);
+      s += '<path d="M' + sx + ' ' + sy + 'h' + (7 + rand(8)) + '" stroke="rgba(60,33,10,.36)" stroke-width="1.1" stroke-linecap="round" fill="none"/>';
     }
     return s + "</svg>";
   }
 
+  var INSPECT_LOCK_MS = 450; // 틀린 키 뒤 잠깐 멈춤 -- 아무 키나 연타해서 4분의 1 확률로 뚫는 걸 막는다
+
   function inspectGame(body, c) {
     var cfg = INSPECT_CFG[c.level - 1];
-    var total = cfg.cols * cfg.rows;
-    var defectSet = {};
-    shuffle(Array.apply(null, { length: total }).map(function (_, i) { return i; }))
-      .slice(0, cfg.defects).forEach(function (i) { defectSet[i] = true; });
-    var found = 0, locked = false;
+    var badAt = {};
+    shuffle(Array.apply(null, { length: cfg.n }).map(function (_, i) { return i; })).slice(0, cfg.bad).forEach(function (i) { badAt[i] = true; });
+    var items = [];
+    for (var i = 0; i < cfg.n; i++) items.push({ cls: rand(3), bad: !!badAt[i] });
+    var expected = items.map(function (it) { return it.bad ? "space" : CLASSES[it.cls].key; });
+    if (c.testHooks) body.setAttribute("data-seq", expected.join(","));
 
-    body.innerHTML = '<p class="mg-progress">파손된 상자 <em class="mg-found">0</em> / ' + cfg.defects + "개 찾음</p>"
-      + '<div class="mg-grid" style="--cols:' + cfg.cols + '"></div>';
-    var grid = body.querySelector(".mg-grid");
-    var foundEl = body.querySelector(".mg-found");
+    var binsHtml = CLASSES.map(function (k) {
+      return '<button type="button" class="mg-bin" data-a="' + k.key + '" style="--bin:' + k.color + '" aria-label="' + k.name + '">'
+        + '<span class="mg-bin-k">' + k.keyGlyph + '</span><span class="mg-bin-n">' + k.name + '</span></button>';
+    }).join("");
+    body.innerHTML = '<div class="mg-belt"><div class="mg-gate" aria-hidden="true"><span>검수대</span></div><div class="mg-queue"></div></div>'
+      + '<p class="mg-progress">처리 <em class="mg-found">0</em> / ' + cfg.n + '개</p>'
+      + '<p class="mg-freeze-note"></p>'
+      + '<div class="mg-bins">' + binsHtml + '</div>'
+      + '<button type="button" class="mg-bin mg-discard" data-a="space" aria-label="이상 폐기"><span class="mg-bin-k">SPACE</span><span class="mg-bin-n">이상한 택배 폐기</span></button>';
 
-    for (var i = 0; i < total; i++) {
-      (function (i) {
-        var t = el("button", "mg-tile", boxSvg(!!defectSet[i], cfg));
-        t.type = "button";
-        t.setAttribute("aria-label", "상자 " + (i + 1));
-        if (c.testHooks && defectSet[i]) t.setAttribute("data-defect", "1");
-        t.addEventListener("click", function () {
-          if (locked || c.isFinished() || t.classList.contains("is-found")) return;
-          if (defectSet[i]) {
-            t.classList.add("is-found");
-            found++;
-            foundEl.textContent = found;
-            if (found === cfg.defects) c.later(c.finish, 320);
-          } else {
-            c.addMistake();
-            locked = true;
-            grid.classList.add("is-locked");
-            restartAnim(t, "is-wrong");
-            c.later(function () { t.classList.remove("is-wrong"); locked = false; grid.classList.remove("is-locked"); }, 600);
-          }
-        });
-        grid.appendChild(t);
-      })(i);
+    var queue = body.querySelector(".mg-queue");
+    var doneEl = body.querySelector(".mg-found");
+    var note = body.querySelector(".mg-freeze-note");
+    var els = items.map(function (it, i) {
+      var d = el("div", "mg-pkg", pkgSvg(it.cls, it.bad, cfg));
+      d.style.setProperty("--i", i);
+      queue.appendChild(d);
+      return d;
+    });
+    var idx = 0, locked = false;
+    function setFront() {
+      queue.style.setProperty("--shift", idx);
+      els.forEach(function (d, i) { d.classList.toggle("is-front", i === idx); });
     }
-    return { hint: function () { return "깨지거나 찌그러진 상자를 전부 찾아 클릭하세요. 멀쩡한 상자를 누르면 잠깐 멈춰요."; } };
+
+    function act(a) {
+      if (locked || c.isFinished() || idx >= cfg.n) return;
+      var btn = body.querySelector('.mg-bin[data-a="' + a + '"]');
+      if (a === expected[idx]) {
+        var d = els[idx];
+        d.classList.add(items[idx].bad ? "is-zap" : "is-sent");
+        if (btn) restartAnim(btn, "is-ok");
+        idx++;
+        doneEl.textContent = idx;
+        setFront();
+        if (idx === cfg.n) c.later(c.finish, 380);
+        return;
+      }
+      // 오입력: 실수 +1, 앞 택배는 그대로 남고 잠깐 멈춘다
+      c.addMistake();
+      locked = true;
+      restartAnim(els[idx], "mg-shake");
+      if (btn) restartAnim(btn, "is-wrong");
+      note.textContent = items[idx].bad && a !== "space" ? "이상한 택배예요 — 폐기!" : (a === "space" ? "멀쩡한 택배예요" : "다른 칸이에요");
+      c.later(function () { locked = false; note.textContent = ""; }, INSPECT_LOCK_MS);
+    }
+
+    function onKey(e) {
+      if (e.repeat || c.isFinished()) return;
+      var a = null;
+      if (e.key === "ArrowLeft") a = "left";
+      else if (e.key === "ArrowDown") a = "down";
+      else if (e.key === "ArrowRight") a = "right";
+      else if (e.code === "Space" || e.key === " ") a = "space";
+      else if (e.key === "ArrowUp") { e.preventDefault(); return; } // 쓰지 않는 키지만 화면이 스크롤되지 않게
+      if (!a) return;
+      e.preventDefault();
+      e.stopPropagation();
+      act(a);
+    }
+    document.addEventListener("keydown", onKey, true);
+    c.onCleanup(function () { document.removeEventListener("keydown", onKey, true); });
+    Array.prototype.forEach.call(body.querySelectorAll(".mg-bin"), function (b) {
+      b.addEventListener("pointerdown", function (e) { e.preventDefault(); act(b.getAttribute("data-a")); });
+    });
+    setFront();
+    return { hint: function () { return "검수대에 온 택배를 종류에 맞는 칸으로 보내세요 (← 일반 · ↓ 깨지기 · → 귀중품). 찌그러지거나 갈라진 택배는 스페이스로 폐기! 틀리면 잠깐 멈춰요."; } };
   }
 
   // ======================================================================

@@ -137,38 +137,71 @@ async function main() {
     log("pack: 너무 이른 스페이스=오입력, 키 꾹 누름(repeat)은 무시");
   }
 
-  // ================= 불량 검수 =================
-  const INSPECT = [{ tiles: 9, defects: 2 }, { tiles: 12, defects: 3 }, { tiles: 20, defects: 4 }];
+  // ================= 이상 확인 (벨트 분류) =================
+  const INSPECT = [{ n: 6, bad: 1 }, { n: 8, bad: 2 }, { n: 10, bad: 3 }];
+  const inspectSeq = async () => (await page.getAttribute(".mg-body", "data-seq")).split(",");
   for (let lv = 1; lv <= 3; lv++) {
     await launch("inspect", lv);
-    const tiles = await page.$$(".mg-tile");
-    const defects = await page.$$(".mg-tile[data-defect]");
-    assert(tiles.length === INSPECT[lv - 1].tiles, `inspect L${lv} tile count ${tiles.length}`);
-    assert(defects.length === INSPECT[lv - 1].defects, `inspect L${lv} defect count ${defects.length}`);
+    const seq = await inspectSeq();
+    assert(seq.length === INSPECT[lv - 1].n, `inspect L${lv} should queue ${INSPECT[lv - 1].n} packages, got ${seq.length}`);
+    assert(seq.filter((a) => a === "space").length === INSPECT[lv - 1].bad, `inspect L${lv} should have ${INSPECT[lv - 1].bad} anomalies`);
+    assert((await page.$$(".mg-pkg")).length === seq.length, "every queued package is rendered");
     if (lv === 2) await shot("inspect_L2_start");
-    for (let i = 0; i < defects.length; i++) {
-      await defects[i].click();
-      if (lv === 2 && i === 1) await shot("inspect_L2_mid");
+    for (let i = 0; i < seq.length; i++) {
+      await page.keyboard.press(KEY[seq[i]]);
+      if (lv === 2 && i === 2) await shot("inspect_L2_mid");
     }
     await waitFor(result, { label: `inspect L${lv} done` });
     const r = await result();
     assert(r.ok && r.mistakes === 0, "inspect clean run: " + JSON.stringify(r));
-    log(`inspect L${lv}: ${INSPECT[lv - 1].tiles}칸 중 불량 ${INSPECT[lv - 1].defects}개 클리어 (${r.ms}ms)`);
+    log(`inspect L${lv}: 택배 ${seq.length}개(이상 ${INSPECT[lv - 1].bad}개) 분류/폐기 클리어 (${r.ms}ms)`);
   }
-  // 잘못된 클릭: 실수 +1, 0.6초 잠금(그 사이 정답 클릭도 무시), 풀린 뒤엔 정상
+  // 오입력: 실수 +1, 앞 택배는 그대로, 0.45초 잠금(그 사이 정답 키도 무시), 풀린 뒤엔 정상
   await launch("inspect", 2);
   {
-    const good = await page.$$(".mg-tile[data-defect]");
-    const badEl = await page.evaluateHandle(() => Array.from(document.querySelectorAll(".mg-tile")).find((t) => !t.hasAttribute("data-defect")));
-    await badEl.asElement().click();
-    assert((await miss()) === 1, "wrong tile click counts as a mistake");
-    await good[0].click(); // 잠금 중
-    assert((await page.$$(".mg-tile.is-found")).length === 0, "clicks during the 0.6s lock must be ignored");
-    await sleep(700);
-    for (const g of good) await g.click();
+    const seq = await inspectSeq();
+    const wrong = ["left", "down", "right", "space"].find((a) => a !== seq[0]);
+    await page.keyboard.press(KEY[wrong]);
+    assert((await miss()) === 1, "wrong action counts as a mistake");
+    await page.keyboard.press(KEY[seq[0]]); // 잠금 중
+    assert((await page.textContent(".mg-found")) === "0", "the correct key during the lock must be ignored");
+    await sleep(560);
+    await page.keyboard.press(KEY[seq[0]]);
+    assert((await page.textContent(".mg-found")) === "1", "after the lock the correct key is accepted");
+    for (let i = 1; i < seq.length; i++) await page.keyboard.press(KEY[seq[i]]);
     await waitFor(result, { label: "inspect after-lock done" });
     assert((await result()).mistakes === 1, "inspect mistakes recorded");
-    log("inspect: 멀쩡한 상자 클릭=실수, 0.6초 잠금 중 클릭 무시, 풀리면 정상 진행");
+    log("inspect: 틀린 칸=실수+0.45초 잠금(그 사이 입력 무시), 풀리면 정상 진행");
+  }
+  // 이상한 택배를 분류 키로 보내거나 멀쩡한 택배를 폐기하면 둘 다 실수
+  await launch("inspect", 3);
+  {
+    const seq = await inspectSeq();
+    const iBad = seq.indexOf("space"), iOk = seq.findIndex((a) => a !== "space");
+    let pos = 0, expectedMiss = 0;
+    const advanceTo = async (target) => { while (pos < target) { await page.keyboard.press(KEY[seq[pos]]); pos++; } };
+    const first = Math.min(iBad, iOk), second = Math.max(iBad, iOk);
+    for (const t of [first, second]) {
+      await advanceTo(t);
+      const wrongKey = seq[t] === "space" ? "left" : "space";   // 이상한 택배엔 분류 키, 멀쩡한 택배엔 폐기 키
+      await page.keyboard.press(KEY[wrongKey]);
+      expectedMiss++;
+      assert((await miss()) === expectedMiss, `mistake #${expectedMiss} (${seq[t] === "space" ? "classified an anomaly" : "discarded a good package"})`);
+      await sleep(560);
+    }
+    while (pos < seq.length) { await page.keyboard.press(KEY[seq[pos]]); pos++; }
+    await waitFor(result, { label: "inspect mixed-mistake done" });
+    assert((await result()).mistakes === 2, "both kinds of wrong action recorded");
+    log("inspect: 이상한 택배를 분류 키로, 멀쩡한 택배를 폐기 키로 보내면 각각 실수");
+  }
+  // 터치/마우스용 칸 버튼도 같은 동작
+  await launch("inspect", 1);
+  {
+    const seq = await inspectSeq();
+    for (const a of seq) await page.dispatchEvent(`.mg-bin[data-a="${a}"]`, "pointerdown");
+    await waitFor(result, { label: "inspect via on-screen buttons" });
+    assert((await result()).mistakes === 0, "on-screen buttons work like the keys");
+    log("inspect: 화면 버튼(포인터)으로도 클리어");
   }
 
   // ================= 송장 붙이기 =================
