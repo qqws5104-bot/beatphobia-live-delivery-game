@@ -205,7 +205,8 @@ async function main() {
   if (fixedFloorFace !== 1) throw new Error("fixed-floor cell face did not render");
   await secureCell(p1, "fixed-floor-3"); // num index 2 -> FLOORS[2] = "2F"
   // 이미 p1이 선점한 층은 p2 화면에서 열 수 없다 (선점자 우선)
-  if ((await countSel(p2, '[data-action="open-cell"][data-cell="fixed-floor-3"]')) !== 0) throw new Error("a floor already taken by the opponent must not be openable");
+  // (상대 화면에 브로드캐스트가 도착하기까지 잠깐 걸린다 -- 즉시 세면 경쟁 상태로 가끔 실패했다)
+  await waitFor(async () => (await countSel(p2, '[data-action="open-cell"][data-cell="fixed-floor-3"]')) === 0, { label: "a floor already taken by the opponent must not be openable" });
   await secureCell(p2, "fixed-floor-6");
   log("확정 층수 택배: p1이 2F를 선점하면 p2는 열 수 없고, p2는 다른 층(5F)을 확보");
 

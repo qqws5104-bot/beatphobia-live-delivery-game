@@ -554,6 +554,13 @@ APP_JS_TEMPLATE = r"""
   var CELL_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
   var ROOM = (new URLSearchParams(window.location.search).get("room") || "").trim().toUpperCase();
+  // 2026-10-06: ?view=main 이면 "메인 모니터" 화면 -- 좌석을 잡지 않고 상태만 받아서 큰 화면으로 보여준다
+  // (renderMain 참고). 서버 입장에서는 좌석 없는 관전 연결이라 게임 진행에는 아무 영향이 없다.
+  var MAIN = /[?&]view=main(&|$)/.test(window.location.search);
+  if (MAIN) document.body.classList.add("main-view");
+  // 서버 시계와 이 기기 시계의 차이 (서버가 상태 메시지마다 now를 실어 보낸다). 메인 모니터의 카운트다운에만 쓴다.
+  var clockOffset = 0;
+  function nowMs() { return Date.now() + clockOffset; }
 
   // ---------- identity: per-tab, survives a refresh (sessionStorage), but a second tab on the
   // same device gets its own id -- so two tabs can hold the two different seats without one
@@ -635,6 +642,7 @@ APP_JS_TEMPLATE = r"""
         // either player) already moves it for real before this broadcast goes out, so a plain
         // re-render is enough to show the car actually stepping; no client-side simulation needed.
         state = msg.state;
+        if (typeof msg.now === "number") clockOffset = msg.now - Date.now();
         // 2026-08-27: "pick-courier"는 좌석 번호를 클라이언트가 미리 못 정하므로(서버가 정해서
         // 돌려줌 -- game-room.js의 pickCourier), 낙관적으로 sessionStorage에 세팅하는 대신 여기서
         // 매 상태 브로드캐스트마다 "아직 내 좌석을 모르는 상태에서 내 clientId가 어느 좌석 주인이
@@ -1252,6 +1260,7 @@ APP_JS_TEMPLATE = r"""
 
   function renderBody() {
     if (!ROOM) return '<main class="stage"><div class="center-screen"><div class="lobby-box card"><h2>잘못된 링크예요</h2><p>방 코드가 없어요. 처음 받은 링크로 다시 들어와 주세요.</p></div></div></main>';
+    if (MAIN) return renderMain();
     if (!state) return renderTopbarShell() + renderLoading();
     var seat = mySeat();
     var body = renderTopbar(state, seat);
@@ -1282,6 +1291,140 @@ APP_JS_TEMPLATE = r"""
       + '<div class="right"><span class="room-chip">방 ' + esc(ROOM) + '</span></div></div>';
   }
 
+
+  // ---------- 메인 모니터 (2026-10-06, ?view=main) ----------
+  // 현장 TV/프로젝터에 띄우는 관전 화면. 요청된 것만 크게 보여준다:
+  //   확보 단계    -> 남은 시간 + 종류별 남은 박스 수
+  //   엘리베이터   -> 엘리베이터 위치(현재 층) + 남은 시간
+  // 그 외(대기/하프타임/종료)는 흐름이 끊기지 않게 최소한만 (참가 안내, 점수). 플레이어별 비공개 정보(송장 내용,
+  // 우선 택배 지정, 택배도둑 배치 위치)는 어디에도 그리지 않는다. 카운트다운 숫자는 data-ends(서버 시각)를 보고
+  // mainTick()이 200ms마다 갱신하므로, 상태가 안 바뀌어도 시계는 계속 간다.
+  var mvPrevFloor = null;
+  function mvSeatCard(st, seatNo, readyMap, readyWord) {
+    var key = st.courierPick && st.courierPick[seatNo];
+    var c = key ? courierByKey(key) : null;
+    var idx = c ? COURIERS.indexOf(c) : -1;
+    var ready = !!(readyMap && readyMap[seatNo]);
+    return '<div class="mv-seat' + (c ? ' is-on' : '') + (ready ? ' is-ready' : '') + '"' + (c ? ' style="--c:' + c.color + '"' : '') + '>'
+      + (c ? '<span class="mv-seat-icon">' + COURIER_ICONS[idx] + '</span>' + esc(c.name) : '<span style="color:var(--muted)">플레이어 ' + seatNo + '</span>')
+      + '<small>' + (!c ? '택배사 선택 대기' : (readyMap ? (ready ? readyWord + ' 완료' : '대기 중') : '입장 완료')) + '</small></div>';
+  }
+  function mvTime(endsAt, totalMs, opts) {
+    // 큰 시계 한 덩어리. 값은 mainTick()이 채운다 (초기 문자열만 같은 규칙으로 미리 넣어 깜빡임을 막는다).
+    opts = opts || {};
+    return '<div class="mv-time" data-ends="' + endsAt + '" data-fmt="' + (opts.sec ? 'sec' : 'clock') + '"' + (opts.lowMs ? ' data-low="' + opts.lowMs + '"' : '') + '>'
+      + mvFormat(endsAt, opts.sec ? 'sec' : 'clock') + '</div>';
+  }
+  function mvFormat(endsAt, fmt) {
+    var left = Math.max(0, endsAt - nowMs());
+    if (fmt === 'sec') return Math.ceil(left / 1000) + '<small>초</small>';
+    return fmtClock(left);
+  }
+  function renderMain() {
+    var st = state;
+    var head = function (label) {
+      return '<header class="mv-head"><div><span class="mv-eyebrow">BeatPhobia · Live</span><h1>택배 배송 게임</h1></div>'
+        + '<div class="mv-chips">' + (label ? '<span class="mv-chip phase">' + esc(label) + '</span>' : '')
+        + '<span class="mv-chip room">방 ' + esc(ROOM) + '</span></div></header>';
+    };
+    if (!ROOM) return '<div class="mv">' + head('') + '<div class="mv-body"><div class="mv-center"><h2>방 코드가 없어요</h2><p>주소 끝에 ?view=main 만 붙여 열면 새 방이 만들어져요.</p></div></div></div>';
+    if (!st) return '<div class="mv">' + head('') + '<div class="mv-body"><div class="mv-center"><h2>연결 중...</h2></div></div></div>';
+    var halfName = st.half === 2 ? "후반" : "전반";
+    var html = '';
+
+    if (st.phase === "lobby") {
+      var joinUrl = location.origin + "/?room=" + ROOM;
+      html = head("대기 중") + '<div class="mv-body"><div class="mv-center">'
+        + '<h2>참가자를 기다리고 있어요</h2>'
+        + '<div class="mv-seats">' + mvSeatCard(st, "1", st.ready, "준비") + mvSeatCard(st, "2", st.ready, "준비") + '</div>'
+        + '<div class="mv-join">각자 기기에서 이 주소로 들어오세요<b>' + esc(joinUrl) + '</b></div>'
+        + '</div></div>';
+    }
+    else if (st.phase === "secure") {
+      var endsAt = st.secureEndsAt || nowMs();
+      var cats = TYPES.map(function (t, catIdx) {
+        var left = boardLeft(st, catIdx), pips = '';
+        for (var i = 0; i < t.count; i++) pips += '<span class="mv-pip' + (i < left ? '' : ' is-gone') + '"></span>';
+        return '<div class="mv-cat' + (left === 0 ? ' is-empty' : (left <= 2 ? ' is-few' : '')) + '" style="--c:' + t.color + '">'
+          + '<div class="mv-cat-head"><span class="mv-cat-icon">' + CAT_ICONS[catIdx] + '</span><span class="mv-cat-name">' + esc(t.name) + '</span></div>'
+          + '<div class="mv-cat-game">' + esc(MINI_NAME[t.mini] || "우봉고") + '</div>'
+          + '<div class="mv-left">' + left + '<small>/ ' + t.count + '</small></div>'
+          + '<div class="mv-pips">' + pips + '</div></div>';
+      }).join('');
+      html = head("택배 확보 · " + halfName) + '<div class="mv-body">'
+        + '<div class="mv-secure-top"><div class="mv-label">확보 남은 시간</div>'
+        + mvTime(endsAt, SECURE_PHASE_MS, { lowMs: 30000 })
+        + '<div class="mv-bar"><i data-ends="' + endsAt + '" data-total="' + SECURE_PHASE_MS + '"></i></div></div>'
+        + '<div class="mv-cats">' + cats + '</div></div>';
+    }
+    else if (st.phase === "elevator") {
+      var el = st.elevator, floorIdx = el.floorIdx;
+      var stateLabel = "", ends = null, wait = "";
+      if (el.state === "idle") { stateLabel = "출발 준비 중"; wait = "두 플레이어가 준비하면 출발해요"; }
+      else if (el.state === "thief") { stateLabel = "택배도둑 배치 시간"; ends = el.thiefWindowEndsAt; }
+      else if (el.state === "voting") { stateLabel = "엘리베이터 이동 중!"; ends = el.votingEndsAt; }
+      else if (el.state === "choosing") { stateLabel = "같은 층 택배 선택 중"; ends = el.pendingChoice && el.pendingChoice.endsAt; }
+      else if (el.state === "result") { stateLabel = "라운드 결과 확인 중"; wait = "다음 라운드 준비 대기"; }
+      else { stateLabel = "배송 종료"; }
+      var rows = '';
+      FLOORS.forEach(function (f, i) { rows += '<div class="mv-floor-row' + (i === floorIdx ? ' is-current' : '') + '">' + f + '</div>'; });
+      var carFrom = mvPrevFloor === null ? floorIdx : mvPrevFloor;
+      html = head("엘리베이터 · " + halfName) + '<div class="mv-body"><div class="mv-elev">'
+        + '<div class="mv-shaft"><div class="mv-floors">' + rows + '</div>'
+        + '<div class="mv-car" id="mv-car" data-to="' + floorIdx + '" style="--i:' + carFrom + '"><span>' + FLOORS[floorIdx] + '</span></div></div>'
+        + '<div class="mv-elev-main">'
+        + '<span class="mv-round">라운드 ' + el.round + ' / ' + ELEVATOR_ROUNDS + '</span>'
+        + '<div class="mv-nowfloor"><span class="mv-label">현재 층</span><span class="mv-floor-big">' + FLOORS[floorIdx] + '</span></div>'
+        + '<div class="mv-state">' + esc(stateLabel) + '</div>'
+        + (ends ? mvTime(ends, 0, { sec: true }) : (wait ? '<div class="mv-wait">' + esc(wait) + '</div>' : ''))
+        + '</div></div></div>';
+      mvPrevFloor = floorIdx;
+      return '<div class="mv">' + html + '</div>';
+    }
+    else if (st.phase === "halftime") {
+      var h1 = st.halfHistory && st.halfHistory[0];
+      html = head("하프타임") + '<div class="mv-body"><div class="mv-center"><h2>전반 종료</h2>'
+        + (h1 ? '<div class="mv-scores">' + ["1", "2"].map(function (sn) { return '<div class="mv-score">' + esc(seatName(sn, st)) + '<b>' + fmtWon(h1.scores[sn]) + '</b></div>'; }).join('') + '</div>' : '')
+        + '<p>잠시 후 후반이 시작돼요</p>'
+        + '<div class="mv-seats">' + mvSeatCard(st, "1", st.halftimeReady, "준비") + mvSeatCard(st, "2", st.halftimeReady, "준비") + '</div>'
+        + '</div></div>';
+    }
+    else if (st.phase === "end") {
+      var s1 = st.scores ? st.scores["1"] : 0, s2 = st.scores ? st.scores["2"] : 0;
+      var winner = s1 === s2 ? "무승부" : (s1 > s2 ? (seatName("1", st) + " 승리") : (seatName("2", st) + " 승리"));
+      html = head("게임 종료") + '<div class="mv-body"><div class="mv-center"><div class="mv-winner">' + esc(winner) + '</div>'
+        + '<div class="mv-scores">' + ["1", "2"].map(function (sn) { return '<div class="mv-score">' + esc(seatName(sn, st)) + ' 총점<b>' + fmtWon(sn === "1" ? s1 : s2) + '</b></div>'; }).join('') + '</div>'
+        + '</div></div>';
+    }
+    if (st.phase !== "elevator") mvPrevFloor = null; // 다음에 엘리베이터가 시작되면 제자리에서 시작
+    return '<div class="mv">' + html + '</div>';
+  }
+  // 그린 직후: 엘리베이터 칸을 새 층으로 옮긴다 (이전 층에서 출발한 모습으로 그려 두었다가 다음 프레임에 이동 -> CSS transition)
+  function mainAfterRender() {
+    mainTick();
+    var car = document.getElementById("mv-car");
+    if (!car) return;
+    var to = car.getAttribute("data-to");
+    if (car.style.getPropertyValue("--i") === to) return;
+    void car.offsetWidth;
+    requestAnimationFrame(function () { requestAnimationFrame(function () { car.style.setProperty("--i", to); }); });
+  }
+  function mainTick() {
+    var n = nowMs();
+    Array.prototype.forEach.call(document.querySelectorAll(".mv-time[data-ends]"), function (e) {
+      var ends = parseInt(e.getAttribute("data-ends"), 10), fmt = e.getAttribute("data-fmt");
+      e.innerHTML = mvFormat(ends, fmt);
+      var low = parseInt(e.getAttribute("data-low") || "0", 10);
+      e.classList.toggle("is-low", !!low && ends - n < low);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".mv-bar > i[data-ends]"), function (e) {
+      var ends = parseInt(e.getAttribute("data-ends"), 10), total = parseInt(e.getAttribute("data-total"), 10);
+      var pct = Math.max(0, Math.min(100, (ends - n) / total * 100));
+      e.style.width = pct + "%";
+      e.classList.toggle("is-low", ends - n < 30000);
+    });
+  }
+
   function showToast(msg) {
     var el = document.getElementById("toast");
     if (el) el.remove();
@@ -1294,6 +1437,7 @@ APP_JS_TEMPLATE = r"""
 
   function render() {
     document.getElementById("app").innerHTML = renderBody();
+    if (MAIN) mainAfterRender();
   }
 
   // ---------- event handling ----------
@@ -1354,6 +1498,7 @@ APP_JS_TEMPLATE = r"""
   });
 
   document.addEventListener("keydown", function (e) {
+    if (MAIN) return; // 메인 모니터는 입력을 받지 않는다 (스페이스/방향키가 게임에 영향 주면 안 됨)
     if (e.code === "Space" || e.key === " " || e.key === "Spacebar") {
       var seat = mySeat();
       if (seat && state && state.phase === "lobby" && !e.repeat && !state.ready[seat]) {
@@ -1381,6 +1526,7 @@ APP_JS_TEMPLATE = r"""
   // via its own timers, so there is nothing for the client to "submit" or auto-advance here ----------
   setInterval(function () {
     if (!state) return;
+    if (MAIN) { mainTick(); return; }
     updateMiniClock();
     if (state.phase === "secure" && state.secureEndsAt) {
       var msLeft = state.secureEndsAt - Date.now();
@@ -1438,10 +1584,12 @@ APP_JS = (APP_JS_TEMPLATE
 _here = os.path.dirname(os.path.abspath(__file__))
 MINIGAMES_CSS = open(os.path.join(_here, "minigames.css"), encoding="utf-8").read()
 MINIGAMES_JS = open(os.path.join(_here, "minigames.js"), encoding="utf-8").read()
+MAINVIEW_CSS = open(os.path.join(_here, "mainview.css"), encoding="utf-8").read()   # 메인 모니터(?view=main) 전용 스타일
+assert "</style" not in MAINVIEW_CSS
 assert "</script" not in MINIGAMES_JS and "</style" not in MINIGAMES_CSS
 
 full_html = (
-    HEAD_HTML.replace("</style>\n</head>", MINIGAMES_CSS + "\n</style>\n</head>", 1)
+    HEAD_HTML.replace("</style>\n</head>", MINIGAMES_CSS + "\n" + MAINVIEW_CSS + "\n</style>\n</head>", 1)
     + '<script>' + MINIGAMES_JS + "</script>\n"
     + '<script>' + APP_JS + "</script>\n"
     + "</body></html>\n"

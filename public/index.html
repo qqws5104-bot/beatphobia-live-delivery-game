@@ -600,6 +600,89 @@
   .mg-box { transform: scale(0.86); transform-origin: top center; margin-bottom: -26px; }
 }
 
+/* mainview.css -- 메인 모니터(?view=main) 전용 스타일. 큰 TV/프로젝터 화면용이라 모든 크기를 vh/vw로 잡는다.
+ * 플레이어 화면과 같은 색 토큰(--bg, --gold, --ink ...)을 쓰고, 이 화면은 body.main-view 일 때만 적용된다. */
+body.main-view { overflow: hidden; }
+body.main-view #app { height: 100vh; min-height: 0; }
+.mv { height: 100vh; display: flex; flex-direction: column; gap: 2.4vh; padding: 2.6vh 3vw 3vh; background: linear-gradient(180deg, var(--bg-deep), var(--bg) 22%); }
+.mv-head { display: flex; align-items: center; justify-content: space-between; gap: 2vw; flex: 0 0 auto; }
+.mv-eyebrow { font-family: var(--font-display); font-size: 1.7vh; letter-spacing: 0.22em; text-transform: uppercase; color: var(--gold); font-weight: 600; }
+.mv-head h1 { margin: 0.4vh 0 0; font-size: 4vh; font-weight: 800; }
+.mv-chips { display: flex; align-items: center; gap: 1vw; }
+.mv-chip { padding: 0.9vh 1.5vw; border-radius: 999px; font-family: var(--font-display); font-weight: 700; font-size: 2.4vh; letter-spacing: 0.04em; white-space: nowrap; }
+.mv-chip.phase { background: rgba(226, 105, 26, 0.12); border: 2px solid rgba(226, 105, 26, 0.5); color: var(--gold); }
+.mv-chip.room { background: rgba(37, 105, 168, 0.1); border: 2px solid rgba(37, 105, 168, 0.4); color: var(--sky); }
+.mv-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 2.6vh; }
+.mv-center { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 2.4vh; }
+.mv-center h2 { margin: 0; font-size: 7vh; font-weight: 800; }
+.mv-center p { margin: 0; font-size: 3vh; color: var(--muted); }
+
+/* ---------- 큰 시계 ---------- */
+.mv-label { font-family: var(--font-display); font-size: 3.4vh; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+.mv-time { font-family: var(--font-display); font-weight: 700; line-height: 0.95; font-variant-numeric: tabular-nums; color: var(--ink); }
+.mv-time small { font-size: 0.3em; margin-left: 0.15em; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+.mv-time.is-low { color: var(--danger); animation: mv-pulse 1s ease-in-out infinite; }
+@keyframes mv-pulse { 50% { opacity: 0.55; } }
+.mv-bar { height: 2.2vh; border-radius: 999px; background: rgba(43, 29, 18, 0.1); overflow: hidden; }
+.mv-bar > i { display: block; height: 100%; width: 100%; background: var(--gold); border-radius: 999px; transition: width 0.25s linear; }
+.mv-bar > i.is-low { background: var(--danger); }
+
+/* ---------- 확보 단계 ---------- */
+.mv-secure-top { flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 1.2vh; }
+.mv-secure-top .mv-time { font-size: min(27vh, 22vw); }
+.mv-secure-top .mv-bar { width: 100%; }
+.mv-cats { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.6vw; }
+.mv-cat { --c: #ccc; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 1vh; padding: 2.4vh 1vw 2.6vh; border-radius: 2.6vh; background: var(--c); color: var(--ink); border: 0.5vh solid rgba(22, 35, 63, 0.18); box-shadow: 0 1vh 2.4vh rgba(43, 29, 18, 0.16); position: relative; overflow: hidden; }
+.mv-cat-head { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0.8vw; }
+.mv-cat-icon { width: 4.6vh; height: 4.6vh; flex: 0 0 auto; }
+.mv-cat-icon svg { width: 100%; height: 100%; display: block; }
+.mv-cat-name { font-size: min(3.4vh, 1.9vw); font-weight: 800; letter-spacing: -0.01em; }
+.mv-cat-game { font-size: 2vh; font-weight: 700; opacity: 0.7; }
+.mv-left { font-family: var(--font-display); font-weight: 700; font-size: min(20vh, 11vw); line-height: 0.9; font-variant-numeric: tabular-nums; }
+.mv-left small { font-size: 0.24em; margin-left: 0.2em; opacity: 0.65; font-weight: 600; }
+.mv-pips { display: flex; gap: 0.7vw; }
+.mv-pip { width: min(3.6vh, 1.6vw); height: min(3.6vh, 1.6vw); border-radius: 0.8vh; background: var(--ink); opacity: 0.85; border: 0.35vh solid var(--ink); transition: opacity 0.3s, background 0.3s; }
+.mv-pip.is-gone { background: transparent; opacity: 0.35; border-style: dashed; }
+.mv-cat.is-empty { filter: grayscale(0.7); opacity: 0.6; }
+.mv-cat.is-empty::after { content: "소진"; position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(-12deg); padding: 0.6vh 2vw; border: 0.8vh solid var(--danger); color: var(--danger); font-family: var(--font-display); font-size: min(9vh, 4.4vw); font-weight: 800; letter-spacing: 0.08em; border-radius: 1.4vh; background: rgba(255, 252, 244, 0.85); white-space: nowrap; }
+.mv-cat.is-few .mv-left { color: var(--danger); }
+
+/* ---------- 엘리베이터 단계 ---------- */
+.mv-elev { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.4fr); gap: 4vw; }
+.mv-shaft { position: relative; height: 100%; border-radius: 2.4vh; background: rgba(43, 29, 18, 0.07); border: 0.5vh solid rgba(43, 29, 18, 0.22); padding: 1vh 1vh; }
+.mv-floors { height: 100%; display: flex; flex-direction: column-reverse; gap: 0.8vh; }
+.mv-floor-row { flex: 1 1 0; display: flex; align-items: center; justify-content: flex-end; padding-right: 2vw; border-bottom: 0.3vh dashed rgba(43, 29, 18, 0.18); font-family: var(--font-display); font-weight: 700; font-size: 5.4vh; color: var(--muted); }
+.mv-floor-row:first-child { border-bottom: 0; }
+.mv-floor-row.is-current { color: var(--ink); }
+.mv-car { position: absolute; left: 2vh; width: calc(100% - 22vh); height: calc((100% - 2vh - 4vh) / 6); bottom: calc(1vh + var(--i, 0) * ((100% - 2vh - 4vh) / 6 + 0.8vh));
+  transition: bottom 0.55s cubic-bezier(.4, .1, .2, 1); border-radius: 1.4vh; background: linear-gradient(90deg, #d9d2c3 0 49%, #b9b19f 49% 51%, #d9d2c3 51%); border: 0.5vh solid var(--ink); box-shadow: 0 0.8vh 2vh rgba(43, 29, 18, 0.3); display: flex; align-items: center; justify-content: center; }
+.mv-car span { font-family: var(--font-display); font-weight: 800; font-size: 5vh; color: var(--ink); background: var(--gold); color: var(--gold-ink); padding: 0.2vh 1.2vw; border-radius: 0.8vh; }
+.mv-elev-main { display: flex; flex-direction: column; justify-content: center; gap: 2.6vh; min-width: 0; }
+.mv-round { align-self: flex-start; padding: 0.8vh 1.6vw; border-radius: 999px; background: var(--ink); color: var(--bg); font-family: var(--font-display); font-weight: 700; font-size: 3.4vh; letter-spacing: 0.06em; }
+.mv-nowfloor { display: flex; align-items: baseline; gap: 2vw; }
+.mv-nowfloor .mv-label { font-size: 4vh; }
+.mv-floor-big { font-family: var(--font-display); font-weight: 800; font-size: min(34vh, 16vw); line-height: 0.9; color: var(--gold); }
+.mv-state { font-size: 4.6vh; font-weight: 800; }
+.mv-elev-main .mv-time { font-size: min(24vh, 14vw); }
+.mv-wait { font-size: 4vh; font-weight: 700; color: var(--muted); }
+
+/* ---------- 대기/하프타임/종료 ---------- */
+.mv-seats { display: flex; gap: 3vw; margin-top: 1vh; }
+.mv-seat { min-width: 26vw; padding: 3vh 2vw; border-radius: 2.4vh; background: var(--panel); border: 0.5vh solid var(--panel-line); font-size: 3.6vh; font-weight: 800; display: flex; flex-direction: column; align-items: center; gap: 1vh; }
+.mv-seat.is-on { border-color: var(--c, var(--gold)); }
+.mv-seat.is-ready { background: rgba(47, 143, 82, 0.12); border-color: var(--ok); }
+.mv-seat .mv-seat-icon { width: 8vh; height: 8vh; color: var(--c, var(--muted)); }
+.mv-seat .mv-seat-icon svg { width: 100%; height: 100%; }
+.mv-seat small { font-size: 2.4vh; font-weight: 700; color: var(--muted); }
+.mv-join { margin-top: 2vh; font-size: 3vh; color: var(--muted); }
+.mv-join b { display: block; margin-top: 0.8vh; color: var(--ink); font-size: 4.6vh; letter-spacing: 0.02em; word-break: break-all; }
+.mv-code { font-family: var(--font-display); font-weight: 800; font-size: 14vh; letter-spacing: 0.12em; color: var(--sky); line-height: 1; }
+.mv-scores { display: flex; gap: 4vw; justify-content: center; }
+.mv-score { min-width: 24vw; padding: 3vh 2vw; border-radius: 2.4vh; background: var(--panel); border: 0.5vh solid var(--panel-line); font-size: 3.6vh; font-weight: 800; }
+.mv-score b { display: block; margin-top: 1vh; font-family: var(--font-display); font-size: 9vh; color: var(--gold); }
+.mv-winner { font-size: 9vh; font-weight: 800; color: var(--gold); }
+@media (prefers-reduced-motion: reduce) { .mv-car, .mv-bar > i { transition: none; } .mv-time.is-low { animation: none; } }
+
 </style>
 </head><body>
 <div id="app"></div>
@@ -1196,6 +1279,13 @@
   var CELL_LETTERS = ["A", "B", "C", "D", "E", "F"];
 
   var ROOM = (new URLSearchParams(window.location.search).get("room") || "").trim().toUpperCase();
+  // 2026-10-06: ?view=main 이면 "메인 모니터" 화면 -- 좌석을 잡지 않고 상태만 받아서 큰 화면으로 보여준다
+  // (renderMain 참고). 서버 입장에서는 좌석 없는 관전 연결이라 게임 진행에는 아무 영향이 없다.
+  var MAIN = /[?&]view=main(&|$)/.test(window.location.search);
+  if (MAIN) document.body.classList.add("main-view");
+  // 서버 시계와 이 기기 시계의 차이 (서버가 상태 메시지마다 now를 실어 보낸다). 메인 모니터의 카운트다운에만 쓴다.
+  var clockOffset = 0;
+  function nowMs() { return Date.now() + clockOffset; }
 
   // ---------- identity: per-tab, survives a refresh (sessionStorage), but a second tab on the
   // same device gets its own id -- so two tabs can hold the two different seats without one
@@ -1277,6 +1367,7 @@
         // either player) already moves it for real before this broadcast goes out, so a plain
         // re-render is enough to show the car actually stepping; no client-side simulation needed.
         state = msg.state;
+        if (typeof msg.now === "number") clockOffset = msg.now - Date.now();
         // 2026-08-27: "pick-courier"는 좌석 번호를 클라이언트가 미리 못 정하므로(서버가 정해서
         // 돌려줌 -- game-room.js의 pickCourier), 낙관적으로 sessionStorage에 세팅하는 대신 여기서
         // 매 상태 브로드캐스트마다 "아직 내 좌석을 모르는 상태에서 내 clientId가 어느 좌석 주인이
@@ -1894,6 +1985,7 @@
 
   function renderBody() {
     if (!ROOM) return '<main class="stage"><div class="center-screen"><div class="lobby-box card"><h2>잘못된 링크예요</h2><p>방 코드가 없어요. 처음 받은 링크로 다시 들어와 주세요.</p></div></div></main>';
+    if (MAIN) return renderMain();
     if (!state) return renderTopbarShell() + renderLoading();
     var seat = mySeat();
     var body = renderTopbar(state, seat);
@@ -1924,6 +2016,140 @@
       + '<div class="right"><span class="room-chip">방 ' + esc(ROOM) + '</span></div></div>';
   }
 
+
+  // ---------- 메인 모니터 (2026-10-06, ?view=main) ----------
+  // 현장 TV/프로젝터에 띄우는 관전 화면. 요청된 것만 크게 보여준다:
+  //   확보 단계    -> 남은 시간 + 종류별 남은 박스 수
+  //   엘리베이터   -> 엘리베이터 위치(현재 층) + 남은 시간
+  // 그 외(대기/하프타임/종료)는 흐름이 끊기지 않게 최소한만 (참가 안내, 점수). 플레이어별 비공개 정보(송장 내용,
+  // 우선 택배 지정, 택배도둑 배치 위치)는 어디에도 그리지 않는다. 카운트다운 숫자는 data-ends(서버 시각)를 보고
+  // mainTick()이 200ms마다 갱신하므로, 상태가 안 바뀌어도 시계는 계속 간다.
+  var mvPrevFloor = null;
+  function mvSeatCard(st, seatNo, readyMap, readyWord) {
+    var key = st.courierPick && st.courierPick[seatNo];
+    var c = key ? courierByKey(key) : null;
+    var idx = c ? COURIERS.indexOf(c) : -1;
+    var ready = !!(readyMap && readyMap[seatNo]);
+    return '<div class="mv-seat' + (c ? ' is-on' : '') + (ready ? ' is-ready' : '') + '"' + (c ? ' style="--c:' + c.color + '"' : '') + '>'
+      + (c ? '<span class="mv-seat-icon">' + COURIER_ICONS[idx] + '</span>' + esc(c.name) : '<span style="color:var(--muted)">플레이어 ' + seatNo + '</span>')
+      + '<small>' + (!c ? '택배사 선택 대기' : (readyMap ? (ready ? readyWord + ' 완료' : '대기 중') : '입장 완료')) + '</small></div>';
+  }
+  function mvTime(endsAt, totalMs, opts) {
+    // 큰 시계 한 덩어리. 값은 mainTick()이 채운다 (초기 문자열만 같은 규칙으로 미리 넣어 깜빡임을 막는다).
+    opts = opts || {};
+    return '<div class="mv-time" data-ends="' + endsAt + '" data-fmt="' + (opts.sec ? 'sec' : 'clock') + '"' + (opts.lowMs ? ' data-low="' + opts.lowMs + '"' : '') + '>'
+      + mvFormat(endsAt, opts.sec ? 'sec' : 'clock') + '</div>';
+  }
+  function mvFormat(endsAt, fmt) {
+    var left = Math.max(0, endsAt - nowMs());
+    if (fmt === 'sec') return Math.ceil(left / 1000) + '<small>초</small>';
+    return fmtClock(left);
+  }
+  function renderMain() {
+    var st = state;
+    var head = function (label) {
+      return '<header class="mv-head"><div><span class="mv-eyebrow">BeatPhobia · Live</span><h1>택배 배송 게임</h1></div>'
+        + '<div class="mv-chips">' + (label ? '<span class="mv-chip phase">' + esc(label) + '</span>' : '')
+        + '<span class="mv-chip room">방 ' + esc(ROOM) + '</span></div></header>';
+    };
+    if (!ROOM) return '<div class="mv">' + head('') + '<div class="mv-body"><div class="mv-center"><h2>방 코드가 없어요</h2><p>주소 끝에 ?view=main 만 붙여 열면 새 방이 만들어져요.</p></div></div></div>';
+    if (!st) return '<div class="mv">' + head('') + '<div class="mv-body"><div class="mv-center"><h2>연결 중...</h2></div></div></div>';
+    var halfName = st.half === 2 ? "후반" : "전반";
+    var html = '';
+
+    if (st.phase === "lobby") {
+      var joinUrl = location.origin + "/?room=" + ROOM;
+      html = head("대기 중") + '<div class="mv-body"><div class="mv-center">'
+        + '<h2>참가자를 기다리고 있어요</h2>'
+        + '<div class="mv-seats">' + mvSeatCard(st, "1", st.ready, "준비") + mvSeatCard(st, "2", st.ready, "준비") + '</div>'
+        + '<div class="mv-join">각자 기기에서 이 주소로 들어오세요<b>' + esc(joinUrl) + '</b></div>'
+        + '</div></div>';
+    }
+    else if (st.phase === "secure") {
+      var endsAt = st.secureEndsAt || nowMs();
+      var cats = TYPES.map(function (t, catIdx) {
+        var left = boardLeft(st, catIdx), pips = '';
+        for (var i = 0; i < t.count; i++) pips += '<span class="mv-pip' + (i < left ? '' : ' is-gone') + '"></span>';
+        return '<div class="mv-cat' + (left === 0 ? ' is-empty' : (left <= 2 ? ' is-few' : '')) + '" style="--c:' + t.color + '">'
+          + '<div class="mv-cat-head"><span class="mv-cat-icon">' + CAT_ICONS[catIdx] + '</span><span class="mv-cat-name">' + esc(t.name) + '</span></div>'
+          + '<div class="mv-cat-game">' + esc(MINI_NAME[t.mini] || "우봉고") + '</div>'
+          + '<div class="mv-left">' + left + '<small>/ ' + t.count + '</small></div>'
+          + '<div class="mv-pips">' + pips + '</div></div>';
+      }).join('');
+      html = head("택배 확보 · " + halfName) + '<div class="mv-body">'
+        + '<div class="mv-secure-top"><div class="mv-label">확보 남은 시간</div>'
+        + mvTime(endsAt, SECURE_PHASE_MS, { lowMs: 30000 })
+        + '<div class="mv-bar"><i data-ends="' + endsAt + '" data-total="' + SECURE_PHASE_MS + '"></i></div></div>'
+        + '<div class="mv-cats">' + cats + '</div></div>';
+    }
+    else if (st.phase === "elevator") {
+      var el = st.elevator, floorIdx = el.floorIdx;
+      var stateLabel = "", ends = null, wait = "";
+      if (el.state === "idle") { stateLabel = "출발 준비 중"; wait = "두 플레이어가 준비하면 출발해요"; }
+      else if (el.state === "thief") { stateLabel = "택배도둑 배치 시간"; ends = el.thiefWindowEndsAt; }
+      else if (el.state === "voting") { stateLabel = "엘리베이터 이동 중!"; ends = el.votingEndsAt; }
+      else if (el.state === "choosing") { stateLabel = "같은 층 택배 선택 중"; ends = el.pendingChoice && el.pendingChoice.endsAt; }
+      else if (el.state === "result") { stateLabel = "라운드 결과 확인 중"; wait = "다음 라운드 준비 대기"; }
+      else { stateLabel = "배송 종료"; }
+      var rows = '';
+      FLOORS.forEach(function (f, i) { rows += '<div class="mv-floor-row' + (i === floorIdx ? ' is-current' : '') + '">' + f + '</div>'; });
+      var carFrom = mvPrevFloor === null ? floorIdx : mvPrevFloor;
+      html = head("엘리베이터 · " + halfName) + '<div class="mv-body"><div class="mv-elev">'
+        + '<div class="mv-shaft"><div class="mv-floors">' + rows + '</div>'
+        + '<div class="mv-car" id="mv-car" data-to="' + floorIdx + '" style="--i:' + carFrom + '"><span>' + FLOORS[floorIdx] + '</span></div></div>'
+        + '<div class="mv-elev-main">'
+        + '<span class="mv-round">라운드 ' + el.round + ' / ' + ELEVATOR_ROUNDS + '</span>'
+        + '<div class="mv-nowfloor"><span class="mv-label">현재 층</span><span class="mv-floor-big">' + FLOORS[floorIdx] + '</span></div>'
+        + '<div class="mv-state">' + esc(stateLabel) + '</div>'
+        + (ends ? mvTime(ends, 0, { sec: true }) : (wait ? '<div class="mv-wait">' + esc(wait) + '</div>' : ''))
+        + '</div></div></div>';
+      mvPrevFloor = floorIdx;
+      return '<div class="mv">' + html + '</div>';
+    }
+    else if (st.phase === "halftime") {
+      var h1 = st.halfHistory && st.halfHistory[0];
+      html = head("하프타임") + '<div class="mv-body"><div class="mv-center"><h2>전반 종료</h2>'
+        + (h1 ? '<div class="mv-scores">' + ["1", "2"].map(function (sn) { return '<div class="mv-score">' + esc(seatName(sn, st)) + '<b>' + fmtWon(h1.scores[sn]) + '</b></div>'; }).join('') + '</div>' : '')
+        + '<p>잠시 후 후반이 시작돼요</p>'
+        + '<div class="mv-seats">' + mvSeatCard(st, "1", st.halftimeReady, "준비") + mvSeatCard(st, "2", st.halftimeReady, "준비") + '</div>'
+        + '</div></div>';
+    }
+    else if (st.phase === "end") {
+      var s1 = st.scores ? st.scores["1"] : 0, s2 = st.scores ? st.scores["2"] : 0;
+      var winner = s1 === s2 ? "무승부" : (s1 > s2 ? (seatName("1", st) + " 승리") : (seatName("2", st) + " 승리"));
+      html = head("게임 종료") + '<div class="mv-body"><div class="mv-center"><div class="mv-winner">' + esc(winner) + '</div>'
+        + '<div class="mv-scores">' + ["1", "2"].map(function (sn) { return '<div class="mv-score">' + esc(seatName(sn, st)) + ' 총점<b>' + fmtWon(sn === "1" ? s1 : s2) + '</b></div>'; }).join('') + '</div>'
+        + '</div></div>';
+    }
+    if (st.phase !== "elevator") mvPrevFloor = null; // 다음에 엘리베이터가 시작되면 제자리에서 시작
+    return '<div class="mv">' + html + '</div>';
+  }
+  // 그린 직후: 엘리베이터 칸을 새 층으로 옮긴다 (이전 층에서 출발한 모습으로 그려 두었다가 다음 프레임에 이동 -> CSS transition)
+  function mainAfterRender() {
+    mainTick();
+    var car = document.getElementById("mv-car");
+    if (!car) return;
+    var to = car.getAttribute("data-to");
+    if (car.style.getPropertyValue("--i") === to) return;
+    void car.offsetWidth;
+    requestAnimationFrame(function () { requestAnimationFrame(function () { car.style.setProperty("--i", to); }); });
+  }
+  function mainTick() {
+    var n = nowMs();
+    Array.prototype.forEach.call(document.querySelectorAll(".mv-time[data-ends]"), function (e) {
+      var ends = parseInt(e.getAttribute("data-ends"), 10), fmt = e.getAttribute("data-fmt");
+      e.innerHTML = mvFormat(ends, fmt);
+      var low = parseInt(e.getAttribute("data-low") || "0", 10);
+      e.classList.toggle("is-low", !!low && ends - n < low);
+    });
+    Array.prototype.forEach.call(document.querySelectorAll(".mv-bar > i[data-ends]"), function (e) {
+      var ends = parseInt(e.getAttribute("data-ends"), 10), total = parseInt(e.getAttribute("data-total"), 10);
+      var pct = Math.max(0, Math.min(100, (ends - n) / total * 100));
+      e.style.width = pct + "%";
+      e.classList.toggle("is-low", ends - n < 30000);
+    });
+  }
+
   function showToast(msg) {
     var el = document.getElementById("toast");
     if (el) el.remove();
@@ -1936,6 +2162,7 @@
 
   function render() {
     document.getElementById("app").innerHTML = renderBody();
+    if (MAIN) mainAfterRender();
   }
 
   // ---------- event handling ----------
@@ -1996,6 +2223,7 @@
   });
 
   document.addEventListener("keydown", function (e) {
+    if (MAIN) return; // 메인 모니터는 입력을 받지 않는다 (스페이스/방향키가 게임에 영향 주면 안 됨)
     if (e.code === "Space" || e.key === " " || e.key === "Spacebar") {
       var seat = mySeat();
       if (seat && state && state.phase === "lobby" && !e.repeat && !state.ready[seat]) {
@@ -2023,6 +2251,7 @@
   // via its own timers, so there is nothing for the client to "submit" or auto-advance here ----------
   setInterval(function () {
     if (!state) return;
+    if (MAIN) { mainTick(); return; }
     updateMiniClock();
     if (state.phase === "secure" && state.secureEndsAt) {
       var msLeft = state.secureEndsAt - Date.now();

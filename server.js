@@ -37,7 +37,8 @@ function getOrCreateRoom(code) {
 function broadcast(code, state) {
   const entry = rooms.get(code);
   if (!entry) return;
-  const payload = JSON.stringify({ type: "state", state });
+  // now: 서버 시계. 메인 모니터는 따로 있는 기기라 기기 시계가 어긋나 있을 수 있어서, 이 값으로 오차를 보정한다.
+  const payload = JSON.stringify({ type: "state", state, now: Date.now() });
   for (const conn of entry.sockets) {
     if (conn.ws.readyState === conn.ws.OPEN) conn.ws.send(payload);
   }
@@ -72,7 +73,8 @@ const server = http.createServer((req, res) => {
   if (!room) {
     let code = makeRoomCode();
     while (rooms.has(code)) code = makeRoomCode(); // astronomically unlikely, but keep it honest
-    res.writeHead(302, { location: "/?room=" + code });
+    // ?view=main(메인 모니터)으로 들어온 경우 방을 새로 만들면서도 그 표시를 유지한다.
+    res.writeHead(302, { location: "/?room=" + code + (url.searchParams.get("view") === "main" ? "&view=main" : "") });
     res.end();
     return;
   }
@@ -91,7 +93,7 @@ wss.on("connection", (ws, req) => {
   const conn = { ws, clientId: null, seat: null };
   entry.sockets.add(conn);
 
-  ws.send(JSON.stringify({ type: "state", state: entry.room.state }));
+  ws.send(JSON.stringify({ type: "state", state: entry.room.state, now: Date.now() }));
 
   ws.on("message", (raw) => {
     let msg;
