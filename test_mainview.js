@@ -121,7 +121,7 @@ async function main() {
     time: document.querySelector(".mv-elev-main .mv-time") ? document.querySelector(".mv-elev-main .mv-time").textContent : null,
   }));
   let ei = await elevInfo();
-  assert(ei.floor === "1F" && /라운드 1 \/ 5/.test(ei.round) && ei.state.includes("출발 준비"), "elevator starts at 1F, round 1/5, waiting: " + JSON.stringify(ei));
+  assert(ei.floor === "1F" && /라운드 1 \/ 7/.test(ei.round) && ei.state.includes("출발 준비"), "elevator starts at 1F, round 1/7, waiting: " + JSON.stringify(ei));
   await shot(main, "main_5_elevator_idle");
   await pressSpace(p1); await pressSpace(p2);
   // 2026-10-06: 준비가 끝나면 우선 택배 지정 10초 창이 먼저 -- 메인에도 상태 이름과 남은 시간(~10초)이 보인다.

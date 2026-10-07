@@ -514,22 +514,29 @@
 
   // ======================================================================
   // 지도 배달 (2026-10-07: 귀중품의 우봉고를 대체)
-  //   지도에 집(호실)이 여러 개 있고, 목표 집들이 순서 번호와 함께 잠깐 켜졌다가 꺼진다. 그 순서대로 방향키로 이동해서
-  //   집에 도착하면 스페이스로 배달한다. 입력은 박스 포장과 같은 방향키 4개 + 스페이스(화면 버튼도 같다).
+  //   1) 송장 단계: 지도는 가려져 있고, "송장만 붙은 택배" 여러 개(예: 103호, 201호 ...)가 순서대로 팝업으로 떴다가 사라진다.
+  //   2) 지도 단계: 택배가 사라지고 지도가 뜬다 -- 집마다 호실 번호가 적혀 있어서, 외운 호실의 집을 지도에서 찾아
+  //      방향키로 이동해 도착하면 스페이스로 배달한다. 외운 순서대로.
+  //   3) 게임 시작 20초 뒤부터(MAP_REPLAY_AFTER_MS) "송장 다시 보기"가 열린다: 택배 팝업을 다시 보여 준다(그동안 지도는 가려지고 이동 불가).
+  //      공짜지만 그만큼 시간이 가므로 사실상의 비용은 시간이다. 그 전에는 못 본다 -- 처음에 제대로 외워야 한다.
+  //   (이력: 1차는 목표 집이 지도 위에서 번호와 함께 켜졌다. 2차는 호실 번호 목록만 먼저 띄웠다. 사용자가 "송장만 붙은 택배 4개가
+  //    팝업으로 보였다 사라지고, 이후 지도가 표시되고, 20초 뒤부터는 다시 호수를 확인"으로 정정해서 지금 형태가 됐다.)
+  //   입력은 박스 포장과 같은 방향키 4개 + 스페이스(화면 버튼도 같다).
   //   난이도 레버는 전부 MAP_CFG 한 군데:
-  //     targets   외울 집 수          flashMs   목표가 켜져 있는 시간(ms)
-  //     cols/rows 지도 크기           houses    집 개수
-  //     hideLabels true면 깜빡임이 끝난 뒤 지도의 호실 번호도 사라진다(위치만 기억해야 함)
-  //     blocks    지나갈 수 없는 칸(공사장 등) 수 -- 돌아가야 해서 길을 직접 짜야 한다
+  //     targets  외울 택배(호실) 수     flashMs  택배 팝업이 떠 있는 시간(ms)
+  //     cols/rows 지도 크기            houses   집 개수 (목표 + 미끼)
+  //     similar  목표와 비슷한 번호(같은 층 / 같은 호)를 가진 미끼 집 수 -- 잘못 외우거나 대충 보면 틀리는 함정
+  //     blocks   지나갈 수 없는 칸(공사장) 수 -- 돌아가야 해서 길을 직접 짜야 한다
   //   레벨 1은 시험장 전용, 게임에서는 전반 2 / 후반 3 (game-data.js의 TYPES.valuable.miniLevel).
-  //   틀린 배달(엉뚱한 집/도로/이미 배달한 집)은 실수 +1 이고 0.8초 멈춘다 -- 진행은 유지. "다시 보기"는 남은 목표를 다시
-  //   깜빡여 주되 실수 +1 (잊어버려서 영영 못 끝내는 일은 없게 하되 공짜는 아니게).
+  //   틀린 배달(엉뚱한 집/도로/이미 배달한 집/순서 틀림)은 실수 +1 이고 0.8초 멈춘다 -- 진행은 유지.
   // ======================================================================
   var MAP_CFG = [
-    { cols: 5, rows: 4, houses: 8,  targets: 3, flashMs: 4500, hideLabels: false, blocks: 0 },
-    { cols: 6, rows: 4, houses: 11, targets: 4, flashMs: 3500, hideLabels: false, blocks: 0 },
-    { cols: 7, rows: 5, houses: 14, targets: 5, flashMs: 3000, hideLabels: true,  blocks: 5 },
+    { cols: 5, rows: 4, houses: 8,  targets: 3, flashMs: 4500, similar: 0, blocks: 0 },
+    { cols: 6, rows: 4, houses: 11, targets: 4, flashMs: 4000, similar: 2, blocks: 0 },
+    { cols: 7, rows: 5, houses: 14, targets: 5, flashMs: 3500, similar: 5, blocks: 5 },
   ];
+  var MAP_REPLAY_AFTER_MS = 20000; // 게임 시작 후 이 시간이 지나야 "송장 다시 보기"가 열린다
+  var MAP_POP_STAGGER_MS = 150;    // 택배 팝업이 하나씩 뜨는 간격(순서 단서)
   var MAP_LOCK_MS = 800;   // 틀린 배달 뒤 멈춤
   var MAP_STEP_MS = 70;    // 방향키를 꾹 누를 때 한 칸씩 가는 최소 간격
   var MAP_VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
@@ -537,6 +544,30 @@
   var VAN_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="11" width="21" height="17" rx="2" class="mg-van-box"/><path d="M25 16h7l4 5v7H25Z" class="mg-van-cab"/><circle cx="12" cy="30" r="3.4" class="mg-van-wh"/><circle cx="30" cy="30" r="3.4" class="mg-van-wh"/></svg>';
 
   function mapKey(x, y) { return x + "," + y; }
+  // 호실 번호: 층(1~5) + 0 + 호(1~9) = 101 ~ 509. 목표는 무작위, 미끼 중 similar개는 목표와 같은 층 또는 같은 호(번갈아)를 가진다.
+  function assignRoomLabels(houses, targets, similar) {
+    var used = {};
+    function code(f, r) { return String(f * 100 + r); }
+    function takeRandom() {
+      for (;;) { var cd = code(1 + rand(5), 1 + rand(9)); if (!used[cd]) { used[cd] = 1; return cd; } }
+    }
+    targets.forEach(function (t) { t.label = takeRandom(); });
+    var tset = {}; targets.forEach(function (t) { tset[mapKey(t.x, t.y)] = 1; });
+    var decoys = shuffle(houses.filter(function (h) { return !tset[mapKey(h.x, h.y)]; }));
+    var n = Math.min(similar, decoys.length, targets.length);
+    for (var i = 0; i < decoys.length; i++) {
+      var cand = [];
+      if (i < n) {
+        var f = parseInt(targets[i].label.charAt(0), 10), r = parseInt(targets[i].label.charAt(2), 10);
+        for (var a = 1; a <= 5; a++) for (var b = 1; b <= 9; b++) {
+          var same = i % 2 === 0 ? (a === f && b !== r) : (b === r && a !== f); // 짝수: 같은 층 다른 호 / 홀수: 같은 호 다른 층
+          if (same && !used[code(a, b)]) cand.push(code(a, b));
+        }
+      }
+      if (cand.length) { var pick = cand[rand(cand.length)]; used[pick] = 1; decoys[i].label = pick; }
+      else decoys[i].label = takeRandom();
+    }
+  }
   function makeMapPlan(cfg, noBlocks) {
     var W = cfg.cols, H = cfg.rows, nb = noBlocks ? 0 : cfg.blocks;
     var depot = { x: Math.floor(W / 2), y: H - 1 };
@@ -558,11 +589,9 @@
       }
       var ok = houses.every(function (h) { return seen[mapKey(h.x, h.y)]; });
       if (!ok) continue; // 공사장 때문에 갈 수 없는 집이 생겼으면 다시 뽑는다
-      var codes = [];
-      for (var f = 1; f <= 5; f++) for (var r = 1; r <= 9; r++) codes.push(String(f * 100 + r)); // 105, 203 ... (층 + 0 + 호)
-      codes = shuffle(codes);
-      houses.forEach(function (h, i) { h.label = codes[i]; });
-      return { W: W, H: H, depot: depot, blocked: blocked, houses: houses, targets: shuffle(houses).slice(0, cfg.targets) };
+      var targets = shuffle(houses).slice(0, cfg.targets);
+      assignRoomLabels(houses, targets, cfg.similar);
+      return { W: W, H: H, depot: depot, blocked: blocked, houses: houses, targets: targets };
     }
     return noBlocks ? null : makeMapPlan(cfg, true); // (사실상 도달 불가) 공사장 없이라도 만든다
   }
@@ -585,16 +614,17 @@
     for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
       var k = mapKey(x, y), h = houseAt[k], isDepot = x === plan.depot.x && y === plan.depot.y;
       tiles += '<div class="mg-tile' + (h ? " is-house" : "") + (blockAt[k] ? " is-block" : "") + (isDepot ? " is-depot" : "") + '" data-x="' + x + '" data-y="' + y + '">'
-        + (h ? HOUSE_SVG + '<b class="mg-lab">' + h.label + '</b><i class="mg-ord"></i><span class="mg-chk">✓</span>'
+        + (h ? HOUSE_SVG + '<b class="mg-lab">' + h.label + '</b><span class="mg-chk">✓</span>'
           : blockAt[k] ? '<span class="mg-fence"></span>' : isDepot ? '<span class="mg-dep">센터</span>' : "")
         + "</div>";
     }
     var dots = ""; for (var di = 0; di < N; di++) dots += '<span class="mg-dot"></span>';
     body.innerHTML =
-      '<div class="mg-map-top"><div class="mg-order"></div><div class="mg-flashbar"><i></i></div><p class="mg-phase"></p></div>'
-      + '<div class="mg-map" style="--cols:' + W + ';--rows:' + H + '">' + tiles
-      + '<div class="mg-courier" style="--cx:' + plan.depot.x + ';--cy:' + plan.depot.y + '">' + VAN_SVG + "</div></div>"
-      + '<div class="mg-map-foot"><div class="mg-dots">' + dots + '</div><button type="button" class="mg-replay" tabindex="-1">다시 보기 (실수 +1)</button></div>'
+      '<div class="mg-map-top"><div class="mg-flashbar"><i></i></div><p class="mg-phase"></p></div>'
+      + '<div class="mg-map is-covered" style="--cols:' + W + ';--rows:' + H + '">' + tiles
+      + '<div class="mg-courier" style="--cx:' + plan.depot.x + ';--cy:' + plan.depot.y + '">' + VAN_SVG + '</div>'
+      + '<div class="mg-cover"><div class="mg-parcels"></div><span class="mg-cover-note">지도는 택배를 확인한 뒤에 나와요</span></div></div>'
+      + '<div class="mg-map-foot"><div class="mg-dots">' + dots + '</div><button type="button" class="mg-replay" tabindex="-1" disabled>송장 다시 보기</button></div>'
       + '<p class="mg-freeze-note"></p>'
       + '<div class="mg-pad">'
       + '<button type="button" class="mg-key" data-k="up" aria-label="위">↑</button>'
@@ -605,51 +635,51 @@
       + "</div>";
 
     var map = body.querySelector(".mg-map"), courier = body.querySelector(".mg-courier");
-    var orderEl = body.querySelector(".mg-order"), phaseEl = body.querySelector(".mg-phase"), barEl = body.querySelector(".mg-flashbar > i");
+    var parcelsEl = body.querySelector(".mg-parcels"), phaseEl = body.querySelector(".mg-phase"), barEl = body.querySelector(".mg-flashbar > i");
     var note = body.querySelector(".mg-freeze-note"), replay = body.querySelector(".mg-replay");
     var dotEls = Array.prototype.slice.call(body.querySelectorAll(".mg-dot"));
     function tileAt(x, y) { return map.querySelector('.mg-tile[data-x="' + x + '"][data-y="' + y + '"]'); }
 
-    var pos = { x: plan.depot.x, y: plan.depot.y }, idx = 0, phase = "flash", locked = false, lastStep = 0;
+    var pos = { x: plan.depot.x, y: plan.depot.y }, idx = 0, phase = "invoice", locked = false, lastStep = 0;
+    var startedAt = performance.now(), replayAfter = typeof c.opts.replayAfterMs === "number" ? c.opts.replayAfterMs : MAP_REPLAY_AFTER_MS;
 
     function paintDots() {
       dotEls.forEach(function (d, i) { d.classList.toggle("is-done", i < idx); d.classList.toggle("is-current", i === idx && phase === "play"); });
     }
-    function clearTargets() {
-      Array.prototype.forEach.call(map.querySelectorAll(".mg-tile.is-target"), function (t) { t.classList.remove("is-target"); t.querySelector(".mg-ord").textContent = ""; });
-    }
-    // 아직 배달 안 한 목표(idx부터)를 번호와 함께 잠깐 켠다. 처음 한 번 + "다시 보기" 때.
-    function showFlash() {
-      phase = "flash";
-      clearTargets();
-      map.classList.add("is-flash");
-      map.classList.remove("is-labels-hidden");
-      var chips = [];
-      for (var i = idx; i < N; i++) {
-        var t = plan.targets[i], tile = tileAt(t.x, t.y);
-        tile.classList.add("is-target");
-        tile.querySelector(".mg-ord").textContent = String(i + 1);
-        chips.push('<span class="mg-oc"><i>' + (i + 1) + "</i>" + t.label + "</span>");
+    // 송장 단계: 지도를 가리고 그 위에 "송장만 붙은 택배"를 순서대로 팝업으로 띄운다(이미 배달한 호실은 흐리게 + 체크로 같이 보여 줘서
+    // 번호 순서가 그대로 유지된다). 처음 한 번 + "다시 보기" 때.
+    function showInvoice() {
+      phase = "invoice";
+      map.classList.add("is-covered");
+      var html = "";
+      for (var i = 0; i < N; i++) {
+        html += '<div class="mg-parcel' + (i < idx ? " is-done" : "") + '" style="--d:' + (i * MAP_POP_STAGGER_MS) + 'ms">'
+          + '<i class="pn">' + (i + 1) + '</i><span class="pbox"><b class="pl">' + plan.targets[i].label + '호</b></span><span class="pk">✓</span></div>';
       }
-      orderEl.innerHTML = chips.join('<span class="mg-oa">→</span>');
-      orderEl.classList.remove("is-off");
-      phaseEl.textContent = "외우세요! 이 순서대로 배달해요";
+      parcelsEl.innerHTML = html; // 새로 그려야 팝업 애니메이션이 처음부터 다시 돈다
+      phaseEl.textContent = "택배 송장을 외우세요! 이 순서대로 배달해요";
       barEl.style.transition = "none"; barEl.style.width = "100%";
       void barEl.offsetWidth;
       barEl.style.transition = "width " + cfg.flashMs + "ms linear"; barEl.style.width = "0%";
       replay.disabled = true;
       paintDots();
-      c.later(endFlash, cfg.flashMs);
+      c.later(showMap, cfg.flashMs);
     }
-    function endFlash() {
+    // 지도 단계: 택배가 사라지고 지도가 뜬다.
+    function showMap() {
       phase = "play";
-      clearTargets();
-      map.classList.remove("is-flash");
-      if (cfg.hideLabels) map.classList.add("is-labels-hidden");
-      orderEl.classList.add("is-off");
-      phaseEl.textContent = "출발! 방향키로 이동하고 스페이스로 배달하세요";
-      replay.disabled = false;
+      map.classList.remove("is-covered");
+      phaseEl.textContent = "지도가 나왔어요! 호실을 찾아 순서대로 배달하세요";
       paintDots();
+      updateReplay();
+    }
+    // "송장 다시 보기": 게임 시작 후 replayAfter(20초)가 지나야 열린다. 그 전에는 남은 시간을 버튼에 표시.
+    function updateReplay() {
+      var left = replayAfter - (performance.now() - startedAt);
+      if (left <= 0) { replay.textContent = "송장 다시 보기"; replay.disabled = phase !== "play"; return; }
+      replay.disabled = true;
+      replay.textContent = "송장 다시 보기 (" + Math.ceil(left / 1000) + "초 뒤)";
+      c.later(updateReplay, Math.min(500, left));
     }
     function place() { courier.style.setProperty("--cx", pos.x); courier.style.setProperty("--cy", pos.y); }
 
@@ -674,7 +704,7 @@
       c.addMistake();
       locked = true;
       restartAnim(tile, "is-wrong");
-      note.textContent = tile.classList.contains("is-house") ? "여기가 아니에요!" : "배달할 집이 아니에요";
+      note.textContent = tile.classList.contains("is-house") ? "그 호실이 아니에요!" : "배달할 집이 아니에요";
       c.later(function () { locked = false; note.textContent = ""; }, MAP_LOCK_MS);
     }
     function press(k) {
@@ -702,17 +732,16 @@
     });
     replay.addEventListener("mousedown", function (e) { e.preventDefault(); }); // 포커스를 안 가져가게(스페이스가 버튼을 또 누르면 안 된다)
     replay.addEventListener("click", function () {
-      if (phase !== "play" || locked || c.isFinished()) return;
-      c.addMistake();
-      showFlash();
+      if (phase !== "play" || locked || c.isFinished() || performance.now() - startedAt < replayAfter) return;
+      showInvoice(); // 공짜 -- 대신 보는 동안 지도가 가려져 시간이 간다
     });
 
-    showFlash();
+    showInvoice();
+    updateReplay();
     return {
       hint: function () {
-        return "잠깐 켜지는 집의 번호 순서를 외우세요. 방향키로 이동하고, 집에 도착하면 스페이스로 배달해요. "
-          + (cfg.hideLabels ? "집 번호는 곧 사라지니 위치를 기억해야 해요. " : "집 번호는 지도에 계속 보여요. ")
-          + "엉뚱한 곳에서 배달하면 실수예요.";
+        return "먼저 송장만 붙은 택배가 순서대로 잠깐 떠요 -- 호실 번호와 순서를 외우세요. 그다음 지도가 나오면 그 호실의 집을 찾아 방향키로 이동하고, 도착하면 스페이스로 배달해요. "
+          + "비슷한 번호의 집이 섞여 있어요. 엉뚱한 집에서 배달하면 실수예요. 시작 " + Math.round(replayAfter / 1000) + "초 뒤부터는 송장을 다시 볼 수 있어요.";
       },
     };
   }
@@ -747,7 +776,7 @@
     var tick = setInterval(function () { if (!finished) timeEl.textContent = fmtSec(performance.now() - t0); }, 100);
 
     var ctx = {
-      level: level, label: opts.label, testHooks: !!opts.testHooks,
+      level: level, label: opts.label, testHooks: !!opts.testHooks, opts: opts,
       isFinished: function () { return finished || destroyed; },
       later: function (fn, ms) {
         var id = setTimeout(function () { if (!destroyed) fn(); }, ms);
@@ -795,6 +824,7 @@
     start: start,
     KINDS: KINDS,
     LEVEL_NAME: LEVEL_NAME,
+    MAP_REPLAY_AFTER_MS: MAP_REPLAY_AFTER_MS,
     setMistakeRule: function (rule) { if (rule === "reset" || rule === "freeze" || rule === "ignore") config.mistakeRule = rule; },
     getMistakeRule: function () { return config.mistakeRule; },
   };

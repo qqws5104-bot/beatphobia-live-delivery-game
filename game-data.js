@@ -59,7 +59,7 @@ TYPES.forEach((t, catIdx) => {
 });
 
 const START_FLOOR_IDX = 1; // 1F
-const ELEVATOR_ROUNDS = 5;
+const ELEVATOR_ROUNDS = 7; // 전/후반 각각 이 라운드 수 (2026-10-07: 5 -> 7)
 const SECURE_PHASE_MS = 3 * 60 * 1000;
 const VOTE_MS = 5000; // 엘리베이터 이동 라운드 길이 (기존과 동일)
 
@@ -76,6 +76,8 @@ const HALVES = 2;
 // 후반 전용: 매 라운드 이동(voting) 시작 전, 택배도둑을 놓을지 말지 따로 주어지는 시간
 // (2026-08-27 신설 -- 원래는 idle/voting 중 아무 때나 놓을 수 있었는데, 별도의 전용 시간으로 분리).
 const THIEF_PLACE_MS = 5000;
+// 후반 전체에서 1인당 택배도둑을 놓을 수 있는 횟수 (2026-10-07: 1 -> 2). 라운드당 최대 1개는 그대로.
+const THIEF_PER_HALF = 2;
 // 우선 택배 지정 전용 시간 (2026-10-06 신설, 사용자 요청: "우선택배 지정 시간을 10초, 타이머 있게").
 // 라운드 게이트(idle/result)에서 둘 다 스페이스바를 누르면 이 창이 먼저 열리고(후반이면 그 다음 택배도둑 창),
 // 둘 다 "확정"하면 10초를 다 기다리지 않고 곧장 다음으로 넘어간다 -- thief 창과 같은 조기-진행 패턴.
@@ -83,5 +85,5 @@ const PRIORITY_PICK_MS = 10000;
 
 module.exports = {
   TYPES, COURIERS, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
-  PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, PRIORITY_PICK_MS,
+  PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, THIEF_PER_HALF, PRIORITY_PICK_MS,
 };

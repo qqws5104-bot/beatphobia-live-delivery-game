@@ -337,7 +337,7 @@ async function main() {
   }
 
   async function playHalf(halfLabel, isHalf2) {
-    for (let round = 1; round <= 5; round++) {
+    for (let round = 1; round <= 7; round++) {
       if (!isHalf2) {
         const strayThief = await countSel(p1, ".thief-window");
         if (strayThief !== 0) throw new Error(`${halfLabel} round ${round}: thief window rendered during 전반 -- should be 후반-only`);
@@ -345,7 +345,11 @@ async function main() {
       const prioMode = halfLabel === "전반" ? ({ 1: "pick", 2: "timeout", 3: "space" }[round] || "confirm") : (round === 1 ? "space" : "confirm");
       await priorityStep(halfLabel, round, prioMode, isHalf2);
 
-      if (isHalf2) {
+      if (isHalf2 && round === 7) {
+        // 마지막 라운드엔 택배도둑 창이 열리지 않는다 (도둑은 다음 라운드부터 작동하는데 다음이 없음)
+        await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: `${halfLabel} round 7: voting starts with no thief window`, timeout: 6000 });
+        if (await countSel(p1, ".thief-window")) throw new Error("thief window must not open in the final round");
+      } else if (isHalf2) {
         await waitFor(async () => (await countSel(p1, ".thief-window")) > 0, { label: `${halfLabel} round ${round}: thief window`, timeout: 6000 });
         if (await countSel(p1, '.thief-floors [data-action="place-thief"]')) {
           await clickSel(p1, '.thief-floors [data-action="place-thief"]');
@@ -397,20 +401,20 @@ async function main() {
       await p1.waitForTimeout(150);
       await pressSpace(p2);
 
-      if (round < 5) {
+      if (round < 7) {
         await waitFor(async () => {
           const t1 = await bodyText(p1);
           const t2 = await bodyText(p2);
-          return t1.includes(`라운드 ${round + 1} / 5`) && t2.includes(`라운드 ${round + 1} / 5`);
+          return t1.includes(`라운드 ${round + 1} / 7`) && t2.includes(`라운드 ${round + 1} / 7`);
         }, { label: `${halfLabel}: advance to round ${round + 1}`, timeout: 5000 });
       }
     }
-    log(`${halfLabel}: all 5 rounds completed`);
+    log(`${halfLabel}: all 7 rounds completed`);
   }
 
   await playHalf("전반", false);
 
-  // ---- halftime transition: must appear after 전반's 5th round, on both viewers ----
+  // ---- halftime transition: must appear after 전반's 7th round, on both viewers ----
   await waitFor(async () => {
     const t1 = await bodyText(p1);
     const t2 = await bodyText(p2);

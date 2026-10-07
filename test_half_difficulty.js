@@ -1,7 +1,7 @@
 // 2026-10-06: 전반/후반 난이도가 라이브 게임에서 실제로 다르게 적용되는지 (사용자 요청 수치):
 //   일반택배(박스 포장) 키 6 -> 8 / 깨지기 쉬운(이상 확인) 8 -> 10 / 확정 층수(송장 붙이기) 송장 3 -> 4, 박스 5 -> 7
-//   귀중품(지도 배달) 난이도 보통 -> 어려움: 6x4 지도/목표 4/번호 유지 -> 7x5 지도/목표 5/공사장 5/번호 숨김.  전반은 test_minigames_live.js가 확인하므로 여기선 후반만 본다.
-// 전반 5라운드를 빠르게 흘려보낸 뒤(test_theft_e2e.js와 같은 흐름) 후반 보드에서 각 종류 칸을 열어 직접 센다.
+//   귀중품(지도 배달) 난이도 보통 -> 어려움: 6x4 지도/송장 4장/비슷한 번호 미끼 2 -> 7x5 지도/송장 5장/공사장 5/미끼 5.  전반은 test_minigames_live.js가 확인하므로 여기선 후반만 본다.
+// 전반 7라운드를 빠르게 흘려보낸 뒤(test_theft_e2e.js와 같은 흐름) 후반 보드에서 각 종류 칸을 열어 직접 센다.
 // 사전 준비: SECURE_PHASE_MS를 임시로 단축(예: 10 * 1000) + build_client.py 재빌드 + 서버 재시작. 끝나면 원복.
 "use strict";
 const { chromium } = require("playwright");
@@ -83,7 +83,7 @@ async function main() {
   log("전반 elevator phase 진입");
 
   // 전반 5라운드: 확보한 게 없어 배송도 없다 -- idle/result 게이트만 통과시키며 흘려보낸다.
-  for (let round = 1; round <= 5; round++) {
+  for (let round = 1; round <= 7; round++) {
     await pressSpace(p1); await pressSpace(p2); // idle 또는 이전 라운드의 result 게이트 통과
     await passPriority(p1, p2, '[data-action="vote-up"]');
     await waitFor(async () => (await countSel(p1, '[data-action="vote-up"]')) > 0, { label: `전반 round ${round} voting 시작`, timeout: 8000 });
@@ -91,8 +91,8 @@ async function main() {
     await clickSel(p2, '[data-action="vote-up"]');
     await waitFor(async () => (await bodyText(p1)).includes(`라운드 ${round} 결과`), { label: `전반 round ${round} 결과`, timeout: 8000 });
   }
-  log("전반 5라운드 통과");
-  // 5라운드 결과 게이트도 다른 라운드와 동일하게 "둘 다 스페이스"로 넘겨야 half가 끝난다
+  log("전반 7라운드 통과");
+  // 7라운드 결과 게이트도 다른 라운드와 동일하게 "둘 다 스페이스"로 넘겨야 half가 끝난다
   // (setElevatorReady: el.state==="result"이고 round>=ELEVATOR_ROUNDS일 때 비로소 _finishHalf 호출).
   await pressSpace(p1); await pressSpace(p2);
 
@@ -139,9 +139,10 @@ async function main() {
     return b ? { grid: b.dataset.grid, targets: b.dataset.targets.split(";").length, blocked: b.dataset.blocked.split(";").filter(Boolean).length } : null;
   });
   assert_(mapInfo && mapInfo.grid === "7,5" && mapInfo.targets === 5 && mapInfo.blocked === 5, `후반 지도 배달: 7x5 지도 / 목표 5개 / 공사장 5칸이어야 함, got ${JSON.stringify(mapInfo)}`);
-  await p1.waitForTimeout(3300); // 깜빡임(3초)이 끝나면 호실 번호가 지도에서 사라진다
-  assert_((await countSel(p1, "#mg-layer .mg-map.is-labels-hidden")) === 1, "후반 지도 배달은 깜빡임 뒤 호실 번호가 숨겨져야 함");
-  log("후반 귀중품(지도 배달): 7x5 지도, 목표 5개, 공사장 5칸, 깜빡임 뒤 번호 숨김");
+  assert_((await countSel(p1, "#mg-layer .mg-map.is-covered")) === 1 && (await countSel(p1, "#mg-layer .mg-parcel")) === 5, "후반 지도 배달은 송장 택배 5개가 먼저 뜨고 지도는 가려져 있어야 함");
+  await p1.waitForTimeout(3900); // 송장 단계(3.5초)가 끝나면 지도가 뜬다
+  assert_((await countSel(p1, "#mg-layer .mg-map.is-covered")) === 0, "송장 단계가 끝나면 지도가 떠야 함");
+  log("후반 귀중품(지도 배달): 7x5 지도, 송장 5장, 공사장 5칸, 송장 -> 지도 순서");
   await giveUp();
 
   if (errors.length) throw new Error("page errors: " + errors.join(" | "));

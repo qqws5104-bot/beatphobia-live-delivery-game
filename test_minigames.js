@@ -36,17 +36,17 @@ async function main() {
   await page.goto(URL);
 
   // ---- 헬퍼: API로 직접 게임을 띄운다 (testHooks로 정답 위치를 노출) ----
-  async function launch(kind, level, rule) {
-    await page.evaluate(({ kind, level, rule }) => {
+  async function launch(kind, level, rule, extra) {
+    await page.evaluate(({ kind, level, rule, extra }) => {
       if (window.__ctl) { window.__ctl.destroy(); window.__ctl = null; }
       document.getElementById("menu").hidden = true;
       document.getElementById("play").hidden = false;
       MiniGames.setMistakeRule(rule || "reset");
       window.__res = null;
-      window.__ctl = MiniGames.start(document.getElementById("host"), {
+      window.__ctl = MiniGames.start(document.getElementById("host"), Object.assign({
         kind, level, testHooks: true, label: "1F", onDone: (r) => { window.__res = r; }, onCancel: () => { window.__cancelled = true; },
-      });
-    }, { kind, level, rule });
+      }, extra || {}));
+    }, { kind, level, rule, extra: extra || null });
   }
   const result = () => page.evaluate(() => window.__res);
   const miss = async () => parseInt((await page.textContent(".mg-miss")).replace(/\D/g, ""), 10);
@@ -332,11 +332,14 @@ async function main() {
   }
 
   // ================= 지도 배달 (2026-10-07, 귀중품) =================
+  // 흐름: 송장 단계(지도 가려짐, 송장만 붙은 택배가 팝업으로 뜬다) -> 지도 단계(택배 사라짐, 호실 번호가 적힌 집을 찾아 순서대로 배달)
+  //       시작 20초 뒤부터 "송장 다시 보기"(공짜)가 열린다
   const MAPCFG = [
-    { cols: 5, rows: 4, houses: 8,  targets: 3, flash: 4500, hide: false, blocks: 0 },
-    { cols: 6, rows: 4, houses: 11, targets: 4, flash: 3500, hide: false, blocks: 0 },
-    { cols: 7, rows: 5, houses: 14, targets: 5, flash: 3000, hide: true,  blocks: 5 },
+    { cols: 5, rows: 4, houses: 8,  targets: 3, flash: 4500, similar: 0, blocks: 0 },
+    { cols: 6, rows: 4, houses: 11, targets: 4, flash: 4000, similar: 2, blocks: 0 },
+    { cols: 7, rows: 5, houses: 14, targets: 5, flash: 3500, similar: 5, blocks: 5 },
   ];
+  assert(await page.evaluate(() => MiniGames.MAP_REPLAY_AFTER_MS) === 20000, "map replay unlocks 20 seconds after the game starts");
   const DIRV = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
   const mapInfo = () => page.evaluate(() => {
     const b = document.querySelector(".mg-body");
@@ -344,6 +347,8 @@ async function main() {
     return { grid: b.dataset.grid.split(",").map(Number), depot: b.dataset.depot.split(",").map(Number), blocked: P(b.dataset.blocked), targets: P(b.dataset.targets) };
   });
   const courierAt = () => page.evaluate(() => { const c = document.querySelector(".mg-courier"); return [c.style.getPropertyValue("--cx"), c.style.getPropertyValue("--cy")].map(Number); });
+  const invoiceNums = () => page.$$eval(".mg-cover .mg-parcel", (els) => els.map((e) => ({ n: e.querySelector(".pn").textContent, room: e.querySelector(".pl").textContent.replace("호", ""), done: e.classList.contains("is-done") })));
+  const labelAt = (x, y) => page.evaluate(([x, y]) => { const l = document.querySelector(`.mg-tile[data-x="${x}"][data-y="${y}"] .mg-lab`); return l ? l.textContent : null; }, [x, y]);
   function bfsDirs(info, from, to) {
     const [W, H] = info.grid, bl = new Set(info.blocked.map((b) => b.join(",")));
     const prev = new Map([[from.join(","), null]]); const q = [from];
@@ -368,7 +373,7 @@ async function main() {
     const at = await courierAt();
     assert(at[0] === to[0] && at[1] === to[1], `courier should be at ${to}, got ${at}`);
   }
-  const waitFlashEnd = () => waitFor(async () => (await page.$$(".mg-map.is-flash")).length === 0, { timeout: 7000, label: "flash ends" });
+  const waitMapShown = () => waitFor(async () => (await page.$$(".mg-map.is-covered")).length === 0, { timeout: 7000, label: "map appears" });
 
   for (let lv = 1; lv <= 3; lv++) {
     const cfg = MAPCFG[lv - 1];
@@ -381,22 +386,30 @@ async function main() {
     const labels = await page.$$eval(".mg-lab", (els) => els.map((e) => e.textContent));
     assert(new Set(labels).size === labels.length && labels.every((t) => /^[1-5]0[1-9]$/.test(t)), "house labels are unique 3-digit room numbers: " + labels);
     for (const t of info.targets) assert(bfsDirs(info, info.depot, t), `target ${t} reachable (blocked tiles must never cut a house off)`);
-    // 깜빡임 단계: 목표 N개가 번호(1..N)와 함께 켜지고, 이동/배달은 잠겨 있다
-    assert((await page.$$(".mg-map.is-flash")).length === 1 && (await page.$$(".mg-tile.is-target")).length === cfg.targets, "flash shows all targets");
-    for (let i = 0; i < info.targets.length; i++) {
-      const [tx, ty] = info.targets[i];
-      const ord = await page.textContent(`.mg-tile[data-x="${tx}"][data-y="${ty}"] .mg-ord`);
-      assert(ord === String(i + 1), `target ${i + 1} badge shows its order, got '${ord}'`);
-    }
-    assert((await page.$$(".mg-order .mg-oc")).length === cfg.targets, "order panel lists every target during the flash");
+    // 송장 단계: 지도는 가려져 있고(안 보임), 호실 번호가 순서(1..N)와 함께 목록으로만 뜬다
+    assert((await page.$$(".mg-map.is-covered")).length === 1, "the map is covered while the parcels pop up");
+    assert(await page.$eval(".mg-cover", (e) => getComputedStyle(e).display !== "none"), "the cover is actually displayed");
+    const inv = await invoiceNums();
+    assert(inv.length === cfg.targets && inv.every((v, i) => v.n === String(i + 1) && /^[1-5]0[1-9]$/.test(v.room) && !v.done), "N parcels with only a room number are shown in order: " + JSON.stringify(inv));
+    assert((await page.$$(".mg-cover .mg-parcel .pbox")).length === cfg.targets, "each parcel is a box carrying just the invoice");
+    assert(await page.$eval(".mg-replay", (e) => e.disabled && /초 뒤/.test(e.textContent)), "replay is locked at the start and shows a countdown");
+    for (let i = 0; i < info.targets.length; i++) assert((await labelAt(...info.targets[i])) === inv[i].room, `target ${i + 1} house carries invoice room ${inv[i].room}`);
+    assert((await page.$$(".mg-tile.is-target")).length === 0, "no target is highlighted on the map (you must find the houses yourself)");
+    // 송장 단계의 키 입력은 무시된다
     await page.keyboard.press("ArrowUp"); await page.keyboard.press("Space");
     const c0 = await courierAt();
-    assert(c0[0] === info.depot[0] && c0[1] === info.depot[1] && (await miss()) === 0, "keys are ignored while the targets are flashing (no move, no mistake)");
-    if (lv === 2) await shot("map_L2_flash");
-    await waitFlashEnd();
-    assert((await page.$$(".mg-tile.is-target")).length === 0, "targets go dark after the flash");
-    assert((await page.$$(".mg-map.is-labels-hidden")).length === (cfg.hide ? 1 : 0), `map L${lv}: labels ${cfg.hide ? "hidden" : "kept"} after the flash`);
-    if (lv === 3) await shot("map_L3_play");
+    assert(c0[0] === info.depot[0] && c0[1] === info.depot[1] && (await miss()) === 0, "keys are ignored while the invoices are showing (no move, no mistake)");
+    if (lv === 2) { await sleep(900); await shot("map_L2_invoice"); }
+    // 비슷한 번호 미끼: 목표와 같은 층 또는 같은 호를 가진 미끼 집이 설정한 수 이상
+    const targetRooms = new Set(inv.map((v) => v.room));
+    const decoys = labels.filter((t) => !targetRooms.has(t));
+    const similarCount = decoys.filter((t) => inv.some((v) => v.room[0] === t[0] || v.room[2] === t[2])).length;
+    assert(similarCount >= cfg.similar, `map L${lv}: at least ${cfg.similar} decoys look like a target (same floor or same room), got ${similarCount}`);
+    await waitMapShown();
+    assert(await page.$eval(".mg-cover", (e) => getComputedStyle(e).display === "none"), "the parcels disappear once the map shows");
+    assert(await page.$eval(".mg-tile.is-house .mg-lab", (e) => getComputedStyle(e).visibility !== "hidden"), "house numbers stay visible on the map");
+    if (lv === 2) await shot("map_L2_map");
+    if (lv === 3) await shot("map_L3_map");
     // 순서대로 배달
     let at = info.depot;
     for (let i = 0; i < info.targets.length; i++) {
@@ -411,52 +424,63 @@ async function main() {
     await waitFor(result, { label: `map L${lv} done` });
     const r = await result();
     assert(r.ok && r.kind === "map" && r.level === lv && r.mistakes === 0, "map clean run: " + JSON.stringify(r));
-    log(`map L${lv}: ${cfg.cols}x${cfg.rows} 지도, 집 ${cfg.houses}, 목표 ${cfg.targets}, 공사장 ${cfg.blocks}, 호실 번호 ${cfg.hide ? "숨김" : "유지"} -- 클리어 (${r.ms}ms, 실수 0)`);
+    log(`map L${lv}: ${cfg.cols}x${cfg.rows} 지도, 집 ${cfg.houses}(비슷한 번호 미끼 ${similarCount}), 송장 ${cfg.targets}장, 공사장 ${cfg.blocks} -- 택배 팝업 후 지도가 뜨고 클리어 (${r.ms}ms, 실수 0)`);
   }
 
-  // 오배달 / 다시 보기 / 막힌 칸
+  // 오배달 / 송장 다시 보기(20초 뒤 해금, 공짜) / 막힌 칸
   {
-    await launch("map", 1);
+    await launch("map", 1, null, { replayAfterMs: 12000 });
     const info = await mapInfo();
-    await waitFlashEnd();
+    await waitMapShown();
+    assert(await page.$eval(".mg-replay", (e) => e.disabled && /초 뒤/.test(e.textContent)), "replay is still locked right after the map shows");
+    await page.click(".mg-replay", { force: true }).catch(() => {});
+    assert((await page.$$(".mg-map.is-covered")).length === 0, "clicking a locked replay does nothing");
     // (1) 도로(센터)에서 스페이스 = 실수 + 멈춤, 멈춰 있는 동안의 연타는 또 세지 않는다
     await page.keyboard.press("Space"); await page.keyboard.press("Space");
     assert((await miss()) === 1, "Space on a road tile is one mistake; the repeat during the lock does not count again");
     assert((await page.textContent(".mg-freeze-note")).length > 0, "a lock note is shown");
     await sleep(900);
-    // (2) 엉뚱한 집(목표가 아닌 집)에서 스페이스 = 실수
+    // (2) 엉뚱한 집(송장에 없는 호실)에서 스페이스 = 실수
     const targetKeys = new Set(info.targets.map((t) => t.join(",")));
     const other = await page.$$eval(".mg-tile.is-house", (els) => els.map((e) => [+e.dataset.x, +e.dataset.y]));
     const wrongHouse = other.find((h) => !targetKeys.has(h.join(",")));
     await walkTo(info, info.depot, wrongHouse);
     await page.keyboard.press("Space");
-    assert((await miss()) === 2, "Space on a non-target house is a mistake");
+    assert((await miss()) === 2, "Space on a house that is not on the invoice is a mistake");
     assert((await page.$$(".mg-tile.is-delivered")).length === 0, "...and nothing is delivered");
     await sleep(900);
-    // (3) 첫 목표만 배달한 뒤 "다시 보기": 실수 +1, 남은 목표(2번부터)만 원래 번호로 다시 켜진다
-    await walkTo(info, wrongHouse, info.targets[0]);
+    // (3) 두 번째 호실을 먼저 가서 배달 시도 = 순서 틀림 = 실수
+    await walkTo(info, wrongHouse, info.targets[1]);
+    await page.keyboard.press("Space");
+    assert((await miss()) === 3, "delivering to the 2nd invoice room first is a mistake (order matters)");
+    await sleep(900);
+    // (4) 20초(테스트에선 12초) 전에는 송장 다시 보기가 잠겨 있다 -> 해금 후 첫 호실 배달 -> 다시 보기(공짜)
+    await walkTo(info, info.targets[1], info.targets[0]);
     await page.keyboard.press("Space");
     await sleep(60);
     assert((await page.$$(".mg-tile.is-delivered")).length === 1, "first target delivered");
+    await waitFor(() => page.$eval(".mg-replay", (e) => !e.disabled && e.textContent === "송장 다시 보기"), { timeout: 12000, label: "replay unlocks" });
     await page.click(".mg-replay");
-    assert((await miss()) === 3, "replay costs one mistake");
-    assert((await page.$$(".mg-tile.is-target")).length === info.targets.length - 1, "replay lights only the remaining targets");
-    const [sx, sy] = info.targets[1];
-    assert((await page.textContent(`.mg-tile[data-x="${sx}"][data-y="${sy}"] .mg-ord`)) === "2", "remaining targets keep their original order numbers");
-    await page.click(".mg-replay", { force: true }).catch(() => {});
-    assert((await miss()) === 3, "replay button is disabled during a flash");
-    await waitFlashEnd();
+    assert((await miss()) === 3, "replay is free (no extra mistake)");
+    assert((await page.$$(".mg-map.is-covered")).length === 1, "the map is covered again while the parcels replay");
+    const inv2 = await invoiceNums();
+    assert(inv2.length === info.targets.length && inv2[0].done && !inv2[1].done && inv2.every((v, i) => v.n === String(i + 1)), "replay shows every parcel in the original order, delivered ones marked: " + JSON.stringify(inv2));
+    assert(await page.$eval(".mg-replay", (e) => e.disabled), "replay button is disabled while the parcels show");
+    await page.keyboard.press("ArrowUp");
+    const cc = await courierAt();
+    assert(cc[0] === info.targets[0][0] && cc[1] === info.targets[0][1], "the courier does not move while the map is covered");
+    await waitMapShown();
     // 다시 본 뒤 나머지를 순서대로 -> 완료
     let at = info.targets[0];
     for (let i = 1; i < info.targets.length; i++) { await walkTo(info, at, info.targets[i]); at = info.targets[i]; await page.keyboard.press("Space"); await sleep(60); }
     await waitFor(result, { label: "map done after mistakes" });
     assert((await result()).mistakes === 3, "final result carries the 3 mistakes");
-    log("map: 도로/엉뚱한 집에서 배달 = 실수 + 0.8초 멈춤(연타 무시), 다시 보기 = 실수 +1 로 남은 목표만 원래 번호로 재점등");
+    log("map: 도로/송장에 없는 집/순서 틀린 집에서 배달 = 실수 + 0.8초 멈춤(연타 무시), 송장 다시 보기는 시작 후 일정 시간(실게임 20초) 뒤에 열리고 공짜, 지도를 다시 가리고 전체 택배를 원래 번호로 재표시(배달한 건 체크)");
   }
   {
     await launch("map", 3);
     const info = await mapInfo();
-    await waitFlashEnd();
+    await waitMapShown();
     // 막힌 칸(공사장)은 들어갈 수 없다: 도달 가능한 칸 중 공사장과 인접한 곳으로 가서 그쪽으로 밀어 본다
     const bl = new Set(info.blocked.map((b) => b.join(",")));
     let probe = null;
@@ -473,7 +497,6 @@ async function main() {
     assert((await miss()) === 0, "bumping a wall/blocked tile is not a mistake");
     log("map L3: 공사장 칸은 들어갈 수 없고(실수 아님), 모든 집은 공사장에 안 막히고 갈 수 있음");
   }
-  // 지도 안에서 방향키/스페이스가 게임 본체로 새지 않고, destroy 후엔 반응 없음은 아래 destroy 검사에서 pack으로 확인
 
   // ================= destroy 정리 =================
   await launch("pack", 1);

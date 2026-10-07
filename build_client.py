@@ -1194,24 +1194,27 @@ APP_JS_TEMPLATE = r"""
     // 아무 때나 놓을 수 있던 예전 방식 대신, 이제는 독립된 상태 화면이다). 배치는 선택사항(건너뛰기
     // 가능)이고, 배치 직후엔 아무 효과 없이 다음 라운드부터 실제로 작동한다 (game-room.js의 el.thieves
     // 참고). 둘 다 배치/건너뛰기를 마치면 타이머를 기다리지 않고 곧장 voting으로 넘어간다.
-    // 2026-08-27: 1인당 이 후반 전체(5라운드)를 통틀어 배치는 딱 1번만 허용 -- usedThisHalf가 true면
-    // 서버가 이미 매 라운드 자동으로 스킵 처리해두므로(placeThief 호출 없이도 doneMine이 true), 여기서는
-    // "이미 다 썼다"는 걸 구분해서 보여주기만 하면 된다.
+    // 2026-10-07: 1인당 이 후반 전체를 통틀어 thieves.perHalf(2)번까지 배치 가능 -- usedThisHalf(횟수)가
+    // perHalf에 닿으면 서버가 이미 매 라운드 자동으로 스킵 처리해두므로(placeThief 호출 없이도 doneMine이
+    // true), 여기서는 "이미 다 썼다"는 걸 구분해서 보여주기만 하면 된다. (마지막 라운드엔 창이 안 열린다.)
     if (st.elevator.state === "thief") {
       var placedMine = st.elevator.thieves.placedThisRound[seat];
       var skippedMine = !!st.elevator.thieves.skipped[seat];
-      var usedUpMine = !!st.elevator.thieves.usedThisHalf[seat];
+      var perHalf = st.elevator.thieves.perHalf || 1;
+      var usedCnt = st.elevator.thieves.usedThisHalf[seat] || 0;
+      var usedUpMine = usedCnt >= perHalf;
+      var leftMine = Math.max(0, perHalf - usedCnt);
       var doneMine = placedMine !== null && placedMine !== undefined || skippedMine;
       html += '<div class="thief-window">';
-      html += '<h4>택배도둑 배치 (후반 전용, 후반 통틀어 1회)</h4>';
+      html += '<h4>택배도둑 배치 (후반 전용, 후반 통틀어 ' + perHalf + '회 · 남은 횟수 ' + leftMine + '회)</h4>';
       if (doneMine) {
         html += '<div style="color:var(--muted);font-size:0.85rem;">'
           + (placedMine !== null && placedMine !== undefined
             ? ('<strong style="color:var(--danger)">' + esc(FLOORS[placedMine]) + '</strong>에 배치했어요. 다음 라운드부터 그 층에 상대가 배송하면 뺏어요.')
-            : (usedUpMine ? '이번 후반에 택배도둑을 이미 사용했어요 (1인당 1회).' : '이번 라운드는 배치하지 않았어요.'))
+            : (usedUpMine ? '이번 후반에 택배도둑을 이미 다 사용했어요 (1인당 ' + perHalf + '회).' : '이번 라운드는 배치하지 않았어요.'))
           + ' 상대를 기다리는 중...</div>';
       } else {
-        html += '<div style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem;">층을 골라 배치하면, 다음 라운드에 상대가 그 층에 배송할 때 가로채서 상대에게 확정 마이너스 점수를 줘요. 이 후반 동안 딱 한 번만 놓을 수 있으니 신중하게 골라주세요.</div>';
+        html += '<div style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem;">층을 골라 배치하면, 다음 라운드에 상대가 그 층에 배송할 때 가로채서 상대에게 확정 마이너스 점수를 줘요. 이 후반 동안 총 ' + perHalf + '번까지 놓을 수 있고(라운드당 1개), 마지막 라운드엔 놓을 수 없으니 신중하게 골라주세요.</div>';
         html += '<div class="thief-floors">' + FLOORS.map(function (f, i) {
           return '<button class="btn ghost" data-action="place-thief" data-floor-idx="' + i + '">' + esc(f) + '</button>';
         }).join('') + '<button class="btn ghost" data-action="skip-thief">건너뛰기</button></div>';

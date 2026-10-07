@@ -270,15 +270,7 @@
 .mg-label .lb-code { flex: 0 0 1.9cqw; margin: 0 1.4cqw 1cqw; background: repeating-linear-gradient(90deg, #2b1d12 0 0.25cqw, transparent 0.25cqw 0.5cqw, #2b1d12 0.5cqw 0.65cqw, transparent 0.65cqw 1.05cqw); opacity: 0.85; }
 
 /* ================= 지도 배달 (귀중품, 2026-10-07) ================= */
-.mg-map-top { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-height: 5.1rem; margin-bottom: 0.5rem; }
-.mg-order { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.3rem; min-height: 2.2rem; }
-.mg-order.is-off { visibility: hidden; }
-.mg-oc {
-  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.6rem 0.2rem 0.25rem; border-radius: 999px;
-  font-family: var(--mg-font-display); font-weight: 700; font-size: 1.1rem; background: #fff; border: 2px solid var(--mg-accent);
-}
-.mg-oc i { font-style: normal; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; background: var(--mg-accent); color: var(--mg-accent-ink); }
-.mg-oa { color: var(--mg-muted); font-weight: 700; }
+.mg-map-top { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-height: 2.2rem; margin-bottom: 0.5rem; }
 .mg-flashbar { width: min(100%, 360px); height: 6px; border-radius: 999px; background: rgba(43, 29, 18, 0.1); overflow: hidden; }
 .mg-flashbar > i { display: block; height: 100%; width: 0; background: var(--mg-accent); border-radius: 999px; }
 .mg-phase { margin: 0; font-size: 0.86rem; font-weight: 700; text-align: center; color: var(--mg-ink); min-height: 1.3em; }
@@ -300,14 +292,6 @@
   position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); font-family: var(--mg-font-display); font-weight: 700;
   font-size: 0.72rem; line-height: 1; padding: 0.1rem 0.28rem; border-radius: 4px; background: #fffdf5; border: 1px solid #7a5a30; color: #2b1d12; white-space: nowrap;
 }
-.mg-map.is-labels-hidden .mg-lab { visibility: hidden; }
-.mg-ord {
-  position: absolute; right: -5px; top: -7px; width: 1.55rem; height: 1.55rem; border-radius: 50%; z-index: 3; display: none; align-items: center; justify-content: center;
-  font-style: normal; font-family: var(--mg-font-display); font-weight: 800; font-size: 1rem; background: var(--mg-accent); color: var(--mg-accent-ink); border: 2px solid #fff;
-}
-.mg-tile.is-target { box-shadow: 0 0 0 3px var(--mg-accent), 0 0 14px rgba(226, 105, 26, 0.65); background: #fff3d6; z-index: 2; animation: mg-glow 0.7s ease-in-out infinite alternate; }
-.mg-tile.is-target .mg-ord { display: inline-flex; }
-@keyframes mg-glow { to { filter: brightness(1.08); } }
 .mg-chk {
   position: absolute; right: -4px; top: -6px; width: 1.2rem; height: 1.2rem; border-radius: 50%; display: none; align-items: center; justify-content: center; z-index: 3;
   font-size: 0.8rem; font-weight: 800; background: var(--mg-ok); color: #fff; border: 2px solid #fff;
@@ -320,6 +304,32 @@
 .mg-fence { position: absolute; inset: 22% 14%; border-radius: 3px; background: rgba(43, 29, 18, 0.55); }
 .mg-tile.is-depot { background: #3b4049; }
 .mg-dep { font-family: var(--mg-font-display); font-weight: 700; font-size: 0.7rem; color: #f4f1ea; letter-spacing: 0.08em; position: absolute; top: 4px; }
+.mg-cover {
+  position: absolute; inset: 0; z-index: 6; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 0.7rem; border-radius: 12px;
+  text-align: center; padding: 0.5rem; background: repeating-linear-gradient(45deg, #c9b58a 0 12px, #bfa97c 12px 24px);
+}
+.mg-cover-note { background: rgba(255, 252, 244, 0.85); padding: 0.25rem 0.8rem; border-radius: 999px; color: #5a4224; font-weight: 800; font-size: 0.8rem; }
+.mg-map.is-covered .mg-cover { display: flex; }
+/* 송장만 붙은 택배 팝업 */
+.mg-parcels { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.6rem 0.7rem; max-width: 100%; }
+.mg-parcel { position: relative; animation: mg-popin 0.34s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: var(--d, 0ms); }
+.mg-parcel .pbox {
+  position: relative; display: flex; align-items: center; justify-content: center; width: 86px; height: 70px; border-radius: 6px;
+  background: linear-gradient(160deg, var(--mg-card-light), var(--mg-card)); border: 2px solid var(--mg-card-edge); box-shadow: 0 5px 10px rgba(43, 29, 18, 0.35);
+}
+.mg-parcel .pbox::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 12px; transform: translateX(-50%); background: var(--mg-tape); opacity: 0.85; }
+.mg-parcel .pl {
+  position: relative; z-index: 1; font-family: var(--mg-font-display); font-weight: 700; font-size: 1.3rem; line-height: 1; padding: 0.3rem 0.45rem;
+  background: #fffefa; border: 2px solid #9a8460; border-radius: 4px; color: #2b1d12; white-space: nowrap; transform: rotate(-3deg);
+}
+.mg-parcel .pn {
+  position: absolute; left: -7px; top: -9px; z-index: 2; width: 1.6rem; height: 1.6rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-style: normal; font-family: var(--mg-font-display); font-weight: 800; font-size: 0.95rem; background: var(--mg-accent); color: var(--mg-accent-ink); border: 2px solid #fff;
+}
+.mg-parcel .pk { position: absolute; right: -6px; top: -8px; z-index: 2; display: none; width: 1.3rem; height: 1.3rem; border-radius: 50%; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; background: var(--mg-ok); color: #fff; border: 2px solid #fff; }
+.mg-parcel.is-done .pbox { opacity: 0.45; filter: grayscale(0.5); }
+.mg-parcel.is-done .pk { display: flex; }
+@keyframes mg-popin { from { transform: scale(0.15) translateY(14px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
 .mg-courier {
   position: absolute; z-index: 4; pointer-events: none; padding: 4px; /* 지도 padding(4px)과 같다 */
   width: calc((100% - 8px - (var(--cols) - 1) * 3px) / var(--cols)); height: calc((100% - 8px - (var(--rows) - 1) * 3px) / var(--rows));
@@ -342,10 +352,10 @@
 .mg-replay:hover:not(:disabled) { background: rgba(43, 29, 18, 0.06); }
 .mg-replay:disabled { opacity: 0.4; cursor: default; }
 .mg-kind-map .mg-pad { margin-top: 0.3rem; }
-@media (max-width: 480px) { .mg-map { --ts: 52px; } .mg-lab { font-size: 0.62rem; } }
+@media (max-width: 480px) { .mg-map { --ts: 52px; } .mg-lab { font-size: 0.62rem; } .mg-parcel .pbox { width: 68px; height: 58px; } .mg-parcel .pl { font-size: 1.05rem; } }
 @media (max-height: 820px) {
   .mg-map { --ts: 50px; }
-  .mg-map-top { min-height: 4.2rem; margin-bottom: 0.3rem; }
+  .mg-map-top { min-height: 2rem; margin-bottom: 0.3rem; }
   .mg-kind-map .mg-freeze-note { margin: 0 0 0.2rem; }
 }
 

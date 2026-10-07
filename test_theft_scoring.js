@@ -99,9 +99,10 @@ assert.deepStrictEqual(
 );
 log("confirmed: round-1 thief placement activated exactly one round later, as designed");
 
-// seat 1은 후반 전체 1회 한도를 이미 썼으므로 자동으로 스킵 처리돼 있어야 한다.
-assert.strictEqual(room.state.elevator.thieves.skipped["1"], true, "seat 1 should be auto-skipped (already used this half)");
-room.placeThief("2", null); // seat 2도 넘겨서 곧장 voting으로
+// seat 1은 후반 2회 한도 중 1회만 썼으므로 아직 자동 스킵이 아니다(2026-10-07: 1회 -> 2회). 둘 다 넘겨서 voting으로.
+assert.strictEqual(room.state.elevator.thieves.skipped["1"], false, "seat 1 still has 1 placement left (2 per half)");
+room.placeThief("1", null);
+room.placeThief("2", null);
 assert.strictEqual(room.state.elevator.state, "voting", "round 2 should now be voting");
 
 // 엘리베이터를 1F(idx 1) -> B1(idx 0)으로 이동시켜 seat 2의 그 송장을 이번 라운드에 배송시킨다.

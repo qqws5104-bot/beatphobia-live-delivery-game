@@ -107,7 +107,7 @@ async function playMap(page) {
     const P = (s) => (s ? s.split(";").filter(Boolean).map((t) => t.split(",").map(Number)) : []);
     return { grid: b.dataset.grid.split(",").map(Number), depot: b.dataset.depot.split(",").map(Number), blocked: P(b.dataset.blocked), targets: P(b.dataset.targets) };
   });
-  await waitFor(async () => (await countSel(page, "#mg-layer .mg-map.is-flash")) === 0, { timeout: 7000, label: "map flash ends" });
+  await waitFor(async () => (await countSel(page, "#mg-layer .mg-map.is-covered")) === 0, { timeout: 7000, label: "map shows after the invoices" });
   let at = info.depot;
   for (const t of info.targets) {
     for (const d of mapBfs(info, at, t)) { await page.keyboard.press(KEY[d]); await sleep(85); }
@@ -211,7 +211,7 @@ async function main() {
   assert(mapBody.grid === "6,4" && mapBody.targets === 4, "전반 지도 배달은 6x4 지도 / 목표 4개, got " + JSON.stringify(mapBody));
   await playOpenGame(p1);
   await waitFor(async () => (await myCount(p1, 2)) === 1, { label: "valuable secured by really playing the map game" });
-  log("귀중품 칸 -> 지도 배달(6x4, 목표 4) 진짜로 플레이해서 완주 -> valuable 확보");
+  log("귀중품 칸 -> 지도 배달(6x4, 송장 4장) 진짜로 플레이해서 완주 -> valuable 확보");
 
   // ---- f2. 송장 붙이기를 키보드만으로 (2026-10-07): ←→로 박스 고르고 스페이스 ----
   await clickSel(p1, openSel("fixed-floor-5"));

@@ -650,15 +650,7 @@
 .mg-label .lb-code { flex: 0 0 1.9cqw; margin: 0 1.4cqw 1cqw; background: repeating-linear-gradient(90deg, #2b1d12 0 0.25cqw, transparent 0.25cqw 0.5cqw, #2b1d12 0.5cqw 0.65cqw, transparent 0.65cqw 1.05cqw); opacity: 0.85; }
 
 /* ================= 지도 배달 (귀중품, 2026-10-07) ================= */
-.mg-map-top { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-height: 5.1rem; margin-bottom: 0.5rem; }
-.mg-order { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.3rem; min-height: 2.2rem; }
-.mg-order.is-off { visibility: hidden; }
-.mg-oc {
-  display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.2rem 0.6rem 0.2rem 0.25rem; border-radius: 999px;
-  font-family: var(--mg-font-display); font-weight: 700; font-size: 1.1rem; background: #fff; border: 2px solid var(--mg-accent);
-}
-.mg-oc i { font-style: normal; width: 1.5rem; height: 1.5rem; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 0.9rem; background: var(--mg-accent); color: var(--mg-accent-ink); }
-.mg-oa { color: var(--mg-muted); font-weight: 700; }
+.mg-map-top { display: flex; flex-direction: column; align-items: center; gap: 0.35rem; min-height: 2.2rem; margin-bottom: 0.5rem; }
 .mg-flashbar { width: min(100%, 360px); height: 6px; border-radius: 999px; background: rgba(43, 29, 18, 0.1); overflow: hidden; }
 .mg-flashbar > i { display: block; height: 100%; width: 0; background: var(--mg-accent); border-radius: 999px; }
 .mg-phase { margin: 0; font-size: 0.86rem; font-weight: 700; text-align: center; color: var(--mg-ink); min-height: 1.3em; }
@@ -680,14 +672,6 @@
   position: absolute; left: 50%; bottom: 3%; transform: translateX(-50%); font-family: var(--mg-font-display); font-weight: 700;
   font-size: 0.72rem; line-height: 1; padding: 0.1rem 0.28rem; border-radius: 4px; background: #fffdf5; border: 1px solid #7a5a30; color: #2b1d12; white-space: nowrap;
 }
-.mg-map.is-labels-hidden .mg-lab { visibility: hidden; }
-.mg-ord {
-  position: absolute; right: -5px; top: -7px; width: 1.55rem; height: 1.55rem; border-radius: 50%; z-index: 3; display: none; align-items: center; justify-content: center;
-  font-style: normal; font-family: var(--mg-font-display); font-weight: 800; font-size: 1rem; background: var(--mg-accent); color: var(--mg-accent-ink); border: 2px solid #fff;
-}
-.mg-tile.is-target { box-shadow: 0 0 0 3px var(--mg-accent), 0 0 14px rgba(226, 105, 26, 0.65); background: #fff3d6; z-index: 2; animation: mg-glow 0.7s ease-in-out infinite alternate; }
-.mg-tile.is-target .mg-ord { display: inline-flex; }
-@keyframes mg-glow { to { filter: brightness(1.08); } }
 .mg-chk {
   position: absolute; right: -4px; top: -6px; width: 1.2rem; height: 1.2rem; border-radius: 50%; display: none; align-items: center; justify-content: center; z-index: 3;
   font-size: 0.8rem; font-weight: 800; background: var(--mg-ok); color: #fff; border: 2px solid #fff;
@@ -700,6 +684,32 @@
 .mg-fence { position: absolute; inset: 22% 14%; border-radius: 3px; background: rgba(43, 29, 18, 0.55); }
 .mg-tile.is-depot { background: #3b4049; }
 .mg-dep { font-family: var(--mg-font-display); font-weight: 700; font-size: 0.7rem; color: #f4f1ea; letter-spacing: 0.08em; position: absolute; top: 4px; }
+.mg-cover {
+  position: absolute; inset: 0; z-index: 6; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 0.7rem; border-radius: 12px;
+  text-align: center; padding: 0.5rem; background: repeating-linear-gradient(45deg, #c9b58a 0 12px, #bfa97c 12px 24px);
+}
+.mg-cover-note { background: rgba(255, 252, 244, 0.85); padding: 0.25rem 0.8rem; border-radius: 999px; color: #5a4224; font-weight: 800; font-size: 0.8rem; }
+.mg-map.is-covered .mg-cover { display: flex; }
+/* 송장만 붙은 택배 팝업 */
+.mg-parcels { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 0.6rem 0.7rem; max-width: 100%; }
+.mg-parcel { position: relative; animation: mg-popin 0.34s cubic-bezier(.2, 1.6, .4, 1) both; animation-delay: var(--d, 0ms); }
+.mg-parcel .pbox {
+  position: relative; display: flex; align-items: center; justify-content: center; width: 86px; height: 70px; border-radius: 6px;
+  background: linear-gradient(160deg, var(--mg-card-light), var(--mg-card)); border: 2px solid var(--mg-card-edge); box-shadow: 0 5px 10px rgba(43, 29, 18, 0.35);
+}
+.mg-parcel .pbox::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 12px; transform: translateX(-50%); background: var(--mg-tape); opacity: 0.85; }
+.mg-parcel .pl {
+  position: relative; z-index: 1; font-family: var(--mg-font-display); font-weight: 700; font-size: 1.3rem; line-height: 1; padding: 0.3rem 0.45rem;
+  background: #fffefa; border: 2px solid #9a8460; border-radius: 4px; color: #2b1d12; white-space: nowrap; transform: rotate(-3deg);
+}
+.mg-parcel .pn {
+  position: absolute; left: -7px; top: -9px; z-index: 2; width: 1.6rem; height: 1.6rem; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-style: normal; font-family: var(--mg-font-display); font-weight: 800; font-size: 0.95rem; background: var(--mg-accent); color: var(--mg-accent-ink); border: 2px solid #fff;
+}
+.mg-parcel .pk { position: absolute; right: -6px; top: -8px; z-index: 2; display: none; width: 1.3rem; height: 1.3rem; border-radius: 50%; align-items: center; justify-content: center; font-size: 0.85rem; font-weight: 800; background: var(--mg-ok); color: #fff; border: 2px solid #fff; }
+.mg-parcel.is-done .pbox { opacity: 0.45; filter: grayscale(0.5); }
+.mg-parcel.is-done .pk { display: flex; }
+@keyframes mg-popin { from { transform: scale(0.15) translateY(14px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
 .mg-courier {
   position: absolute; z-index: 4; pointer-events: none; padding: 4px; /* 지도 padding(4px)과 같다 */
   width: calc((100% - 8px - (var(--cols) - 1) * 3px) / var(--cols)); height: calc((100% - 8px - (var(--rows) - 1) * 3px) / var(--rows));
@@ -722,10 +732,10 @@
 .mg-replay:hover:not(:disabled) { background: rgba(43, 29, 18, 0.06); }
 .mg-replay:disabled { opacity: 0.4; cursor: default; }
 .mg-kind-map .mg-pad { margin-top: 0.3rem; }
-@media (max-width: 480px) { .mg-map { --ts: 52px; } .mg-lab { font-size: 0.62rem; } }
+@media (max-width: 480px) { .mg-map { --ts: 52px; } .mg-lab { font-size: 0.62rem; } .mg-parcel .pbox { width: 68px; height: 58px; } .mg-parcel .pl { font-size: 1.05rem; } }
 @media (max-height: 820px) {
   .mg-map { --ts: 50px; }
-  .mg-map-top { min-height: 4.2rem; margin-bottom: 0.3rem; }
+  .mg-map-top { min-height: 2rem; margin-bottom: 0.3rem; }
   .mg-kind-map .mg-freeze-note { margin: 0 0 0.2rem; }
 }
 
@@ -1359,22 +1369,29 @@ body.main-view #app { height: 100vh; min-height: 0; }
 
   // ======================================================================
   // 지도 배달 (2026-10-07: 귀중품의 우봉고를 대체)
-  //   지도에 집(호실)이 여러 개 있고, 목표 집들이 순서 번호와 함께 잠깐 켜졌다가 꺼진다. 그 순서대로 방향키로 이동해서
-  //   집에 도착하면 스페이스로 배달한다. 입력은 박스 포장과 같은 방향키 4개 + 스페이스(화면 버튼도 같다).
+  //   1) 송장 단계: 지도는 가려져 있고, "송장만 붙은 택배" 여러 개(예: 103호, 201호 ...)가 순서대로 팝업으로 떴다가 사라진다.
+  //   2) 지도 단계: 택배가 사라지고 지도가 뜬다 -- 집마다 호실 번호가 적혀 있어서, 외운 호실의 집을 지도에서 찾아
+  //      방향키로 이동해 도착하면 스페이스로 배달한다. 외운 순서대로.
+  //   3) 게임 시작 20초 뒤부터(MAP_REPLAY_AFTER_MS) "송장 다시 보기"가 열린다: 택배 팝업을 다시 보여 준다(그동안 지도는 가려지고 이동 불가).
+  //      공짜지만 그만큼 시간이 가므로 사실상의 비용은 시간이다. 그 전에는 못 본다 -- 처음에 제대로 외워야 한다.
+  //   (이력: 1차는 목표 집이 지도 위에서 번호와 함께 켜졌다. 2차는 호실 번호 목록만 먼저 띄웠다. 사용자가 "송장만 붙은 택배 4개가
+  //    팝업으로 보였다 사라지고, 이후 지도가 표시되고, 20초 뒤부터는 다시 호수를 확인"으로 정정해서 지금 형태가 됐다.)
+  //   입력은 박스 포장과 같은 방향키 4개 + 스페이스(화면 버튼도 같다).
   //   난이도 레버는 전부 MAP_CFG 한 군데:
-  //     targets   외울 집 수          flashMs   목표가 켜져 있는 시간(ms)
-  //     cols/rows 지도 크기           houses    집 개수
-  //     hideLabels true면 깜빡임이 끝난 뒤 지도의 호실 번호도 사라진다(위치만 기억해야 함)
-  //     blocks    지나갈 수 없는 칸(공사장 등) 수 -- 돌아가야 해서 길을 직접 짜야 한다
+  //     targets  외울 택배(호실) 수     flashMs  택배 팝업이 떠 있는 시간(ms)
+  //     cols/rows 지도 크기            houses   집 개수 (목표 + 미끼)
+  //     similar  목표와 비슷한 번호(같은 층 / 같은 호)를 가진 미끼 집 수 -- 잘못 외우거나 대충 보면 틀리는 함정
+  //     blocks   지나갈 수 없는 칸(공사장) 수 -- 돌아가야 해서 길을 직접 짜야 한다
   //   레벨 1은 시험장 전용, 게임에서는 전반 2 / 후반 3 (game-data.js의 TYPES.valuable.miniLevel).
-  //   틀린 배달(엉뚱한 집/도로/이미 배달한 집)은 실수 +1 이고 0.8초 멈춘다 -- 진행은 유지. "다시 보기"는 남은 목표를 다시
-  //   깜빡여 주되 실수 +1 (잊어버려서 영영 못 끝내는 일은 없게 하되 공짜는 아니게).
+  //   틀린 배달(엉뚱한 집/도로/이미 배달한 집/순서 틀림)은 실수 +1 이고 0.8초 멈춘다 -- 진행은 유지.
   // ======================================================================
   var MAP_CFG = [
-    { cols: 5, rows: 4, houses: 8,  targets: 3, flashMs: 4500, hideLabels: false, blocks: 0 },
-    { cols: 6, rows: 4, houses: 11, targets: 4, flashMs: 3500, hideLabels: false, blocks: 0 },
-    { cols: 7, rows: 5, houses: 14, targets: 5, flashMs: 3000, hideLabels: true,  blocks: 5 },
+    { cols: 5, rows: 4, houses: 8,  targets: 3, flashMs: 4500, similar: 0, blocks: 0 },
+    { cols: 6, rows: 4, houses: 11, targets: 4, flashMs: 4000, similar: 2, blocks: 0 },
+    { cols: 7, rows: 5, houses: 14, targets: 5, flashMs: 3500, similar: 5, blocks: 5 },
   ];
+  var MAP_REPLAY_AFTER_MS = 20000; // 게임 시작 후 이 시간이 지나야 "송장 다시 보기"가 열린다
+  var MAP_POP_STAGGER_MS = 150;    // 택배 팝업이 하나씩 뜨는 간격(순서 단서)
   var MAP_LOCK_MS = 800;   // 틀린 배달 뒤 멈춤
   var MAP_STEP_MS = 70;    // 방향키를 꾹 누를 때 한 칸씩 가는 최소 간격
   var MAP_VEC = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
@@ -1382,6 +1399,30 @@ body.main-view #app { height: 100vh; min-height: 0; }
   var VAN_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="11" width="21" height="17" rx="2" class="mg-van-box"/><path d="M25 16h7l4 5v7H25Z" class="mg-van-cab"/><circle cx="12" cy="30" r="3.4" class="mg-van-wh"/><circle cx="30" cy="30" r="3.4" class="mg-van-wh"/></svg>';
 
   function mapKey(x, y) { return x + "," + y; }
+  // 호실 번호: 층(1~5) + 0 + 호(1~9) = 101 ~ 509. 목표는 무작위, 미끼 중 similar개는 목표와 같은 층 또는 같은 호(번갈아)를 가진다.
+  function assignRoomLabels(houses, targets, similar) {
+    var used = {};
+    function code(f, r) { return String(f * 100 + r); }
+    function takeRandom() {
+      for (;;) { var cd = code(1 + rand(5), 1 + rand(9)); if (!used[cd]) { used[cd] = 1; return cd; } }
+    }
+    targets.forEach(function (t) { t.label = takeRandom(); });
+    var tset = {}; targets.forEach(function (t) { tset[mapKey(t.x, t.y)] = 1; });
+    var decoys = shuffle(houses.filter(function (h) { return !tset[mapKey(h.x, h.y)]; }));
+    var n = Math.min(similar, decoys.length, targets.length);
+    for (var i = 0; i < decoys.length; i++) {
+      var cand = [];
+      if (i < n) {
+        var f = parseInt(targets[i].label.charAt(0), 10), r = parseInt(targets[i].label.charAt(2), 10);
+        for (var a = 1; a <= 5; a++) for (var b = 1; b <= 9; b++) {
+          var same = i % 2 === 0 ? (a === f && b !== r) : (b === r && a !== f); // 짝수: 같은 층 다른 호 / 홀수: 같은 호 다른 층
+          if (same && !used[code(a, b)]) cand.push(code(a, b));
+        }
+      }
+      if (cand.length) { var pick = cand[rand(cand.length)]; used[pick] = 1; decoys[i].label = pick; }
+      else decoys[i].label = takeRandom();
+    }
+  }
   function makeMapPlan(cfg, noBlocks) {
     var W = cfg.cols, H = cfg.rows, nb = noBlocks ? 0 : cfg.blocks;
     var depot = { x: Math.floor(W / 2), y: H - 1 };
@@ -1403,11 +1444,9 @@ body.main-view #app { height: 100vh; min-height: 0; }
       }
       var ok = houses.every(function (h) { return seen[mapKey(h.x, h.y)]; });
       if (!ok) continue; // 공사장 때문에 갈 수 없는 집이 생겼으면 다시 뽑는다
-      var codes = [];
-      for (var f = 1; f <= 5; f++) for (var r = 1; r <= 9; r++) codes.push(String(f * 100 + r)); // 105, 203 ... (층 + 0 + 호)
-      codes = shuffle(codes);
-      houses.forEach(function (h, i) { h.label = codes[i]; });
-      return { W: W, H: H, depot: depot, blocked: blocked, houses: houses, targets: shuffle(houses).slice(0, cfg.targets) };
+      var targets = shuffle(houses).slice(0, cfg.targets);
+      assignRoomLabels(houses, targets, cfg.similar);
+      return { W: W, H: H, depot: depot, blocked: blocked, houses: houses, targets: targets };
     }
     return noBlocks ? null : makeMapPlan(cfg, true); // (사실상 도달 불가) 공사장 없이라도 만든다
   }
@@ -1430,16 +1469,17 @@ body.main-view #app { height: 100vh; min-height: 0; }
     for (var y = 0; y < H; y++) for (var x = 0; x < W; x++) {
       var k = mapKey(x, y), h = houseAt[k], isDepot = x === plan.depot.x && y === plan.depot.y;
       tiles += '<div class="mg-tile' + (h ? " is-house" : "") + (blockAt[k] ? " is-block" : "") + (isDepot ? " is-depot" : "") + '" data-x="' + x + '" data-y="' + y + '">'
-        + (h ? HOUSE_SVG + '<b class="mg-lab">' + h.label + '</b><i class="mg-ord"></i><span class="mg-chk">✓</span>'
+        + (h ? HOUSE_SVG + '<b class="mg-lab">' + h.label + '</b><span class="mg-chk">✓</span>'
           : blockAt[k] ? '<span class="mg-fence"></span>' : isDepot ? '<span class="mg-dep">센터</span>' : "")
         + "</div>";
     }
     var dots = ""; for (var di = 0; di < N; di++) dots += '<span class="mg-dot"></span>';
     body.innerHTML =
-      '<div class="mg-map-top"><div class="mg-order"></div><div class="mg-flashbar"><i></i></div><p class="mg-phase"></p></div>'
-      + '<div class="mg-map" style="--cols:' + W + ';--rows:' + H + '">' + tiles
-      + '<div class="mg-courier" style="--cx:' + plan.depot.x + ';--cy:' + plan.depot.y + '">' + VAN_SVG + "</div></div>"
-      + '<div class="mg-map-foot"><div class="mg-dots">' + dots + '</div><button type="button" class="mg-replay" tabindex="-1">다시 보기 (실수 +1)</button></div>'
+      '<div class="mg-map-top"><div class="mg-flashbar"><i></i></div><p class="mg-phase"></p></div>'
+      + '<div class="mg-map is-covered" style="--cols:' + W + ';--rows:' + H + '">' + tiles
+      + '<div class="mg-courier" style="--cx:' + plan.depot.x + ';--cy:' + plan.depot.y + '">' + VAN_SVG + '</div>'
+      + '<div class="mg-cover"><div class="mg-parcels"></div><span class="mg-cover-note">지도는 택배를 확인한 뒤에 나와요</span></div></div>'
+      + '<div class="mg-map-foot"><div class="mg-dots">' + dots + '</div><button type="button" class="mg-replay" tabindex="-1" disabled>송장 다시 보기</button></div>'
       + '<p class="mg-freeze-note"></p>'
       + '<div class="mg-pad">'
       + '<button type="button" class="mg-key" data-k="up" aria-label="위">↑</button>'
@@ -1450,51 +1490,51 @@ body.main-view #app { height: 100vh; min-height: 0; }
       + "</div>";
 
     var map = body.querySelector(".mg-map"), courier = body.querySelector(".mg-courier");
-    var orderEl = body.querySelector(".mg-order"), phaseEl = body.querySelector(".mg-phase"), barEl = body.querySelector(".mg-flashbar > i");
+    var parcelsEl = body.querySelector(".mg-parcels"), phaseEl = body.querySelector(".mg-phase"), barEl = body.querySelector(".mg-flashbar > i");
     var note = body.querySelector(".mg-freeze-note"), replay = body.querySelector(".mg-replay");
     var dotEls = Array.prototype.slice.call(body.querySelectorAll(".mg-dot"));
     function tileAt(x, y) { return map.querySelector('.mg-tile[data-x="' + x + '"][data-y="' + y + '"]'); }
 
-    var pos = { x: plan.depot.x, y: plan.depot.y }, idx = 0, phase = "flash", locked = false, lastStep = 0;
+    var pos = { x: plan.depot.x, y: plan.depot.y }, idx = 0, phase = "invoice", locked = false, lastStep = 0;
+    var startedAt = performance.now(), replayAfter = typeof c.opts.replayAfterMs === "number" ? c.opts.replayAfterMs : MAP_REPLAY_AFTER_MS;
 
     function paintDots() {
       dotEls.forEach(function (d, i) { d.classList.toggle("is-done", i < idx); d.classList.toggle("is-current", i === idx && phase === "play"); });
     }
-    function clearTargets() {
-      Array.prototype.forEach.call(map.querySelectorAll(".mg-tile.is-target"), function (t) { t.classList.remove("is-target"); t.querySelector(".mg-ord").textContent = ""; });
-    }
-    // 아직 배달 안 한 목표(idx부터)를 번호와 함께 잠깐 켠다. 처음 한 번 + "다시 보기" 때.
-    function showFlash() {
-      phase = "flash";
-      clearTargets();
-      map.classList.add("is-flash");
-      map.classList.remove("is-labels-hidden");
-      var chips = [];
-      for (var i = idx; i < N; i++) {
-        var t = plan.targets[i], tile = tileAt(t.x, t.y);
-        tile.classList.add("is-target");
-        tile.querySelector(".mg-ord").textContent = String(i + 1);
-        chips.push('<span class="mg-oc"><i>' + (i + 1) + "</i>" + t.label + "</span>");
+    // 송장 단계: 지도를 가리고 그 위에 "송장만 붙은 택배"를 순서대로 팝업으로 띄운다(이미 배달한 호실은 흐리게 + 체크로 같이 보여 줘서
+    // 번호 순서가 그대로 유지된다). 처음 한 번 + "다시 보기" 때.
+    function showInvoice() {
+      phase = "invoice";
+      map.classList.add("is-covered");
+      var html = "";
+      for (var i = 0; i < N; i++) {
+        html += '<div class="mg-parcel' + (i < idx ? " is-done" : "") + '" style="--d:' + (i * MAP_POP_STAGGER_MS) + 'ms">'
+          + '<i class="pn">' + (i + 1) + '</i><span class="pbox"><b class="pl">' + plan.targets[i].label + '호</b></span><span class="pk">✓</span></div>';
       }
-      orderEl.innerHTML = chips.join('<span class="mg-oa">→</span>');
-      orderEl.classList.remove("is-off");
-      phaseEl.textContent = "외우세요! 이 순서대로 배달해요";
+      parcelsEl.innerHTML = html; // 새로 그려야 팝업 애니메이션이 처음부터 다시 돈다
+      phaseEl.textContent = "택배 송장을 외우세요! 이 순서대로 배달해요";
       barEl.style.transition = "none"; barEl.style.width = "100%";
       void barEl.offsetWidth;
       barEl.style.transition = "width " + cfg.flashMs + "ms linear"; barEl.style.width = "0%";
       replay.disabled = true;
       paintDots();
-      c.later(endFlash, cfg.flashMs);
+      c.later(showMap, cfg.flashMs);
     }
-    function endFlash() {
+    // 지도 단계: 택배가 사라지고 지도가 뜬다.
+    function showMap() {
       phase = "play";
-      clearTargets();
-      map.classList.remove("is-flash");
-      if (cfg.hideLabels) map.classList.add("is-labels-hidden");
-      orderEl.classList.add("is-off");
-      phaseEl.textContent = "출발! 방향키로 이동하고 스페이스로 배달하세요";
-      replay.disabled = false;
+      map.classList.remove("is-covered");
+      phaseEl.textContent = "지도가 나왔어요! 호실을 찾아 순서대로 배달하세요";
       paintDots();
+      updateReplay();
+    }
+    // "송장 다시 보기": 게임 시작 후 replayAfter(20초)가 지나야 열린다. 그 전에는 남은 시간을 버튼에 표시.
+    function updateReplay() {
+      var left = replayAfter - (performance.now() - startedAt);
+      if (left <= 0) { replay.textContent = "송장 다시 보기"; replay.disabled = phase !== "play"; return; }
+      replay.disabled = true;
+      replay.textContent = "송장 다시 보기 (" + Math.ceil(left / 1000) + "초 뒤)";
+      c.later(updateReplay, Math.min(500, left));
     }
     function place() { courier.style.setProperty("--cx", pos.x); courier.style.setProperty("--cy", pos.y); }
 
@@ -1519,7 +1559,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
       c.addMistake();
       locked = true;
       restartAnim(tile, "is-wrong");
-      note.textContent = tile.classList.contains("is-house") ? "여기가 아니에요!" : "배달할 집이 아니에요";
+      note.textContent = tile.classList.contains("is-house") ? "그 호실이 아니에요!" : "배달할 집이 아니에요";
       c.later(function () { locked = false; note.textContent = ""; }, MAP_LOCK_MS);
     }
     function press(k) {
@@ -1547,17 +1587,16 @@ body.main-view #app { height: 100vh; min-height: 0; }
     });
     replay.addEventListener("mousedown", function (e) { e.preventDefault(); }); // 포커스를 안 가져가게(스페이스가 버튼을 또 누르면 안 된다)
     replay.addEventListener("click", function () {
-      if (phase !== "play" || locked || c.isFinished()) return;
-      c.addMistake();
-      showFlash();
+      if (phase !== "play" || locked || c.isFinished() || performance.now() - startedAt < replayAfter) return;
+      showInvoice(); // 공짜 -- 대신 보는 동안 지도가 가려져 시간이 간다
     });
 
-    showFlash();
+    showInvoice();
+    updateReplay();
     return {
       hint: function () {
-        return "잠깐 켜지는 집의 번호 순서를 외우세요. 방향키로 이동하고, 집에 도착하면 스페이스로 배달해요. "
-          + (cfg.hideLabels ? "집 번호는 곧 사라지니 위치를 기억해야 해요. " : "집 번호는 지도에 계속 보여요. ")
-          + "엉뚱한 곳에서 배달하면 실수예요.";
+        return "먼저 송장만 붙은 택배가 순서대로 잠깐 떠요 -- 호실 번호와 순서를 외우세요. 그다음 지도가 나오면 그 호실의 집을 찾아 방향키로 이동하고, 도착하면 스페이스로 배달해요. "
+          + "비슷한 번호의 집이 섞여 있어요. 엉뚱한 집에서 배달하면 실수예요. 시작 " + Math.round(replayAfter / 1000) + "초 뒤부터는 송장을 다시 볼 수 있어요.";
       },
     };
   }
@@ -1592,7 +1631,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
     var tick = setInterval(function () { if (!finished) timeEl.textContent = fmtSec(performance.now() - t0); }, 100);
 
     var ctx = {
-      level: level, label: opts.label, testHooks: !!opts.testHooks,
+      level: level, label: opts.label, testHooks: !!opts.testHooks, opts: opts,
       isFinished: function () { return finished || destroyed; },
       later: function (fn, ms) {
         var id = setTimeout(function () { if (!destroyed) fn(); }, ms);
@@ -1640,6 +1679,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
     start: start,
     KINDS: KINDS,
     LEVEL_NAME: LEVEL_NAME,
+    MAP_REPLAY_AFTER_MS: MAP_REPLAY_AFTER_MS,
     setMistakeRule: function (rule) { if (rule === "reset" || rule === "freeze" || rule === "ignore") config.mistakeRule = rule; },
     getMistakeRule: function () { return config.mistakeRule; },
   };
@@ -1685,7 +1725,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l4.5-6h9L21 9"></path><path d="M3 9l9 12 9-12"></path><path d="M3 9h18"></path><path d="M9 3l3 6 3-6"></path></svg>',
     '<svg viewBox="0 0 26 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="10" height="18"></rect><line x1="5" y1="6" x2="5" y2="6.01"></line><line x1="9" y1="6" x2="9" y2="6.01"></line><line x1="5" y1="10" x2="5" y2="10.01"></line><line x1="9" y1="10" x2="9" y2="10.01"></line><line x1="5" y1="14" x2="5" y2="14.01"></line><line x1="9" y1="14" x2="9" y2="14.01"></line><path d="M16 12l3 3 6-6"></path></svg>'
   ];
-  var ELEVATOR_ROUNDS = 5;
+  var ELEVATOR_ROUNDS = 7;
   var SECURE_PHASE_MS = 180000;
   var PRIORITY_MULTIPLIER = 2;
   var SAME_FLOOR_CHOICE_MS = 10000;
@@ -2268,24 +2308,27 @@ body.main-view #app { height: 100vh; min-height: 0; }
     // 아무 때나 놓을 수 있던 예전 방식 대신, 이제는 독립된 상태 화면이다). 배치는 선택사항(건너뛰기
     // 가능)이고, 배치 직후엔 아무 효과 없이 다음 라운드부터 실제로 작동한다 (game-room.js의 el.thieves
     // 참고). 둘 다 배치/건너뛰기를 마치면 타이머를 기다리지 않고 곧장 voting으로 넘어간다.
-    // 2026-08-27: 1인당 이 후반 전체(5라운드)를 통틀어 배치는 딱 1번만 허용 -- usedThisHalf가 true면
-    // 서버가 이미 매 라운드 자동으로 스킵 처리해두므로(placeThief 호출 없이도 doneMine이 true), 여기서는
-    // "이미 다 썼다"는 걸 구분해서 보여주기만 하면 된다.
+    // 2026-10-07: 1인당 이 후반 전체를 통틀어 thieves.perHalf(2)번까지 배치 가능 -- usedThisHalf(횟수)가
+    // perHalf에 닿으면 서버가 이미 매 라운드 자동으로 스킵 처리해두므로(placeThief 호출 없이도 doneMine이
+    // true), 여기서는 "이미 다 썼다"는 걸 구분해서 보여주기만 하면 된다. (마지막 라운드엔 창이 안 열린다.)
     if (st.elevator.state === "thief") {
       var placedMine = st.elevator.thieves.placedThisRound[seat];
       var skippedMine = !!st.elevator.thieves.skipped[seat];
-      var usedUpMine = !!st.elevator.thieves.usedThisHalf[seat];
+      var perHalf = st.elevator.thieves.perHalf || 1;
+      var usedCnt = st.elevator.thieves.usedThisHalf[seat] || 0;
+      var usedUpMine = usedCnt >= perHalf;
+      var leftMine = Math.max(0, perHalf - usedCnt);
       var doneMine = placedMine !== null && placedMine !== undefined || skippedMine;
       html += '<div class="thief-window">';
-      html += '<h4>택배도둑 배치 (후반 전용, 후반 통틀어 1회)</h4>';
+      html += '<h4>택배도둑 배치 (후반 전용, 후반 통틀어 ' + perHalf + '회 · 남은 횟수 ' + leftMine + '회)</h4>';
       if (doneMine) {
         html += '<div style="color:var(--muted);font-size:0.85rem;">'
           + (placedMine !== null && placedMine !== undefined
             ? ('<strong style="color:var(--danger)">' + esc(FLOORS[placedMine]) + '</strong>에 배치했어요. 다음 라운드부터 그 층에 상대가 배송하면 뺏어요.')
-            : (usedUpMine ? '이번 후반에 택배도둑을 이미 사용했어요 (1인당 1회).' : '이번 라운드는 배치하지 않았어요.'))
+            : (usedUpMine ? '이번 후반에 택배도둑을 이미 다 사용했어요 (1인당 ' + perHalf + '회).' : '이번 라운드는 배치하지 않았어요.'))
           + ' 상대를 기다리는 중...</div>';
       } else {
-        html += '<div style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem;">층을 골라 배치하면, 다음 라운드에 상대가 그 층에 배송할 때 가로채서 상대에게 확정 마이너스 점수를 줘요. 이 후반 동안 딱 한 번만 놓을 수 있으니 신중하게 골라주세요.</div>';
+        html += '<div style="color:var(--muted);font-size:0.85rem;margin-bottom:0.5rem;">층을 골라 배치하면, 다음 라운드에 상대가 그 층에 배송할 때 가로채서 상대에게 확정 마이너스 점수를 줘요. 이 후반 동안 총 ' + perHalf + '번까지 놓을 수 있고(라운드당 1개), 마지막 라운드엔 놓을 수 없으니 신중하게 골라주세요.</div>';
         html += '<div class="thief-floors">' + FLOORS.map(function (f, i) {
           return '<button class="btn ghost" data-action="place-thief" data-floor-idx="' + i + '">' + esc(f) + '</button>';
         }).join('') + '<button class="btn ghost" data-action="skip-thief">건너뛰기</button></div>';
