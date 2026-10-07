@@ -1,6 +1,6 @@
 // 2026-10-06: 전반/후반 난이도가 라이브 게임에서 실제로 다르게 적용되는지 (사용자 요청 수치):
 //   일반택배(박스 포장) 키 6 -> 8 / 깨지기 쉬운(이상 확인) 8 -> 10 / 확정 층수(송장 붙이기) 송장 3 -> 4, 박스 5 -> 7
-//   귀중품(지도 배달) 난이도 보통 -> 어려움: 6x4 지도/송장 4장/비슷한 번호 미끼 2 -> 7x5 지도/송장 5장/공사장 5/미끼 5.  전반은 test_minigames_live.js가 확인하므로 여기선 후반만 본다.
+//   후반(L3) 난이도: 박스 포장 키 10개 / 이상 확인 13개 / 송장 붙이기 박스 8·송장 5 / 지도 7x5·송장 4·공사장 6 (2026-10-07 난이도 상향).
 // 전반 7라운드를 빠르게 흘려보낸 뒤(test_theft_e2e.js와 같은 흐름) 후반 보드에서 각 종류 칸을 열어 직접 센다.
 // 사전 준비: SECURE_PHASE_MS를 임시로 단축(예: 10 * 1000) + build_client.py 재빌드 + 서버 재시작. 끝나면 원복.
 "use strict";
@@ -116,21 +116,21 @@ async function main() {
 
   await openCell("normal-1");
   const packChips = await countSel(p1, "#mg-layer .mg-chip");
-  assert_(packChips === 9, `후반 박스 포장: 방향키 8개 + SPACE = 칩 9개여야 함, got ${packChips}`);
-  log("후반 일반택배(박스 포장): 키 8개 + SPACE");
+  assert_(packChips === 11, `후반 박스 포장: 방향키 10개 + SPACE = 칩 11개여야 함, got ${packChips}`);
+  log("후반 일반택배(박스 포장): 키 10개 + SPACE");
   await giveUp();
 
   await openCell("fragile-1");
   const inspTxt = await bodyText(p1);
-  assert_(/\/\s*10\s*개/.test(inspTxt), `후반 이상 확인: 택배 10개여야 함, got: ${inspTxt.match(/처리[^\n]*/)}`);
-  log("후반 깨지기 쉬운 택배(이상 확인): 분류 10회");
+  assert_(/\/\s*13\s*개/.test(inspTxt), `후반 이상 확인: 택배 13개여야 함, got: ${inspTxt.match(/처리[^\n]*/)}`);
+  log("후반 깨지기 쉬운 택배(이상 확인): 분류 13회");
   await giveUp();
 
   await openCell("fixed-floor-3");
   const boxes = await countSel(p1, "#mg-layer .mg-bx");
   const stuckTotal = await p1.evaluate(() => { const st = document.querySelector("#mg-layer .mg-stage"); return st ? st.getAttribute("data-total") : null; });
-  assert_(boxes === 7 && stuckTotal === "4", `후반 송장 붙이기: 박스 7개 / 송장 4장이어야 함, got 박스 ${boxes} / 송장 ${stuckTotal}`);
-  log("후반 확정 층수 택배(송장 붙이기): 송장 4장, 박스 7개");
+  assert_(boxes === 8 && stuckTotal === "5", `후반 송장 붙이기: 박스 8개 / 송장 5장이어야 함, got 박스 ${boxes} / 송장 ${stuckTotal}`);
+  log("후반 확정 층수 택배(송장 붙이기): 송장 5장, 박스 8개");
   await giveUp();
 
   await openCell("valuable-1");
@@ -138,11 +138,11 @@ async function main() {
     const b = document.querySelector("#mg-layer .mg-body");
     return b ? { grid: b.dataset.grid, targets: b.dataset.targets.split(";").length, blocked: b.dataset.blocked.split(";").filter(Boolean).length } : null;
   });
-  assert_(mapInfo && mapInfo.grid === "7,5" && mapInfo.targets === 5 && mapInfo.blocked === 5, `후반 지도 배달: 7x5 지도 / 목표 5개 / 공사장 5칸이어야 함, got ${JSON.stringify(mapInfo)}`);
-  assert_((await countSel(p1, "#mg-layer .mg-map.is-covered")) === 1 && (await countSel(p1, "#mg-layer .mg-parcel")) === 5, "후반 지도 배달은 송장 택배 5개가 먼저 뜨고 지도는 가려져 있어야 함");
-  await p1.waitForTimeout(3900); // 송장 단계(3.5초)가 끝나면 지도가 뜬다
+  assert_(mapInfo && mapInfo.grid === "7,5" && mapInfo.targets === 4 && mapInfo.blocked === 6, `후반 지도 배달: 7x5 지도 / 목표 4개 / 공사장 6칸이어야 함, got ${JSON.stringify(mapInfo)}`);
+  assert_((await countSel(p1, "#mg-layer .mg-map.is-covered")) === 1 && (await countSel(p1, "#mg-layer .mg-parcel")) === 4, "후반 지도 배달은 송장 택배 4개가 먼저 뜨고 지도는 가려져 있어야 함");
+  await p1.waitForTimeout(3100); // 송장 단계(2.5초)가 끝나면 지도가 뜬다
   assert_((await countSel(p1, "#mg-layer .mg-map.is-covered")) === 0, "송장 단계가 끝나면 지도가 떠야 함");
-  log("후반 귀중품(지도 배달): 7x5 지도, 송장 5장, 공사장 5칸, 송장 -> 지도 순서");
+  log("후반 귀중품(지도 배달): 7x5 지도, 송장 4장, 공사장 6칸, 송장 -> 지도 순서");
   await giveUp();
 
   if (errors.length) throw new Error("page errors: " + errors.join(" | "));

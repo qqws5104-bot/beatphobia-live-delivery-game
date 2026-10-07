@@ -80,7 +80,7 @@ async function main() {
   // 레일: 양쪽 버튼 존재 (일반 3종 x 2쪽 + 확정 층수 6x2)
   assert((await count(rail, ".rail-btn")) === 6, "레일 일반 3종 x 양쪽 = 6개 버튼, got " + (await count(rail, ".rail-btn")));
   assert((await count(rail, ".floor-btn")) === 12, "층 버튼 6개 x 양쪽");
-  assert((await text(rail, leftOf(0))) === "6", "남은 6개");
+  assert((await text(rail, leftOf(0))) === "4", "남은 4개");
   await shot(rail, "rail_1_open");
   log("플레이어 화면은 레일 모드(버튼 없음, 내 쪽 안내), 레일 화면엔 양쪽 버튼이 있음");
 
@@ -97,12 +97,12 @@ async function main() {
 
   // ---- 끝내면 확보 + 잠금 해제 ----
   assert(await p1.evaluate(() => window.__mgFinish && window.__mgFinish()), "p1 finish");
-  await waitFor(async () => (await text(rail, leftOf(0))) === "5", { label: "남은 5개" });
+  await waitFor(async () => (await text(rail, leftOf(0))) === "3", { label: "남은 3개" });
   await waitFor(async () => (await disabled(rail, railBtn(1, 0))) === false, { label: "1번 버튼 풀림" });
   assert((await count(p1, "[data-rail-wait] .rw-row[data-cat='0'] .my-chip")) === 1, "p1 대기 카드에 내가 확보한 호수 칩");
   assert((await count(p2, "[data-rail-wait] .rw-row[data-cat='0'] .my-chip")) === 0, "p2에겐 p1의 호수가 안 보임");
   assert(!(await rail.evaluate(() => /\d0\d호/.test(document.body.innerText))), "레일 화면엔 누구의 호수도 안 나온다");
-  log("끝내면 남은 개수 6 -> 5, 1번 버튼 풀림, 호수는 본인 화면에만");
+  log("끝내면 남은 개수 4 -> 3, 1번 버튼 풀림, 호수는 본인 화면에만");
 
   // ---- 오른쪽(2번) 버튼 ----
   await click(rail, railBtn(2, 0));
@@ -112,8 +112,8 @@ async function main() {
   await click(rail, railBtn(2, 0)); await click(rail, railBtn(2, 1));
   await sleep(300);
   assert(await p2.evaluate(() => window.__mgFinish && window.__mgFinish()), "p2 finish");
-  await waitFor(async () => (await text(rail, leftOf(0))) === "4", { label: "남은 4개" });
-  log("오른쪽 버튼 -> 2번 플레이어 화면에만 게임, 끝내면 4개로");
+  await waitFor(async () => (await text(rail, leftOf(0))) === "2", { label: "남은 2개" });
+  log("오른쪽 버튼 -> 2번 플레이어 화면에만 게임, 끝내면 2개로");
 
   // ---- 포기하면 잠금 해제 + 개수 그대로 ----
   await click(rail, railBtn(1, 1));
@@ -122,7 +122,7 @@ async function main() {
   assert(await p1.evaluate(() => { const b = Array.from(document.querySelectorAll("#mg-layer button")).find((x) => x.textContent.trim() === "포기"); if (!b) return false; b.click(); return true; }), "포기 버튼");
   await waitFor(async () => !(await hasGame(p1)), { label: "game closed by giving up" });
   await waitFor(async () => (await disabled(rail, railBtn(1, 1))) === false, { label: "포기 -> 버튼 풀림" });
-  assert((await text(rail, leftOf(1))) === "6", "포기하면 개수는 그대로");
+  assert((await text(rail, leftOf(1))) === "4", "포기하면 개수는 그대로");
   log("포기 버튼 -> 버튼 풀림, 남은 개수 그대로");
 
   // ---- 확정 층수 택배: 층 버튼 ----
@@ -134,18 +134,18 @@ async function main() {
   assert((await disabled(rail, floorBtn(2, 3, 4))) === false, "다른 층은 열려 있다");
   log("층 버튼: 확보된 층(2F)은 양쪽 모두 잠기고 남은 개수 5");
 
-  // ---- 소진: 일반택배 4개 더 ----
-  for (let i = 0; i < 4; i++) {
+  // ---- 소진: 일반택배 2개 더 ----
+  for (let i = 0; i < 2; i++) {
     const side = i % 2 === 0 ? 1 : 2, pg = side === 1 ? p1 : p2;
     await click(rail, railBtn(side, 0));
     await waitFor(() => hasGame(pg), { label: "game " + i });
     await pg.evaluate(() => window.__mgFinish());
-    await waitFor(async () => (await text(rail, leftOf(0))) === String(3 - i), { label: "남은 " + (3 - i) });
+    await waitFor(async () => (await text(rail, leftOf(0))) === String(1 - i), { label: "남은 " + (1 - i) });
   }
   assert(await disabled(rail, railBtn(1, 0)) && await disabled(rail, railBtn(2, 0)), "소진되면 양쪽 버튼 잠김");
   assert((await rail.evaluate(() => document.querySelector('.board-row[data-cat="0"]').innerText)).includes("소진"), "소진 표시");
   await shot(rail, "rail_2_exhausted");
-  log("일반택배 6개 모두 확보 -> 양쪽 버튼 잠김 + 소진 표시");
+  log("일반택배 4개 모두 확보 -> 양쪽 버튼 잠김 + 소진 표시");
 
   // ---- 레일 화면의 ws는 플레이어 메시지를 못 보낸다 ----
   const before = await text(rail, leftOf(1));

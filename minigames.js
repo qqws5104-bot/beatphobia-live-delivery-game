@@ -54,7 +54,8 @@
   // ======================================================================
   // 박스 포장 -- 화면에 뜬 방향키 순서대로 누르고, 마지막은 스페이스바(테이프)
   // ======================================================================
-  var PACK_LEN = [4, 6, 8]; // 방향키 개수 (+ 마지막 스페이스)
+  // 2026-10-07 난이도 업: 레벨 2(전반) 6 -> 8, 레벨 3(후반) 8 -> 10. (레벨 1은 시험장 전용)
+  var PACK_LEN = [4, 8, 10]; // 방향키 개수 (+ 마지막 스페이스)
   var DIRS = ["up", "down", "left", "right"];
   var GLYPH = { up: "↑", down: "↓", left: "←", right: "→" };
 
@@ -182,8 +183,8 @@
   // ======================================================================
   var INSPECT_CFG = [
     { n: 6,  bad: 1, crack: 3.4, dent: 0.42, decoy: 0 },
-    { n: 8,  bad: 2, crack: 2.4, dent: 0.30, decoy: 0.3 },
-    { n: 10, bad: 3, crack: 1.7, dent: 0.20, decoy: 0.4 },
+    { n: 10, bad: 3, crack: 2.4, dent: 0.30, decoy: 0.3 }, // 2026-10-07 난이도 업: 전반 8 -> 10개(이상 2 -> 3)
+    { n: 13, bad: 4, crack: 1.7, dent: 0.20, decoy: 0.4 }, //                       후반 10 -> 13개(이상 3 -> 4)
   ];
   var CLASSES = [
     { key: "left",  name: "일반",   tag: "일반",   color: "#C9A576", light: "#ddc08f", keyGlyph: "←" },
@@ -314,8 +315,8 @@
   // 중심이 박스 위에 있으면 그 박스로 판정) -- 어려움은 손기술이 아니라 코드를 읽고 비교하는 데서 온다.
   // 배송코드는 이 미니게임 안에서만 쓰는 값이다: 실제 송장 호수는 확보 순간 서버가 정하므로 여기서 호수를
   // 흉내 내지 않는다(그래서 "1F-07" 같은 호수와 다른 모양의 코드). 코드의 층 부분만 그 칸의 층과 맞춘다.
-  var STK_BOXES  = [4, 5, 7];   // 레벨별 박스 수 (2026-10-06: 어려움 6 -> 7)
-  var STK_LABELS = [2, 3, 4];   // 레벨별 송장 장수 (붙일 박스 수)
+  var STK_BOXES  = [4, 6, 8];   // 레벨별 박스 수 (2026-10-07 난이도 업: 전반 5 -> 6, 후반 7 -> 8)
+  var STK_LABELS = [2, 4, 5];   // 레벨별 송장 장수 (붙일 박스 수; 2026-10-07: 전반 3 -> 4, 후반 4 -> 5)
   var STK_FLOORS = ["B1", "1F", "2F", "3F", "4F", "5F"];
   var STK_LOCK_MS = 450;        // 키보드로 틀린 박스에 붙인 뒤 잠깐 멈춤 (이상 확인과 같은 값)
   var LW = 19, LH = 20.5;       // 송장 크기 (스테이지 대비 %, 스테이지 520:320)
@@ -377,28 +378,25 @@
         + '<div class="bx-tape"></div><span class="bx-ok" aria-hidden="true">✓</span></div>';
     }).join("");
     body.innerHTML = '<div class="mg-stage" data-total="' + k + '"><div class="mg-bxs">' + boxHtml + '</div>'
-      + '<div class="mg-tray"><span class="mg-tray-note"></span></div></div>';
+      + '<div class="mg-tray"><span class="mg-tray-note"></span></div></div>'
+      + '<div class="mg-pad">'
+      + '<button type="button" class="mg-key" data-k="up" aria-label="위">↑</button>'
+      + '<button type="button" class="mg-key" data-k="left" aria-label="왼쪽">←</button>'
+      + '<button type="button" class="mg-key" data-k="down" aria-label="아래">↓</button>'
+      + '<button type="button" class="mg-key" data-k="right" aria-label="오른쪽">→</button>'
+      + '<button type="button" class="mg-key" data-k="space" aria-label="스페이스">SPACE · 붙이기</button>'
+      + "</div>";
     var stage = body.querySelector(".mg-stage");
     if (n > 6) { stage.style.setProperty("--bw", "21cqw"); stage.style.setProperty("--ggap", "2.2cqw 2.2cqw"); } // 7~8개는 한 줄에 4개씩 두 줄
     var boxes = Array.prototype.slice.call(body.querySelectorAll(".mg-bx"));
     var note = body.querySelector(".mg-tray-note");
-    var placed = 0, current = null, dragging = false, grabDX = 0, grabDY = 0;
-    var cursor = 0, keyLocked = false; // 키보드 조작: 지금 고른 박스(boxes 인덱스)
+    var placed = 0, current = null;
+    var cursor = 0, keyLocked = false; // 지금 고른 박스(boxes 인덱스)
 
     function boxCode(b) { return b.querySelector(".bx-addr b").textContent; }
-    // 송장 중심이 놓인 박스(이미 붙인 박스는 제외). 없으면 null.
-    function boxUnder(lb) {
-      var r = lb.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-      for (var i = 0; i < boxes.length; i++) {
-        if (boxes[i].classList.contains("is-done")) continue;
-        var b = boxes[i].getBoundingClientRect();
-        if (cx >= b.left && cx <= b.right && cy >= b.top && cy <= b.bottom) return boxes[i];
-      }
-      return null;
-    }
-    function setHover(b) { boxes.forEach(function (x) { x.classList.toggle("is-hover", x === b); }); }
 
-    // ---- 키보드 (2026-10-07): ←→ 박스 고르기, ↑↓ 윗줄/아랫줄 박스로, 스페이스 = 지금 송장을 고른 박스에 붙이기. 마우스 드래그도 그대로 된다. ----
+    // ---- 조작은 키보드 전용 (2026-10-07: 마우스 끌어다 놓기 제거): ←→ 박스 고르기, ↑↓ 윗줄/아랫줄 박스로, 스페이스 = 지금 송장을 고른 박스에 붙이기.
+    // 화면 아래 방향키/스페이스 버튼은 다른 미니게임과 같은 터치용 패드(폰) -- 누르면 같은 동작이다. ----
     function paintCursor() { boxes.forEach(function (x, i) { x.classList.toggle("is-cursor", i === cursor && !x.classList.contains("is-done")); }); }
     function nextOpen(from, step) { // from에서 step(+1/-1) 방향으로 아직 안 붙인 박스 (한 바퀴 돎)
       for (var i = 1; i <= boxes.length; i++) {
@@ -420,7 +418,7 @@
       if (best >= 0) cursor = best;
     }
     function keyAttach() {
-      if (!current || dragging || keyLocked) return;
+      if (!current || keyLocked) return;
       var b = boxes[cursor];
       if (!b || b.classList.contains("is-done")) return;
       if (boxCode(b) === current.querySelector(".lb-room").textContent) { var lb = current; stick(lb, b); return; }
@@ -429,22 +427,35 @@
       keyLocked = true; // 틀린 뒤 잠깐 멈춤 -- 방향키+스페이스를 번갈아 눌러 박스를 하나씩 찍어 보는 걸 막는다
       c.later(function () { keyLocked = false; }, STK_LOCK_MS);
     }
+    function press(k) {
+      if (c.isFinished()) return;
+      if (k === "left") cursor = nextOpen(cursor, -1);
+      else if (k === "right") cursor = nextOpen(cursor, 1);
+      else if (k === "up") moveRow(-1);
+      else if (k === "down") moveRow(1);
+      else if (k === "space") keyAttach();
+      paintCursor();
+    }
     function onKey(e) {
       if (c.isFinished() || e.repeat) return;
-      var key = e.key;
-      if (key === "ArrowLeft") cursor = nextOpen(cursor, -1);
-      else if (key === "ArrowRight") cursor = nextOpen(cursor, 1);
-      else if (key === "ArrowUp") moveRow(-1);
-      else if (key === "ArrowDown") moveRow(1);
-      else if (e.code === "Space" || key === " ") keyAttach();
-      else return;
+      var k = null;
+      if (e.key === "ArrowLeft") k = "left";
+      else if (e.key === "ArrowRight") k = "right";
+      else if (e.key === "ArrowUp") k = "up";
+      else if (e.key === "ArrowDown") k = "down";
+      else if (e.code === "Space" || e.key === " ") k = "space";
+      if (!k) return;
       e.preventDefault();
       e.stopPropagation(); // 게임 본체의 전역 스페이스바 핸들러가 이 키를 따로 처리하지 않게 막는다
-      paintCursor();
+      press(k);
     }
     document.addEventListener("keydown", onKey, true);
     c.onCleanup(function () { document.removeEventListener("keydown", onKey, true); });
+    Array.prototype.forEach.call(body.querySelectorAll(".mg-key"), function (b) {
+      b.addEventListener("pointerdown", function (e) { e.preventDefault(); press(b.getAttribute("data-k")); });
+    });
 
+    // 송장은 트레이에 한 장씩 나온다(끌 수 없음 -- 붙이는 건 스페이스뿐).
     function spawnLabel() {
       var code = plan.seq[placed];
       note.textContent = "남은 송장 " + (k - placed) + "장";
@@ -455,36 +466,6 @@
       lb.setAttribute("data-label", "1");
       stage.appendChild(lb);
       current = lb;
-      lb.addEventListener("pointerdown", function (e) {
-        if (c.isFinished() || lb !== current) return;
-        e.preventDefault();
-        lb.setPointerCapture(e.pointerId);
-        var lr = lb.getBoundingClientRect();
-        grabDX = e.clientX - lr.left; grabDY = e.clientY - lr.top;
-        dragging = true;
-        lb.classList.remove("is-return");
-        lb.classList.add("is-drag");
-      });
-      lb.addEventListener("pointermove", function (e) {
-        if (!dragging || lb !== current) return;
-        var r = stage.getBoundingClientRect();
-        lb.style.left = clamp((e.clientX - grabDX - r.left) / r.width * 100, -4, 104 - LW) + "%";
-        lb.style.top = clamp((e.clientY - grabDY - r.top) / r.height * 100, -4, 104 - LH) + "%";
-        setHover(boxUnder(lb));
-      });
-      function drop() {
-        if (!dragging || lb !== current) return;
-        dragging = false;
-        lb.classList.remove("is-drag");
-        var b = boxUnder(lb);
-        setHover(null);
-        if (b && boxCode(b) === code) { stick(lb, b); return; }
-        if (b) { c.addMistake(); restartAnim(b, "is-wrong"); } // 틀린 박스에 붙이려 함. 빈 곳에 놓은 건 실수 아님
-        lb.classList.add("is-return");
-        lb.style.left = TRAY_X + "%"; lb.style.top = TRAY_Y + "%";
-      }
-      lb.addEventListener("pointerup", drop);
-      lb.addEventListener("pointercancel", drop);
     }
 
     // 송장이 박스 앞면의 송장 자리로 줄어들며 붙는다
@@ -508,7 +489,7 @@
 
     spawnLabel();
     paintCursor();
-    return { hint: function () { return "송장의 배송코드와 같은 코드가 적힌 박스를 찾아 붙이세요 (" + k + "장). 키보드: ←→↑↓로 박스를 고르고 스페이스로 붙여요(마우스로 끌어다 놓아도 돼요). 비슷한 코드가 섞여 있어요 -- 틀린 박스에 붙이면 실수!"; } };
+    return { hint: function () { return "송장의 배송코드와 같은 코드가 적힌 박스를 찾아 붙이세요 (" + k + "장). 방향키(←→↑↓)로 박스를 고르고 스페이스로 붙여요. 비슷한 코드가 섞여 있어요 -- 틀린 박스에 붙이면 실수!"; } };
   }
 
 
@@ -530,10 +511,12 @@
   //   레벨 1은 시험장 전용, 게임에서는 전반 2 / 후반 3 (game-data.js의 TYPES.valuable.miniLevel).
   //   틀린 배달(엉뚱한 집/도로/이미 배달한 집/순서 틀림)은 실수 +1 이고 0.8초 멈춘다 -- 진행은 유지.
   // ======================================================================
+  // targets = 외워야 할 송장(택배) 수: 전반(레벨 2) 3개, 후반(레벨 3) 4개 (2026-10-07 사용자 요청). 레벨 1은 시험장 전용.
   var MAP_CFG = [
-    { cols: 5, rows: 4, houses: 8,  targets: 3, flashMs: 4500, similar: 0, blocks: 0 },
-    { cols: 6, rows: 4, houses: 11, targets: 4, flashMs: 4000, similar: 2, blocks: 0 },
-    { cols: 7, rows: 5, houses: 14, targets: 5, flashMs: 3500, similar: 5, blocks: 5 },
+    { cols: 5, rows: 4, houses: 8,  targets: 2, flashMs: 4500, similar: 0, blocks: 0 },
+    // 2026-10-07 난이도 업: 외울 개수(3/4)와 송장 다시 보기 20초는 사용자 지정값이라 그대로 두고, 팝업 시간을 줄이고 미끼/공사장을 늘렸다.
+    { cols: 6, rows: 4, houses: 11, targets: 3, flashMs: 3000, similar: 4, blocks: 2 },
+    { cols: 7, rows: 5, houses: 14, targets: 4, flashMs: 2500, similar: 6, blocks: 6 },
   ];
   var MAP_REPLAY_AFTER_MS = 20000; // 게임 시작 후 이 시간이 지나야 "송장 다시 보기"가 열린다
   var MAP_POP_STAGGER_MS = 150;    // 택배 팝업이 하나씩 뜨는 간격(순서 단서)

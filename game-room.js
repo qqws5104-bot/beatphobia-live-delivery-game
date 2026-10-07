@@ -5,6 +5,9 @@
 // existed because the old design had no real server; it's gone here by construction.
 "use strict";
 
+// 보드가 다 비었을 때 확보 단계를 끝내기까지의 짧은 여유(마지막 확보가 화면에 보일 시간).
+const SECURE_EARLY_END_MS = 1500;
+
 const {
   TYPES, COURIERS, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
   PRIORITY_MULTIPLIER, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, THIEF_PER_HALF, PRIORITY_PICK_MS,
@@ -246,6 +249,13 @@ class GameRoom {
     cell.acquiredSeq = this.state.acquireCounter[seat];
     const room = drawRoom(this.state.players[seat]);
     this.state.players[seat].invoices.push(randomInvoice(seat, cell.catIdx, cell.num, cell.acquiredSeq, room));
+    // 2026-10-07: 보드가 다 비면 남은 시간을 기다리지 않고 곧 엘리베이터로 넘어간다(할 게 없는 빈 시간 방지).
+    // 클라이언트의 카운트다운이 secureEndsAt을 보므로 그 값을 짧게 당겨 둔다. _scheduleAt은 타이머 슬롯이 하나라
+    // 원래의 3분 타이머를 대체한다(낡은 타이머가 다음 하프의 확보 단계를 끊을 일 없음).
+    if (this.state.board.every((c) => c.taken)) {
+      this.state.secureEndsAt = Date.now() + SECURE_EARLY_END_MS;
+      this._scheduleAt(this.state.secureEndsAt, () => this._endSecurePhase());
+    }
     this.emit();
   }
 

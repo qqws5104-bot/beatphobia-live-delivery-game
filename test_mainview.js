@@ -74,7 +74,7 @@ async function main() {
     total: parseInt(c.querySelector(".mv-left small").textContent.replace(/\D/g, ""), 10), pipsOpen: c.querySelectorAll(".mv-pip:not(.is-gone)").length })));
   let cards = await cardsText();
   assert(cards.length === 4, "4 category cards");
-  cards.forEach((c, i) => assert(c.name === TYPES[i].name && c.left === 6 && c.total === 6 && c.pipsOpen === 6, `category ${c.name} starts at 6 / 6: ` + JSON.stringify(c)));
+  cards.forEach((c, i) => assert(c.name === TYPES[i].name && c.left === TYPES[i].count && c.total === TYPES[i].count && c.pipsOpen === TYPES[i].count, `category ${c.name} starts full (${TYPES[i].count}): ` + JSON.stringify(c)));
   // 시계: 서버 기준(약 20초)이어야 한다. 기기 시계가 +10분 틀어졌는데 "0:00"이나 이상한 값이면 보정 실패.
   const clockSecs = async () => main.evaluate(() => { const t = document.querySelector(".mv-secure-top .mv-time").textContent.trim(); const [m, s] = t.split(":").map(Number); return m * 60 + s; });
   const c0 = await clockSecs();
@@ -83,7 +83,7 @@ async function main() {
   const c1 = await clockSecs();
   assert(c1 < c0, `main clock should tick down (${c0} -> ${c1})`);
   await shot(main, "main_2_secure_full");
-  log(`확보 단계: 종류별 6 / 6, 시계 ${c0}초 -> ${c1}초 (기기 시계 10분 오차 보정됨)`);
+  log(`확보 단계: 종류별 4/4/3/6 가득, 시계 ${c0}초 -> ${c1}초 (기기 시계 10분 오차 보정됨)`);
 
   // p1이 일반택배 1개, p2가 일반택배 1개 + 귀중품 1개를 확보 -> 메인의 남은 수가 따라 줄어든다
   async function secure(p, id) {
@@ -94,20 +94,20 @@ async function main() {
     else await clickSel(p, '[data-action="complete-cell"]');
   }
   await secure(p1, "normal-1");
-  await waitFor(async () => (await cardsText())[0].left === 5, { label: "main: normal 5 left" });
+  await waitFor(async () => (await cardsText())[0].left === 3, { label: "main: normal 3 left" });
   await secure(p2, "normal-2");
   await secure(p2, "valuable-1");
-  await waitFor(async () => { const c = await cardsText(); return c[0].left === 4 && c[2].left === 5; }, { label: "main: normal 4, valuable 5" });
+  await waitFor(async () => { const c = await cardsText(); return c[0].left === 2 && c[2].left === 2; }, { label: "main: normal 2, valuable 2" });
   cards = await cardsText();
-  assert(cards[0].pipsOpen === 4 && cards[2].pipsOpen === 5 && cards[1].left === 6 && cards[3].left === 6, "pips follow the remaining count: " + JSON.stringify(cards));
+  assert(cards[0].pipsOpen === 2 && cards[2].pipsOpen === 2 && cards[1].left === 4 && cards[3].left === 6, "pips follow the remaining count: " + JSON.stringify(cards));
   // 비공개 정보(내 송장 호수)는 메인에 안 나온다: 확보한 칸의 송장 호수 문자열(예: "101호")이 메인 어디에도 없어야 함
   const mainTxt = await bodyText(main);
   assert(!/\d{3}호|B0\d호/.test(mainTxt), "main must not show invoice room codes: " + mainTxt.match(/(\d{3}|B0\d)호/));
   await shot(main, "main_3_secure_taken");
-  log("확보할 때마다 종류별 남은 수/칸 표시가 따라 줄어듦 (일반 6 -> 4, 귀중품 6 -> 5), 송장 호수는 안 보임");
+  log("확보할 때마다 종류별 남은 수/칸 표시가 따라 줄어듦 (일반 4 -> 2, 귀중품 3 -> 2), 송장 호수는 안 보임");
 
   // 한 종류를 소진시키면 '소진' 표시
-  for (const id of ["fragile-1", "fragile-2", "fragile-3", "fragile-4", "fragile-5", "fragile-6"]) await secure(p1, id);
+  for (const id of ["fragile-1", "fragile-2", "fragile-3", "fragile-4"]) await secure(p1, id);
   await waitFor(async () => (await cardsText())[1].left === 0, { label: "fragile exhausted on main" });
   assert((await countSel(main, ".mv-cat.is-empty")) === 1, "exhausted category is marked");
   await shot(main, "main_4_secure_exhausted");

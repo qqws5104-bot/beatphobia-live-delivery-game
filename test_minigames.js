@@ -53,7 +53,7 @@ async function main() {
   async function shot(name) { if (SHOT_DIR) await page.screenshot({ path: path.join(SHOT_DIR, name + ".png") }); }
 
   // ================= 박스 포장 =================
-  const PACK_LEN = [4, 6, 8];
+  const PACK_LEN = [4, 8, 10];
   for (let lv = 1; lv <= 3; lv++) {
     await launch("pack", lv);
     const seq = (await page.getAttribute(".mg-body", "data-seq")).split(",");
@@ -138,7 +138,7 @@ async function main() {
   }
 
   // ================= 이상 확인 (벨트 분류) =================
-  const INSPECT = [{ n: 6, bad: 1 }, { n: 8, bad: 2 }, { n: 10, bad: 3 }];
+  const INSPECT = [{ n: 6, bad: 1 }, { n: 10, bad: 3 }, { n: 13, bad: 4 }];
   const inspectSeq = async () => (await page.getAttribute(".mg-body", "data-seq")).split(",");
   for (let lv = 1; lv <= 3; lv++) {
     await launch("inspect", lv);
@@ -204,8 +204,9 @@ async function main() {
     log("inspect: 화면 버튼(포인터)으로도 클리어");
   }
 
-  // ================= 송장 붙이기 (박스 찾아 붙이기) =================
-  // 사람이 하는 것과 같은 방법: 송장의 배송코드를 읽고, 같은 코드가 적힌 박스 위로 마우스 드래그.
+  // ================= 송장 붙이기 (박스 찾아 붙이기) -- 키보드 전용 =================
+  // 구성(박스 수/코드 중복 없음/송장이 정확히 한 박스와 맞음)을 레벨별로 확인하고, 마우스 끌기는 더 이상 동작하지 않음을 확인한다.
+  // 키보드/패드 조작 자체는 아래 "송장 붙이기: 키보드" 블록에서 검사한다.
   async function stickerState() {
     return page.evaluate(() => {
       const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
@@ -223,67 +224,43 @@ async function main() {
     await page.mouse.up();
   }
   const ctr = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
-  const BOXES = [4, 5, 7], LABELS = [2, 3, 4];
+  const BOXES = [4, 6, 8], LABELS = [2, 4, 5];
   for (let lv = 1; lv <= 3; lv++) {
     await launch("sticker", lv);
     await page.evaluate(() => window.scrollTo(0, 0));
     const st0 = await stickerState();
     assert(st0.boxes.length === BOXES[lv - 1], `sticker L${lv}: ${BOXES[lv - 1]} boxes, got ${st0.boxes.length}`);
     assert(new Set(st0.boxes.map((b) => b.code)).size === st0.boxes.length, `sticker L${lv}: all box codes distinct`);
+    assert(st0.boxes.filter((b) => b.code === st0.l.code).length === 1, `sticker L${lv}: the label matches exactly one box`);
+    assert((await page.$$(".mg-pad .mg-key")).length === 5, "on-screen pad (4 arrows + space) is shown");
     if (lv === 2) await shot("sticker_L2_start");
-    const seen = [];
-    for (let n = 1; n <= LABELS[lv - 1]; n++) {
-      await waitFor(async () => (await stickerState()).l, { label: `sticker L${lv} label #${n} ready` });
-      const st = await stickerState();
-      seen.push(st.l.code);
-      const hits = st.boxes.filter((b) => b.code === st.l.code && !b.done);
-      assert(hits.length === 1, `sticker L${lv}: label ${st.l.code} must match exactly one open box (got ${hits.length})`);
-      await drag(ctr(st.l.r), ctr(hits[0].r));
-      await waitFor(async () => (await page.$$('.mg-label[data-stuck]')).length === n, { label: `sticker L${lv} #${n} stuck` });
-      if (lv === 2 && n === 1) await shot("sticker_L2_one_stuck");
-    }
-    assert(new Set(seen).size === seen.length, `sticker L${lv}: labels are all different codes`);
-    await waitFor(result, { label: `sticker L${lv} done` });
-    const r = await result();
-    assert(r.ok && r.mistakes === 0, "sticker clean run: " + JSON.stringify(r));
-    if (lv === 2) await shot("sticker_L2_done");
-    log(`sticker L${lv}: 박스 ${BOXES[lv - 1]}개 중 송장 ${LABELS[lv - 1]}장 붙이기 클리어 (${r.ms}ms)`);
   }
-  // 틀린 박스에 놓으면 실수 +1, 붙지 않고 트레이로 복귀. 빈 곳이나 트레이 근처에 놓는 건 실수 아님.
-  await launch("sticker", 3);
+  // 마우스로 송장을 끌어다 맞는 박스 위에 놓아도 아무 일도 일어나지 않는다 (붙지도, 실수도 없음)
+  await launch("sticker", 1);
   {
+    await page.evaluate(() => window.scrollTo(0, 0));
     const st = await stickerState();
-    const wrong = st.boxes.find((b) => b.code !== st.l.code);
     const right = st.boxes.find((b) => b.code === st.l.code);
-    await drag(ctr(st.l.r), ctr(wrong.r));
-    assert((await miss()) === 1, "dropping on a wrong box is a mistake");
-    assert((await page.$$('.mg-label[data-stuck]')).length === 0, "a wrong-box drop must not stick");
-    assert((await page.$$('.mg-bx.is-done')).length === 0, "a wrong-box drop must not mark the box done");
-    await sleep(350);
+    await drag(ctr(st.l.r), ctr(right.r));
+    await sleep(200);
+    assert((await page.$$('.mg-label[data-stuck]')).length === 0 && (await page.$$('.mg-bx.is-done')).length === 0, "dragging with the mouse no longer attaches anything");
     const st2 = await stickerState();
-    assert(Math.abs(st2.l.r.y - st.l.r.y) < 4 && Math.abs(st2.l.r.x - st.l.r.x) < 4, "wrong-box label must return to the tray");
-    // 트레이 근처에서 그냥 놓는 건 실수 아님
-    await drag(ctr(st2.l.r), { x: ctr(st2.l.r).x + 30, y: ctr(st2.l.r).y });
-    assert((await miss()) === 1, "dropping near the tray must NOT count as a mistake");
-    // 박스들 사이 빈 작업대(박스 영역 밖)에 놓는 것도 실수 아님: 스테이지 왼쪽 위 모서리 근처
-    const sg = await page.evaluate(() => { const r = document.querySelector(".mg-stage").getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; });
-    const st3 = await stickerState();
-    await drag(ctr(st3.l.r), { x: sg.x + 4, y: sg.y + 4 });
-    assert((await miss()) === 1, "dropping on empty table must NOT count as a mistake");
-    await sleep(350);
-    // 마지막으로 정답 박스에는 붙는다 (실수 수는 그대로)
-    const st4 = await stickerState();
-    await drag(ctr(st4.l.r), ctr(right.r));
-    await waitFor(async () => (await page.$$('.mg-label[data-stuck]')).length === 1, { label: "correct box accepts the label after mistakes" });
-    assert((await miss()) === 1, "mistake count unchanged by a correct drop");
-    log("sticker: 틀린 박스=실수+복귀, 트레이/빈 작업대에 놓은 건 실수 아님, 이후 정답 박스엔 붙음");
+    assert(Math.abs(st2.l.r.x - st.l.r.x) < 2 && Math.abs(st2.l.r.y - st.l.r.y) < 2, "the label does not move when dragged");
+    assert((await miss()) === 0, "mouse drag is not a mistake either, it is just ignored");
+    // 화면 패드(터치용)로는 된다: 맞는 박스까지 →, 그다음 SPACE
+    const codes = await page.$$eval(".mg-bx .bx-addr b", (els) => els.map((e) => e.textContent));
+    let g = 0;
+    while (codes[await page.evaluate(() => Array.from(document.querySelectorAll(".mg-bx")).findIndex((b) => b.classList.contains("is-cursor")))] !== st.l.code) {
+      await page.dispatchEvent('.mg-key[data-k="right"]', "pointerdown"); assert(++g < 50, "pad reaches the box");
+    }
+    await page.dispatchEvent('.mg-key[data-k="space"]', "pointerdown");
+    await waitFor(async () => (await page.$$('.mg-bx.is-done')).length === 1, { label: "on-screen pad attaches the label" });
+    log("sticker: 마우스 끌기는 무시(붙지도 실수도 없음), 화면 패드(터치) 버튼으로는 동작");
   }
-
-
 
   // ================= 송장 붙이기: 키보드 (2026-10-07) =================
   {
-    const STK_N = [4, 5, 7], STK_K = [2, 3, 4];
+    const STK_N = [4, 6, 8], STK_K = [2, 4, 5];
     const cursorIdx = () => page.evaluate(() => Array.from(document.querySelectorAll(".mg-bx")).findIndex((b) => b.classList.contains("is-cursor")));
     const boxCodes = () => page.$$eval(".mg-bx .bx-addr b", (els) => els.map((e) => e.textContent));
     const labelCode = () => page.evaluate(() => { const l = document.querySelector(".mg-label[data-label]:not([data-stuck])"); return l ? l.querySelector(".lb-room").textContent : null; });
@@ -305,10 +282,10 @@ async function main() {
       assert(r.ok && r.kind === "sticker" && r.mistakes === 0, "sticker keyboard clean run: " + JSON.stringify(r));
       log(`sticker L${lv}: 키보드(←→ 박스 고르기 + 스페이스)만으로 송장 ${STK_K[lv - 1]}장 클리어 (실수 0)`);
     }
-    // ←→ 는 한 바퀴 돌고, ↑↓ 는 윗줄/아랫줄로 간다 (7개 = 4개+3개 두 줄)
+    // ←→ 는 한 바퀴 돌고, ↑↓ 는 윗줄/아랫줄로 간다 (8개 = 4개+4개 두 줄)
     await launch("sticker", 3);
     await page.keyboard.press("ArrowLeft");
-    assert((await cursorIdx()) === 6, "ArrowLeft from the first box wraps to the last");
+    assert((await cursorIdx()) === 7, "ArrowLeft from the first box wraps to the last");
     await page.keyboard.press("ArrowRight");
     assert((await cursorIdx()) === 0, "ArrowRight wraps back to the first");
     await page.keyboard.press("ArrowDown");
@@ -335,9 +312,9 @@ async function main() {
   // 흐름: 송장 단계(지도 가려짐, 송장만 붙은 택배가 팝업으로 뜬다) -> 지도 단계(택배 사라짐, 호실 번호가 적힌 집을 찾아 순서대로 배달)
   //       시작 20초 뒤부터 "송장 다시 보기"(공짜)가 열린다
   const MAPCFG = [
-    { cols: 5, rows: 4, houses: 8,  targets: 3, flash: 4500, similar: 0, blocks: 0 },
-    { cols: 6, rows: 4, houses: 11, targets: 4, flash: 4000, similar: 2, blocks: 0 },
-    { cols: 7, rows: 5, houses: 14, targets: 5, flash: 3500, similar: 5, blocks: 5 },
+    { cols: 5, rows: 4, houses: 8,  targets: 2, flash: 4500, similar: 0, blocks: 0 },
+    { cols: 6, rows: 4, houses: 11, targets: 3, flash: 3000, similar: 4, blocks: 2 },
+    { cols: 7, rows: 5, houses: 14, targets: 4, flash: 2500, similar: 6, blocks: 6 },
   ];
   assert(await page.evaluate(() => MiniGames.MAP_REPLAY_AFTER_MS) === 20000, "map replay unlocks 20 seconds after the game starts");
   const DIRV = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };

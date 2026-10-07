@@ -61,22 +61,19 @@ async function playOpenGame(page) {
   } else if (kind === "map") {
     await playMap(page);
   } else if (kind === "sticker") {
-    const state = () => page.evaluate(() => {
-      const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
-      const l = document.querySelector(".mg-label[data-label]:not([data-stuck])");
-      const boxes = Array.from(document.querySelectorAll(".mg-bx")).map((b) => ({ code: b.querySelector(".bx-addr b").textContent, done: b.classList.contains("is-done"), r: rect(b) }));
-      return { l: l ? { r: rect(l), code: l.querySelector(".lb-room").textContent } : null, boxes };
-    });
-    for (;;) {
-      await waitFor(async () => (await state()).l, { label: "sticker label ready" });
-      const st = await state();
-      const box = st.boxes.find((b) => b.code === st.l.code && !b.done);
-      await page.mouse.move(st.l.r.x + st.l.r.w / 2, st.l.r.y + st.l.r.h / 2);
-      await page.mouse.down();
-      await page.mouse.move(box.r.x + box.r.w / 2, box.r.y + box.r.h / 2, { steps: 10 });
-      await page.mouse.up();
-      await sleep(450); // 다음 송장이 나오거나 게임이 끝나길 기다림
+    // 송장 붙이기는 키보드 전용: 송장 코드와 같은 박스까지 ←로 커서를 옮기고 스페이스.
+    for (let guard = 0; guard < 80; guard++) {
       if (!(await page.$("#mg-layer .mg-root")) || (await page.$(".mg-done.is-on"))) break;
+      const pick = await page.evaluate(() => {
+        const l = document.querySelector(".mg-label[data-label]:not([data-stuck])");
+        if (!l) return null;
+        const want = l.querySelector(".lb-room").textContent, boxes = Array.from(document.querySelectorAll(".mg-bx"));
+        return { want, here: boxes.findIndex((b) => b.classList.contains("is-cursor")), codes: boxes.map((b) => b.querySelector(".bx-addr b").textContent) };
+      });
+      if (!pick) { await sleep(150); continue; }
+      if (pick.codes[pick.here] !== pick.want) { await page.keyboard.press("ArrowRight"); continue; }
+      await page.keyboard.press("Space");
+      await sleep(450); // 다음 송장이 나오거나 게임이 끝나길 기다림
     }
   }
   return kind;
@@ -176,16 +173,16 @@ async function main() {
   await p1.keyboard.press("Space");
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "pack closes after completion" });
   await waitFor(async () => (await myCount(p1, 0)) === 1, { label: "normal box secured on p1" });
-  assert((await countSel(p1, openSel("normal-3"))) === 1, "the normal-box button stays available (4 left)");
+  assert((await countSel(p1, openSel("normal-3"))) === 1, "the normal-box button stays available (2 left)");
   log("박스 포장 완주 -> 레이어 닫힘 + normal-1 확보");
 
   // ---- e. 깨지기 -> 이상 확인 (진짜로 분류/폐기) ----
   await clickSel(p1, openSel("fragile-1"));
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-inspect")) === 1, { label: "깨지기 = 이상 확인" });
-  assert((await p1.$$("#mg-layer .mg-pkg")).length === 8, "fragile starts at level 2 (8 packages)");
+  assert((await p1.$$("#mg-layer .mg-pkg")).length === 10, "fragile starts at level 2 (10 packages)");
   await playOpenGame(p1);
   await waitFor(async () => (await myCount(p1, 1)) === 1, { label: "fragile box secured" });
-  log("깨지기 택배 칸 -> 이상 확인(8개) 완주 -> fragile-1 확보");
+  log("깨지기 택배 칸 -> 이상 확인(10개) 완주 -> fragile-1 확보");
 
   // ---- f. 확정 층수 -> 송장 붙이기 (송장에 그 칸의 층이 찍힘) ----
   await clickSel(p1, openSel("fixed-floor-2"));
@@ -203,15 +200,15 @@ async function main() {
   assert(/^10\d호$/.test(faceText), `invoice on fixed-floor-2 must be a 1F room (10N호), got ${faceText}`);
   log(`확정 층수 칸 -> 송장 붙이기(송장에 '${labelText}') 완주 -> 확보, 송장 목적지 ${faceText} (1F)`);
 
-  // ---- g. 귀중품 -> 지도 배달 (전반 = 난이도 보통: 6x4 지도, 목표 4, 호실 번호 유지) ----
+  // ---- g. 귀중품 -> 지도 배달 (전반 = 난이도 보통: 6x4 지도, 목표 3, 호실 번호 유지) ----
   await clickSel(p1, openSel("valuable-1"));
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-map")) === 1, { label: "귀중품 = 지도 배달" });
   assert((await countSel(p1, ".puzzle-frame")) === 0, "valuable no longer shows the Ubongo puzzle image");
   const mapBody = await p1.evaluate(() => { const b = document.querySelector("#mg-layer .mg-body"); return { grid: b.dataset.grid, targets: b.dataset.targets.split(";").length }; });
-  assert(mapBody.grid === "6,4" && mapBody.targets === 4, "전반 지도 배달은 6x4 지도 / 목표 4개, got " + JSON.stringify(mapBody));
+  assert(mapBody.grid === "6,4" && mapBody.targets === 3, "전반 지도 배달은 6x4 지도 / 목표 3개, got " + JSON.stringify(mapBody));
   await playOpenGame(p1);
   await waitFor(async () => (await myCount(p1, 2)) === 1, { label: "valuable secured by really playing the map game" });
-  log("귀중품 칸 -> 지도 배달(6x4, 송장 4장) 진짜로 플레이해서 완주 -> valuable 확보");
+  log("귀중품 칸 -> 지도 배달(6x4, 송장 3장) 진짜로 플레이해서 완주 -> valuable 확보");
 
   // ---- f2. 송장 붙이기를 키보드만으로 (2026-10-07): ←→로 박스 고르고 스페이스 ----
   await clickSel(p1, openSel("fixed-floor-5"));
@@ -262,14 +259,14 @@ async function main() {
   await p2Finish("fragile-2"); // p1이 열어 둔 칸 자체를 상대가 가져가도, 같은 종류 빈 칸이 있으니 내 게임은 유지
   await sleep(400);
   assert((await countSel(p1, "#mg-layer .mg-kind-inspect")) === 1, "my game must stay open while the category still has free cells");
-  for (const id of ["fragile-3", "fragile-4", "fragile-5"]) await p2Finish(id); // 이제 1개 남음 (fragile 6칸 - p1이 1, p2가 4 = 5 -> 남은 1)
+  await p2Finish("fragile-3"); // 이제 1개 남음 (fragile 4칸 - p1이 1, p2가 2 = 3 -> 남은 1)
   assert((await countSel(p1, "#mg-layer .mg-kind-inspect")) === 1, "still one cell left -> game stays open");
-  await p2Finish("fragile-6"); // 마지막 1개까지 소진
+  await p2Finish("fragile-4"); // 마지막 1개까지 소진
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "p1 game closes when the category is exhausted" });
   assert((await toastText(p1)).includes("소진"), "p1 should be told the category ran out, got: " + (await toastText(p1)));
   const fragLeft = await p1.textContent('.board-row[data-cat="1"] .cat-left');
-  assert(/남은\s*0\s*\/\s*6/.test(fragLeft), "깨지기 shows 남은 0 / 6, got " + fragLeft);
-  log("일반 종류: 같은 종류 빈 칸이 있는 동안은 게임 유지, 마지막 개수가 소진되면 닫히고 안내 + 남은 0 / 6 표시");
+  assert(/남은\s*0\s*\/\s*4/.test(fragLeft), "깨지기 shows 남은 0 / 4, got " + fragLeft);
+  log("일반 종류: 같은 종류 빈 칸이 있는 동안은 게임 유지, 마지막 개수가 소진되면 닫히고 안내 + 남은 0 / 4 표시");
 
   // ---- i. 확보 시간이 끝나면 열려 있던 게임이 닫힌다 ----
   await clickSel(p1, openSel("normal-3"));

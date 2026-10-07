@@ -17,12 +17,16 @@
 // fixedFloor: true인 종류는 각 칸의 num(0..count-1)이 곧 FLOORS의 인덱스로 고정된다 (무작위 배정 안 함).
 // 표시 순서는 이 배열 순서 그대로 보드에 반영된다 (2026-08-27: 확정 층수 택배를 맨 아래로 이동,
 // 깨지기 쉬운 택배는 주황+흰 글씨 대신 연두+검은 글씨로 -- 주황 배경에 흰 글씨만 유독 튀어서 변경).
+// 2026-10-07 희소성 조정(사용자 요청: "택배를 너무 쉽게 얻어서 우봉고 할 때보다 재미없다" -> "희소성 + 미니게임 난이도 업 둘 다"):
+//   일반 6->4, 깨지기 6->4, 귀중품 6->3 (확정 층수는 층이 6개라 6 그대로) = 24 -> 17칸. 한 하프에 한 사람이 배송할 수 있는 건
+//   라운드 7번 x 1장 이하(실제론 3~5장)라서, 24칸은 두 사람이 다 가져도 남는 공급이었다. 비싼 종류일수록 적게 둔다.
+//   (이전엔 2026-10-06 사용자 요청으로 전 종류 6칸 통일이었다.)
 const TYPES = [
-  { key: "normal", name: "일반택배", count: 6, pieces: 2, reward: 2500, penalty: 1000,
+  { key: "normal", name: "일반택배", count: 4, pieces: 2, reward: 2500, penalty: 1000,
     color: "#C9A576", ink: "#16233F", mini: "pack", miniLevel: [2, 3] },
-  { key: "fragile", name: "깨지기 쉬운 택배", count: 6, pieces: 3, reward: 5000, penalty: 2500,
+  { key: "fragile", name: "깨지기 쉬운 택배", count: 4, pieces: 3, reward: 5000, penalty: 2500,
     color: "#C7E29A", ink: "#16233F", mini: "inspect", miniLevel: [2, 3] },
-  { key: "valuable", name: "귀중품", count: 6, pieces: [3, 4], reward: 10000, penalty: 5000,
+  { key: "valuable", name: "귀중품", count: 3, pieces: [3, 4], reward: 10000, penalty: 5000,
     color: "#F0B84A", ink: "#16233F", mini: "map", miniLevel: [2, 3] },
   { key: "fixed-floor", name: "확정 층수 택배", count: 6, pieces: 3, fixedFloor: true, reward: 3000, penalty: 2500,
     color: "#6DBBFD", ink: "#16233F", mini: "sticker", miniLevel: [2, 3] },

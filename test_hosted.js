@@ -1,6 +1,6 @@
 // Two-player end-to-end test against the REAL local WS server (not a mock), simulating two
 // separate devices via two separate browser contexts (independent sessionStorage/clientId).
-// Covers the full 2026-08-27 rework: 24-cell board (6 cells per category), currency scoring,
+// Covers the full 2026-08-27 rework: 17-cell board (일반4/깨지기4/귀중품3/확정6), currency scoring,
 // per-round priority-package pick in its own timed 10s "priority" window (re-picked every round,
 // bonus only applies if delivered that same round; early advance when both confirm), 후반-only dedicated 택배도둑 placement window
 // (its own state between each round's ready-gate and voting), and the full
@@ -159,13 +159,13 @@ async function main() {
   const hasTimer1 = await countSel(p1, "#side-timer");
   if (!hasTimer1) throw new Error("side timer missing on p1 in secure phase");
 
-  // ---- 24-cell board sanity: 4 category rows of 6 cells each ----
+  // ---- 17-cell board sanity: 4 category rows (4/4/3/6) ----
   const boardRowCount = await countSel(p1, ".board-row");
-  if (boardRowCount !== 4) throw new Error(`expected 4 category rows on the 24-cell board, found ${boardRowCount}`);
+  if (boardRowCount !== 4) throw new Error(`expected 4 category rows on the 17-cell board, found ${boardRowCount}`);
   const totalPips = await countSel(p1, ".rail-box .pip");
-  if (totalPips !== 24) throw new Error(`expected 24 total box pips across all categories, found ${totalPips}`);
+  if (totalPips !== 17) throw new Error(`expected 17 total box pips across all categories, found ${totalPips}`);
   const perRow = await p1.evaluate(() => Array.from(document.querySelectorAll(".board-row")).map((r) => r.querySelectorAll(".pip").length));
-  if (perRow.join(",") !== "6,6,6,6") throw new Error(`every category must have exactly 6 boxes, got ${perRow.join("/")}`);
+  if (perRow.join(",") !== "4,4,3,6") throw new Error(`categories must have 4/4/3/6 boxes, got ${perRow.join("/")}`);
   const typeBtns = await countSel(p1, ".rail-btn[data-action=\"open-type\"]"), floorBtns = await countSel(p1, ".floor-btn");
   if (typeBtns !== 3 || floorBtns !== 6) throw new Error(`rail screen: expected 3 type buttons + 6 floor buttons, got ${typeBtns}/${floorBtns}`);
   // 내 자리 쪽에만 버튼이 있다 (1번 = 왼쪽, 2번 = 오른쪽), 상대 쪽은 비어 있다
@@ -173,7 +173,7 @@ async function main() {
   if (sideOfBtns !== 0) throw new Error(`seat 1's buttons should be on the LEFT of the rail, got column ${sideOfBtns}`);
   const sideOfBtns2 = await p2.evaluate(() => { const r = document.querySelector(".board-row"); const kids = Array.from(r.children); return kids.findIndex((k) => k.classList.contains("mine")); });
   if (sideOfBtns2 !== 2) throw new Error(`seat 2's buttons should be on the RIGHT of the rail, got column ${sideOfBtns2}`);
-  log("confirmed: rail screen -- 4 rows, 6 box pips each (24), my buttons on my side (1번=왼쪽, 2번=오른쪽)");
+  log("confirmed: rail screen -- 4 rows, 4/4/3/6 box pips (17), my buttons on my side (1번=왼쪽, 2번=오른쪽)");
 
   // ---- give up: opening a cell and clicking give-up must NOT mark it taken ----
   await clickSel(p1, openSel("normal-1"));
@@ -187,7 +187,7 @@ async function main() {
   if (takenCountAfterGiveUp !== 0) throw new Error(`giving up should not take any cell, but ${takenCountAfterGiveUp} cell(s) show as taken`);
   log("give-up confirmed: cell stays untaken, no invoice granted");
 
-  // ---- 공유 보드(2026-10-06): 종류별 6개를 두 사람이 나눠 가진다. 둘 다 같은 칸(normal-1)을 열어 끝내면 한 사람은 그 칸을,
+  // ---- 공유 보드(2026-10-06): 종류별 개수(4/4/3/6)를 두 사람이 나눠 가진다. 둘 다 같은 칸(normal-1)을 열어 끝내면 한 사람은 그 칸을,
   // 다른 사람은 같은 종류의 다른 빈 칸을 받는다 -- 합쳐서 2개가 줄어든다 ----
   await Promise.all([
     clickSel(p1, openSel("normal-1")),
@@ -202,8 +202,8 @@ async function main() {
   if (mine1 !== 1 || mine2 !== 1) throw new Error(`each player should own exactly one box (mine1=${mine1}, mine2=${mine2})`);
   // 상대가 뭘 가져갔는지는 내 화면에 안 보인다 -- 내 칩은 내 것 하나뿐이고, 남은 개수만 줄어든다
   const leftTxt = await p1.textContent('.board-row[data-cat="0"] .cat-left');
-  if (!/남은\s*4\s*\/\s*6/.test(leftTxt)) throw new Error(`일반택배 should show 남은 4 / 6, got "${leftTxt}"`);
-  log("공유 보드 확인: 같은 칸을 동시에 끝내도 각자 1개씩 확보, 남은 개수 6 -> 4");
+  if (!/남은\s*2\s*\/\s*4/.test(leftTxt)) throw new Error(`일반택배 should show 남은 2 / 4, got "${leftTxt}"`);
+  log("공유 보드 확인: 같은 칸을 동시에 끝내도 각자 1개씩 확보, 남은 개수 4 -> 2");
 
   async function secureCell(p, cellId) {
     const sel = openSel(cellId);
@@ -226,7 +226,7 @@ async function main() {
   log("확정 층수 택배: p1이 2F를 선점하면 p2는 열 수 없고, p2는 다른 층(5F)을 확보");
 
   // secure a healthy spread of cells for both players so there's real inventory for the elevator
-  // phase (including enough on p1 to make same-floor collisions likely across 24 cells)
+  // phase (including enough on p1 to make same-floor collisions likely across 17 cells)
   for (const id of [
     "normal-3", "normal-4",
     "fixed-floor-1", "fixed-floor-2", "fixed-floor-4", "fixed-floor-5",
@@ -236,7 +236,6 @@ async function main() {
     await secureCell(p1, id);
   }
   await secureCell(p2, "fragile-4");
-  await secureCell(p2, "valuable-4");
   log("secured additional cells for both players");
 
   // ---- wait out the secure phase (server override, shortened for this test run) -> straight into
@@ -279,7 +278,7 @@ async function main() {
   // ---- play out a full 5-round half, handling the optional "choosing" (same-floor conflict)
   // sub-state whenever it appears, plus (후반 only) a dedicated "thief" placement window that now
   // appears before every round's voting -- both players click vote-up every round, which drives
-  // the shared floor to the top and keeps it there, making same-floor collisions likely across 24
+  // the shared floor to the top and keeps it there, making same-floor collisions likely across 17
   // secured cells. ----
   // ---- 우선 택배 지정 전용 10초 창 (2026-10-06). 둘 다 스페이스로 준비하면 맨 먼저 열린다.
   // mode: "pick"(지정/해제/재지정 + 확정 버튼 + 조기 진행 시간 측정) | "timeout"(아무도 확정 안 함 -> 10초 후 자동 진행)
@@ -437,7 +436,7 @@ async function main() {
   // ---- 후반's board must be freshly reset (no cells pre-taken) ----
   const takenAtHalf2Start = await takenTotal(p1);
   if (takenAtHalf2Start !== 0) throw new Error(`후반 secure phase should start with a fresh board, but ${takenAtHalf2Start} cell(s) are already taken`);
-  log("confirmed: 후반 starts with a completely fresh 24-cell board");
+  log("confirmed: 후반 starts with a completely fresh 17-cell board");
 
   for (const id of ["normal-1", "normal-2", "fixed-floor-1", "fixed-floor-2", "fragile-1", "valuable-1"]) {
     await secureCell(p1, id);

@@ -243,8 +243,8 @@
   background: var(--mg-ok); color: #fff; font-weight: 800; font-size: calc(3.2 * var(--u)); line-height: calc(5 * var(--u)); text-align: center;
   transform: scale(0); transition: transform 0.2s ease 0.12s; box-shadow: 0 calc(0.3 * var(--u)) calc(0.6 * var(--u)) rgba(0, 0, 0, 0.3);
 }
-.mg-bx.is-hover, .mg-bx.is-cursor { transform: translateY(calc(-1 * var(--u))); }
-.mg-bx.is-hover .bx-front, .mg-bx.is-cursor .bx-front { box-shadow: 0 0 0 calc(0.6 * var(--u)) var(--mg-accent); }
+.mg-bx.is-cursor { transform: translateY(calc(-1 * var(--u))); }
+.mg-bx.is-cursor .bx-front { box-shadow: 0 0 0 calc(0.6 * var(--u)) var(--mg-accent); }
 .mg-bx.is-done .bx-ok { transform: scale(1); }
 .mg-bx.is-done .bx-slot { border-color: transparent; background: none; }
 .mg-bx.is-wrong { animation: mg-shake 0.32s ease; }
@@ -256,12 +256,10 @@
 .mg-tray-note { position: absolute; right: 2.4cqw; bottom: 1cqw; font-size: 2.3cqw; font-weight: 800; color: var(--mg-muted); letter-spacing: 0.04em; }
 /* --- 송장 스티커 --- */
 .mg-label {
-  position: absolute; z-index: 3; cursor: grab; touch-action: none; border-radius: 0.8cqw; overflow: hidden;
+  position: absolute; z-index: 3; pointer-events: none; border-radius: 0.8cqw; overflow: hidden;
   background: #fffefa; border: 0.3cqw solid #9a8460; box-shadow: 0 0.7cqw 1.3cqw rgba(43, 29, 18, 0.30);
   display: flex; flex-direction: column; transform-origin: 0 0;
 }
-.mg-label.is-drag { cursor: grabbing; box-shadow: 0 2cqw 3cqw rgba(43, 29, 18, 0.34); z-index: 6; }
-.mg-label.is-return { transition: left 0.22s ease, top 0.22s ease; }
 .mg-label.is-stuck { cursor: default; box-shadow: 0 0.2cqw 0.4cqw rgba(43, 29, 18, 0.35); transition: left 0.26s ease, top 0.26s ease, transform 0.26s ease; z-index: 5; }
 .mg-label .lb-bar { flex: 0 0 auto; background: var(--mg-accent); color: var(--mg-accent-ink); font-size: 1.9cqw; font-weight: 800; letter-spacing: 0.3em; padding: 0.35cqw 1.4cqw; line-height: 1.2; }
 .mg-label .lb-main { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; padding: 0 1.4cqw; }
@@ -351,7 +349,7 @@
 }
 .mg-replay:hover:not(:disabled) { background: rgba(43, 29, 18, 0.06); }
 .mg-replay:disabled { opacity: 0.4; cursor: default; }
-.mg-kind-map .mg-pad { margin-top: 0.3rem; }
+.mg-kind-map .mg-pad, .mg-kind-sticker .mg-pad { margin-top: 0.3rem; }
 @media (max-width: 480px) { .mg-map { --ts: 52px; } .mg-lab { font-size: 0.62rem; } .mg-parcel .pbox { width: 68px; height: 58px; } .mg-parcel .pl { font-size: 1.05rem; } }
 @media (max-height: 820px) {
   .mg-map { --ts: 50px; }
