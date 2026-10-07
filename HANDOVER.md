@@ -676,6 +676,7 @@ node test_mainview.js          # 메인 모니터(?view=main) -- SECURE_PHASE_MS
 node test_shared_board.js      # 공유 보드(종류별 6개 합계) 선착순/소진 규칙 -- 서버만, 브라우저 불필요
 node test_priority_window.js   # 우선 택배 10초 창(priority) 서버 규칙 -- 서버만, 브라우저 불필요 (2026-10-06)
 node test_half_difficulty.js   # 후반 난이도가 라이브에서 적용되는지(키 8/10개/송장 4·박스 7/우봉고 4색) -- SECURE_PHASE_MS 10초 필요 (2026-10-06)
+node test_rail_site.js         # 레일 사이트(/rail) 통합 검증 -- SECURE_PHASE_MS 40초 필요 (2026-10-07, 12.2절)
 node test_minigames_live.js    # 라이브 게임 안에서 종류별 미니게임 통합 검증 (SECURE_PHASE_MS 40초 필요, 9절)
 ```
 
@@ -985,3 +986,27 @@ node test_minigames_live.js
 - 테스트 셀렉터 관례: 일반 종류는 `.board-row[data-cat="N"] .rail-btn`(또는 `[data-action="open-type"]`), 확정 층수는 `.floor-btn`/`.floor-btn.mine`, 남은 개수는 `.cat-left b`.
   첫 자식이 `.rail-head`이므로 `:nth-child`로 행을 고르지 말 것.
 - `rail_proto.html`은 이 화면의 초기 단독 시안(선택 예산/공개 재고 실험용). 실제 게임 로직과 연결돼 있지 않다.
+
+### 12.2 레일 사이트 (`/rail`, 2026-10-07) — 공용 레일 화면 + 각자의 게임 화면
+
+사용자 요청: "레일 사이트가 따로 존재했으면" -> 레일 화면(공용)과 각자의 게임 화면(플레이어 사이트)을 **분리**. 사이트가 세 개가 됐다:
+
+| 사이트 | 주소 | 하는 일 |
+|---|---|---|
+| 플레이어 | `/?room=코드` | 좌석 선택, 미니게임, 엘리베이터 |
+| 메인 모니터 | `/?view=main` (방 생성) / `/?room=코드&view=main` | 관전용 큰 화면. 대기 화면에 플레이어 주소 + 레일 주소가 뜬다 |
+| 레일 | `/rail?room=코드` (코드 없이 열면 입력칸) | 공용 화면. 왼쪽 = 1번 자리 버튼, 오른쪽 = 2번 자리 버튼 |
+
+- 흐름: 레일 화면 버튼 클릭 -> `rail-press {side, cat, cellId?}` -> 서버 `handleRailPress`가 `room.railCellFor`로 칸을 정해 그 좌석 주인(`seatOwners[side]` == clientId)의 연결에 `open-game {cellId}` 전송 ->
+  플레이어 클라이언트 `onRailOpenGame` -> `openCell` -> 미니게임. 칸 확보는 **여전히 플레이어가 끝내고 보내는 `secure-cell` 하나뿐**이다(서버 규칙/채점 불변).
+- 레일 연결은 WS 쿼리 `role=rail`로 구분(`conn.role`). 레일 연결이 보내는 건 `rail-press`뿐이고 나머지 메시지는 전부 무시된다(좌석 위조 방지).
+- **레일 모드**: 서버가 상태 방송마다 `rail: {count, busy}`를 같이 보낸다. `count > 0`이면 플레이어 화면의 확보 단계가 `renderRailWaiting`(대기 카드: 내 시간/내 쪽 안내/종류별 남은 개수/내 호수)로 바뀌고,
+  `0`이면(레일 화면이 없거나 닫힘) 예전 `renderBoard`(12절의 레일 보드)로 돌아온다 -> **레일 화면 없이도 혼자/두 폰만으로 계속 플레이 가능**, 기존 테스트도 그대로 유효.
+- **busy**: 레일이 연 게임을 그 좌석 플레이어가 하는 중이면 `entry.busy[seat]=true` -> 레일의 그 쪽 버튼이 전부 잠기고 "게임 중..." 표시. 풀리는 때: 그 좌석의 `secure-cell`, 클라이언트의 `game-closed`(포기/시간 초과/소진으로 게임이 닫힘),
+  플레이어 연결 종료, 확보 단계 종료(`broadcast`가 phase != secure면 초기화).
+- 비공개: 레일 화면엔 남은 개수와 "게임 중" 표시만 있다. 호수/송장 정보는 플레이어 화면에만(테스트가 레일에 `\d0\d호` 패턴이 없음을 검증).
+- 확정 층수 택배는 양쪽에 층 버튼 6개. 확보된 층은 양쪽에서 잠긴다(누가 가져갔는지는 안 보임). "층 랜덤 배정"으로 바꾸려면 `railSideButtons`의 fixedFloor 분기를 일반 버튼으로 바꾸고
+  `railCellFor`가 빈 층 중 하나를 고르게 하면 된다.
+- 레이아웃: `body.rail-view`. 3열(1번|레일|2번)을 모든 폭에서 유지(`.board-row` 반응형 2열 규칙을 `body.rail-view` 셀렉터로 덮어씀). 확인한 뷰포트: 1280x720, 1024x768, 820x1180. 공용 TV/PC/태블릿용이고 폰 세로는 비권장.
+- 테스트: `test_rail_site.js` (셀렉터: `.board-row[data-cat=N] .rail-side.side-S .rail-btn`, `.floor-btn[data-cell=...]`, 플레이어 대기 카드 `[data-rail-wait]`).
+- 서버가 `/rail`을 열어 주므로 `server.js`의 라우팅이 `/`, `/rail`, `/health` 세 개다.

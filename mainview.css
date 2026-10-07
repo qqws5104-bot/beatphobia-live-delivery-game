@@ -80,3 +80,5 @@ body.main-view #app { height: 100vh; min-height: 0; }
 .mv-score b { display: block; margin-top: 1vh; font-family: var(--font-display); font-size: 9vh; color: var(--gold); }
 .mv-winner { font-size: 9vh; font-weight: 800; color: var(--gold); }
 @media (prefers-reduced-motion: reduce) { .mv-car, .mv-bar > i { transition: none; } .mv-time.is-low { animation: none; } }
+.mv-join-rail { margin-top: 1.2vh; font-size: 2.4vh; }
+.mv-join-rail b { font-size: 3.2vh; }

@@ -249,6 +249,25 @@ class GameRoom {
     this.emit();
   }
 
+  // 2026-10-07 레일 사이트(/rail): 공용 레일 화면에서 seat 쪽 버튼이 눌렸을 때 "그 좌석 플레이어가 풀 칸"을 정해 돌려준다.
+  // 상태는 바꾸지 않는다(칸은 플레이어가 미니게임을 끝내고 secure-cell을 보낼 때 확보됨 -- 위 secureCell 규칙 그대로).
+  //  * 일반/깨지기/귀중품: 그 종류의 아직 안 가져간 첫 칸. 없으면 null(소진).
+  //  * 확정 층수 택배: 레일 화면이 고른 층(cellId)이 아직 비어 있어야 한다. 아니면 null.
+  // 좌석 주인이 없거나 확보 단계가 아니면 null.
+  railCellFor(seat, catIdx, cellId) {
+    if (this.state.phase !== "secure") return null;
+    if (seat !== "1" && seat !== "2") return null;
+    if (!this.state.seatOwners[seat]) return null;
+    const t = TYPES[catIdx];
+    if (!t) return null;
+    if (t.fixedFloor) {
+      const c = cellById(this.state, cellId);
+      return c && c.catIdx === catIdx && !c.taken ? c.id : null;
+    }
+    const free = this.state.board.find((c) => c.catIdx === catIdx && !c.taken);
+    return free ? free.id : null;
+  }
+
   _endSecurePhase() {
     if (this.state.phase !== "secure") return;
     this.state.phase = "elevator";

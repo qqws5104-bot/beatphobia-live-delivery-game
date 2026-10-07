@@ -372,6 +372,70 @@ HEAD_HTML = """<!doctype html>
     .rail-btn .rbt { font-size:0.85rem; }
   }
 
+
+  /* ---------- 2026-10-07 레일 사이트(/rail): 공용 화면. 3열(1번 자리 | 레일 | 2번 자리)을 어느 폭에서도 유지한다. ---------- */
+  body.rail-view { overflow:hidden; }
+  body.rail-view #app { height:100vh; min-height:0; }
+  .rv { height:100vh; display:flex; flex-direction:column; gap:clamp(0.4rem,1.2vh,0.9rem); padding:clamp(0.5rem,1.5vh,1.2rem) clamp(0.6rem,2vw,2rem) clamp(0.6rem,1.8vh,1.4rem); background:linear-gradient(180deg,var(--bg-deep),var(--bg) 22%); }
+  .rv-head { display:flex; align-items:center; justify-content:space-between; gap:1rem; flex:0 0 auto; }
+  .rv-eyebrow { font-family:var(--font-display); font-size:0.7rem; letter-spacing:0.22em; text-transform:uppercase; color:var(--gold); font-weight:600; }
+  .rv-head h1 { margin:0.1rem 0 0; font-size:clamp(1.1rem,3.2vh,1.8rem); font-weight:800; }
+  .rv-chips { display:flex; gap:0.5rem; flex-wrap:wrap; justify-content:flex-end; }
+  .rv-chip { padding:0.25rem 0.8rem; border-radius:999px; font-family:var(--font-display); font-weight:700; font-size:0.85rem; white-space:nowrap; }
+  .rv-chip.phase { background:rgba(226,105,26,0.12); border:2px solid rgba(226,105,26,0.5); color:var(--gold); }
+  .rv-chip.room { background:rgba(37,105,168,0.1); border:2px solid rgba(37,105,168,0.4); color:var(--sky); }
+  .rv-clockrow { flex:0 0 auto; display:flex; align-items:center; gap:0.9rem; }
+  .rv-clock-label { font-family:var(--font-display); font-weight:700; color:var(--muted); font-size:0.95rem; white-space:nowrap; }
+  .rv-clockrow b { font-family:var(--font-display); font-size:clamp(1.6rem,6vh,3rem); font-variant-numeric:tabular-nums; line-height:1; min-width:3.4ch; }
+  .rv-clockrow b.is-low { color:var(--danger); }
+  .rv-bar { flex:1; height:0.8rem; border-radius:999px; background:rgba(43,29,18,0.1); overflow:hidden; }
+  .rv-bar > i { display:block; height:100%; width:100%; background:var(--gold); border-radius:999px; transition:width 0.25s linear; }
+  .rv-center { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; gap:1rem; }
+  .rv-center h2 { margin:0; font-size:clamp(1.6rem,6vh,3rem); }
+  .rv-center p { margin:0; color:var(--muted); font-size:1.1rem; }
+  .rv-sides { display:flex; gap:1rem; margin-top:0.6rem; }
+  .rv-code { font:inherit; font-family:var(--font-display); font-size:1.4rem; text-transform:uppercase; width:7ch; text-align:center; padding:0.3rem; border:2px solid var(--muted); border-radius:10px; background:var(--panel); color:var(--ink); }
+  .rv-side { --c:#999; display:inline-flex; flex-direction:column; align-items:center; gap:0.1rem; padding:0.25rem 0.9rem; border-radius:12px; border:2px solid var(--c); background:var(--panel); color:var(--ink); font-family:var(--font-display); min-width:0; }
+  .rv-side b { font-size:clamp(0.9rem,2.4vh,1.25rem); display:inline-flex; align-items:center; gap:0.35rem; }
+  .rv-side .rv-side-icon { width:1.2em; height:1.2em; display:inline-flex; color:var(--c); }
+  .rv-side .rv-side-icon svg { width:100%; height:100%; }
+  .rv-side small { font-size:0.72rem; color:var(--muted); font-weight:700; }
+  .rv-side.is-busy { background:var(--c); }
+  .rv-side.is-busy, .rv-side.is-busy small { color:#fff; }
+  .rv-board { overflow-y:auto; }
+  body.rail-view .rail-head { display:grid; grid-template-columns:minmax(0,1fr) minmax(150px,260px) minmax(0,1fr); align-items:end; gap:0; padding-bottom:0.4rem; }
+  body.rail-view .rail-head > .rv-side { justify-self:center; }
+  body.rail-view .board-row { flex:1 1 0; min-height:84px; grid-template-columns:minmax(0,1fr) minmax(150px,260px) minmax(0,1fr); gap:0; padding:0.28rem 0; }
+  body.rail-view .board-row .rail-mid { order:0; border-radius:0; }
+  body.rail-view .rail-head + .board-row .rail-mid { border-radius:12px 12px 0 0; }
+  body.rail-view .board-row:last-child .rail-mid { border-radius:0 0 12px 12px; }
+  body.rail-view .board-row .rail-side.mine { order:0; padding:0 clamp(0.4rem,1.6vw,1.4rem); }
+  body.rail-view .rail-btn { padding:clamp(0.4rem,1.6vh,1rem) 0.6rem; flex:1; justify-content:center; }
+  body.rail-view .rail-btn .rbt { font-size:clamp(0.95rem,2.6vh,1.5rem); }
+  body.rail-view .rail-btn .rbp { font-size:clamp(0.68rem,1.6vh,0.9rem); }
+  body.rail-view .floor-btn { font-size:clamp(0.9rem,2.4vh,1.3rem); padding:clamp(0.3rem,1.2vh,0.7rem) 0.1rem; }
+  .rail-btn.is-busy { animation:rv-pulse 1.2s ease-in-out infinite; }
+  @keyframes rv-pulse { 50% { opacity:0.55; } }
+  @media (prefers-reduced-motion: reduce) { .rail-btn.is-busy { animation:none; } }
+
+  /* 플레이어 화면(레일 모드)의 대기 카드 */
+  .rw { display:flex; flex-direction:column; gap:0.8rem; }
+  .rw h2 { margin:0; font-size:1.3rem; }
+  .rw-sub { margin:0; color:var(--muted); font-size:0.9rem; }
+  .rw-sub b { color:var(--ink); }
+  .rw-list { display:flex; flex-direction:column; gap:0.5rem; }
+  .rw-row { --c:#ccc; display:grid; grid-template-columns:auto minmax(0,1.3fr) auto minmax(0,1fr); align-items:center; gap:0.7rem; padding:0.5rem 0.8rem; border-radius:12px; border:2px solid var(--c); background:var(--panel); }
+  .rw-row.is-empty { opacity:0.5; }
+  .rw-ico { width:24px; height:24px; display:inline-flex; }
+  .rw-ico svg { width:100%; height:100%; }
+  .rw-name { font-family:var(--font-display); font-weight:800; display:flex; flex-direction:column; line-height:1.15; }
+  .rw-name small { font-weight:700; color:var(--muted); font-size:0.72rem; }
+  .rw-left { font-family:var(--font-display); font-weight:700; font-size:0.85rem; white-space:nowrap; }
+  .rw-left b { font-size:1.1rem; }
+  .rw-mine { display:flex; flex-wrap:wrap; gap:0.25rem; justify-content:flex-end; }
+  .rw-mine small { color:var(--muted); }
+  @media (max-width:560px) { .rw-row { grid-template-columns:auto minmax(0,1fr) auto; } .rw-mine { grid-column:1 / -1; justify-content:flex-start; } }
+
   /* on genuinely short viewports, shrink the chrome around the board (topbar + side-timer) too --
      the board itself already fills whatever's left via grid-template-rows:1fr, but a smaller
      topbar/timer leaves it more room to work with before the overflow-y:auto fallback kicks in. */
@@ -562,6 +626,12 @@ APP_JS_TEMPLATE = r"""
   // (renderMain 참고). 서버 입장에서는 좌석 없는 관전 연결이라 게임 진행에는 아무 영향이 없다.
   var MAIN = /[?&]view=main(&|$)/.test(window.location.search);
   if (MAIN) document.body.classList.add("main-view");
+  // 2026-10-07: /rail (또는 ?view=rail) 이면 "레일 사이트" -- 두 플레이어가 같이 보는 공용 화면. 좌석을 잡지 않고, 왼쪽(1번)/오른쪽(2번) 버튼을
+  // 누르면 서버가 해당 플레이어의 기기에 그 종류의 미니게임을 띄운다 (renderRail 참고). 접속해 있는 동안 플레이어 화면은 레일 모드가 된다.
+  var RAIL = window.location.pathname === "/rail" || /[?&]view=rail(&|$)/.test(window.location.search);
+  if (RAIL) document.body.classList.add("rail-view");
+  // 서버가 상태 메시지마다 실어 보내는 레일 정보 { count: 접속 중인 레일 화면 수, busy: {"1":bool,"2":bool} }.
+  var railInfo = { count: 0, busy: { "1": false, "2": false } };
   // 서버 시계와 이 기기 시계의 차이 (서버가 상태 메시지마다 now를 실어 보낸다). 메인 모니터의 카운트다운에만 쓴다.
   var clockOffset = 0;
   function nowMs() { return Date.now() + clockOffset; }
@@ -627,7 +697,7 @@ APP_JS_TEMPLATE = r"""
   var ws = null;
   function wsUrl() {
     var proto = window.location.protocol === "https:" ? "wss:" : "ws:";
-    return proto + "//" + window.location.host + "/ws?room=" + encodeURIComponent(ROOM);
+    return proto + "//" + window.location.host + "/ws?room=" + encodeURIComponent(ROOM) + (RAIL ? "&role=rail" : "");
   }
   function connectWS() {
     if (!ROOM) return;
@@ -635,7 +705,7 @@ APP_JS_TEMPLATE = r"""
     ws.onopen = function () {
       wsConnected = true;
       renderConnBanner();
-      var seat = mySeat();
+      var seat = RAIL ? null : mySeat();
       ws.send(JSON.stringify({ type: "hello", clientId: CLIENT_ID, seat: seat }));
       if (seat) ws.send(JSON.stringify({ type: "pick-seat", clientId: CLIENT_ID, seat: seat })); // reclaim after reconnect
     };
@@ -649,6 +719,7 @@ APP_JS_TEMPLATE = r"""
         // re-render is enough to show the car actually stepping; no client-side simulation needed.
         state = msg.state;
         if (typeof msg.now === "number") clockOffset = msg.now - Date.now();
+        if (msg.rail) railInfo = msg.rail;
         // 2026-08-27: "pick-courier"는 좌석 번호를 클라이언트가 미리 못 정하므로(서버가 정해서
         // 돌려줌 -- game-room.js의 pickCourier), 낙관적으로 sessionStorage에 세팅하는 대신 여기서
         // 매 상태 브로드캐스트마다 "아직 내 좌석을 모르는 상태에서 내 clientId가 어느 좌석 주인이
@@ -660,6 +731,7 @@ APP_JS_TEMPLATE = r"""
         syncMiniGame();
       }
       else if (msg.type === "error") { handleWsError(msg); }
+      else if (msg.type === "open-game") { onRailOpenGame(msg.cellId); }
     };
     ws.onclose = function () { wsConnected = false; renderConnBanner(); setTimeout(connectWS, 1200); };
     ws.onerror = function () {};
@@ -905,10 +977,24 @@ APP_JS_TEMPLATE = r"""
   // 값이 숫자 하나면 그대로, [전반, 후반] 배열이면 지금 하프 것 (TYPES의 miniLevel/pieces).
   function perHalf(v) { return Array.isArray(v) ? v[(state && state.half === 2) ? 1 : 0] : v; }
   function closeMiniGame() {
-    if (mg) { try { mg.ctl.destroy(); } catch (e) { /* ignore */ } mg = null; }
+    if (mg) { try { mg.ctl.destroy(); } catch (e) { /* ignore */ } mg = null; notifyGameClosed(); }
     var layer = document.getElementById("mg-layer");
     if (layer) { layer.classList.add("hidden"); layer.innerHTML = ""; }
   }
+  // 칸을 연다: 미니게임이 있는 종류면 게임, 없으면(귀중품) 우봉고 오버레이. open-cell 버튼/레일 화면 지시가 같이 쓴다.
+  function openCell(cellId) {
+    var m = cellMeta(cellId, state.half);
+    if (m && TYPES[m.catIdx].mini && window.MiniGames) { openMiniGame(cellId); return; }
+    local.openCellId = cellId; render();
+  }
+  // 레일 화면이 "이 칸을 풀어라"고 보냈을 때. 이미 뭔가 하고 있으면(서버도 막지만 경합 대비) 무시한다.
+  function onRailOpenGame(cellId) {
+    if (!state || state.phase !== "secure" || mg || local.openCellId) return;
+    if (cellBlockedReason(state, cellId)) { notifyGameClosed(); return; }
+    openCell(cellId);
+  }
+  // 레일이 열어 준 게임을 닫았다(포기/시간 종료/소진)는 걸 서버에 알린다 -- 레일 화면의 "플레이 중" 표시와 중복 지시 방지용.
+  function notifyGameClosed() { send({ type: "game-closed", seat: mySeat() }); }
   function openMiniGame(cellId) {
     var meta = cellMeta(cellId, state.half);
     var t = TYPES[meta.catIdx];
@@ -1310,8 +1396,10 @@ APP_JS_TEMPLATE = r"""
   }
 
   function renderBody() {
+    if (RAIL && !ROOM) return renderRailJoin();
     if (!ROOM) return '<main class="stage"><div class="center-screen"><div class="lobby-box card"><h2>잘못된 링크예요</h2><p>방 코드가 없어요. 처음 받은 링크로 다시 들어와 주세요.</p></div></div></main>';
     if (MAIN) return renderMain();
+    if (RAIL) return renderRail();
     if (!state) return renderTopbarShell() + renderLoading();
     var seat = mySeat();
     var body = renderTopbar(state, seat);
@@ -1328,9 +1416,10 @@ APP_JS_TEMPLATE = r"""
       // 우봉고 오버레이를 열어둔 사이 그 칸(또는 그 종류)이 상대에게 다 넘어갔으면 오버레이를 닫는다 (공유 보드).
       if (local.openCellId) {
         var blocked = cellBlockedReason(state, local.openCellId);
-        if (blocked) { local.openCellId = null; setTimeout(function () { showToast(blocked); }, 0); }
+        if (blocked) { local.openCellId = null; notifyGameClosed(); setTimeout(function () { showToast(blocked); }, 0); }
       }
-      body += renderBoard(state, seat) + renderPuzzleOverlay(state);
+      // 레일 화면이 접속해 있으면 버튼은 그쪽에 있다 -- 내 화면은 "기다리는 화면"이고, 게임은 레일에서 눌렀을 때 뜬다.
+      body += (railInfo.count > 0 ? renderRailWaiting(state, seat) : renderBoard(state, seat)) + renderPuzzleOverlay(state);
     }
     else if (state.phase === "elevator") body += renderElevator(state, seat);
     else if (state.phase === "halftime") body += renderHalftime(state, seat);
@@ -1342,6 +1431,116 @@ APP_JS_TEMPLATE = r"""
       + '<div class="right"><span class="room-chip">방 ' + esc(ROOM) + '</span></div></div>';
   }
 
+
+  // ---------- 레일 사이트 (2026-10-07, /rail) ----------
+  // 두 플레이어가 같이 보는 공용 화면. 확보 단계에서 종류마다 한 줄: 가운데 레일 위에 택배 상자(남은 개수 점), 왼쪽 = 1번 자리 버튼,
+  // 오른쪽 = 2번 자리 버튼. 버튼을 누르면 서버(rail-press)가 그 자리 플레이어의 기기에 해당 종류 미니게임을 띄운다. 이 화면은 좌석이 없고
+  // 비공개 정보(내가 확보한 호수, 우선 택배 등)는 어디에도 그리지 않는다 -- 남은 개수와 누가 지금 게임 중인지만 보인다.
+  function renderRailJoin() {
+    return '<main class="stage"><div class="center-screen"><div class="lobby-box card"><h2>레일 화면</h2>'
+      + '<p>메인 화면에 뜬 방 코드를 입력하세요.</p>'
+      + '<p><input id="rail-code" class="rv-code" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="방 코드"> '
+      + '<button class="btn ok" data-action="rail-join">입장</button></p></div></div></main>';
+  }
+  function railSideHead(st, side) {
+    var key = st.courierPick && st.courierPick[side];
+    var c = key ? courierByKey(key) : null;
+    var idx = c ? COURIERS.indexOf(c) : -1;
+    var here = !!st.seatOwners[side];
+    var busy = railInfo.busy && railInfo.busy[side];
+    return '<span class="rv-side' + (c ? ' is-on' : '') + (busy ? ' is-busy' : '') + '" data-side="' + side + '"' + (c ? ' style="--c:' + c.color + '"' : '') + '>'
+      + (c ? '<span class="rv-side-icon">' + COURIER_ICONS[idx] + '</span>' : '')
+      + '<b>' + esc(c ? c.name : '플레이어 ' + side) + '</b>'
+      + '<small>' + (!here ? '입장 대기' : (busy ? '게임 중...' : '버튼을 누르세요')) + '</small></span>';
+  }
+  function railSideButtons(st, side, t, catIdx, left) {
+    var here = !!st.seatOwners[side];
+    var busy = !!(railInfo.busy && railInfo.busy[side]);
+    var html = '<div class="rail-side mine side-' + side + '" style="--c:' + t.color + '">';
+    if (t.fixedFloor) {
+      html += '<div class="floor-btns">';
+      for (var num = 0; num < t.count; num++) {
+        var cell = boardCell(st, t.key + "-" + (num + 1));
+        var off = !here || busy || (cell && cell.taken);
+        html += '<button class="floor-btn' + (cell && cell.taken ? ' is-gone' : '') + '" data-action="rail-press" data-side="' + side + '" data-cat="' + catIdx + '" data-cell="' + t.key + '-' + (num + 1) + '"'
+          + (off ? ' disabled' : '') + '>' + esc(FLOORS[num]) + '</button>';
+      }
+      html += '</div>';
+    } else {
+      var off2 = !here || busy || left === 0;
+      html += '<button class="rail-btn' + (busy ? ' is-busy' : '') + '" data-action="rail-press" data-side="' + side + '" data-cat="' + catIdx + '"' + (off2 ? ' disabled' : '') + '>'
+        + '<span class="rbt">' + (left === 0 ? '소진' : (busy ? '게임 중...' : esc(MINI_NAME[t.mini] || '우봉고') + ' 시작')) + '</span>'
+        + '<span class="rbp">성공 ' + fmtWon(t.reward) + ' · 실패 ' + fmtWon(-t.penalty) + '</span></button>';
+    }
+    return html + '</div>';
+  }
+  function renderRail() {
+    var st = state;
+    var head = function (label) {
+      return '<header class="rv-head"><div><span class="rv-eyebrow">BeatPhobia · Live</span><h1>레일 화면</h1></div>'
+        + '<div class="rv-chips">' + (label ? '<span class="rv-chip phase">' + esc(label) + '</span>' : '') + '<span class="rv-chip room">방 ' + esc(ROOM) + '</span></div></header>';
+    };
+    if (!st) return '<div class="rv">' + head('') + '<div class="rv-center"><h2>연결 중...</h2></div></div>';
+    var halfName = st.half === 2 ? "후반" : "전반";
+    if (st.phase !== "secure") {
+      var msg = st.phase === "lobby" ? ['참가자를 기다리고 있어요', '두 플레이어가 준비하면 이 화면에 레일이 열려요']
+        : st.phase === "elevator" ? ['배송 중이에요', '다음 택배 확보 단계에서 레일이 다시 열려요']
+        : st.phase === "halftime" ? ['하프타임', '후반이 시작되면 레일이 새 택배로 채워져요']
+        : ['게임이 끝났어요', '다시 시작하면 레일이 열려요'];
+      return '<div class="rv">' + head(st.phase === "lobby" ? '대기 중' : halfName) + '<div class="rv-center"><h2>' + msg[0] + '</h2><p>' + msg[1] + '</p>'
+        + '<div class="rv-sides">' + railSideHead(st, "1") + railSideHead(st, "2") + '</div></div></div>';
+    }
+    var endsAt = st.secureEndsAt || nowMs();
+    var html = '<div class="rv">' + head('택배 확보 · ' + halfName);
+    html += '<div class="rv-clockrow"><span class="rv-clock-label">남은 시간</span><b id="rv-clock" data-ends="' + endsAt + '">' + fmtClock(endsAt - nowMs()) + '</b>'
+      + '<div class="rv-bar"><i id="rv-bar" data-ends="' + endsAt + '"></i></div></div>';
+    html += '<div class="board-grid rv-board">';
+    html += '<div class="rail-head">' + railSideHead(st, "1") + '<span>레일</span>' + railSideHead(st, "2") + '</div>';
+    TYPES.forEach(function (t, catIdx) {
+      var left = boardLeft(st, catIdx), pips = '';
+      for (var k = 0; k < t.count; k++) pips += '<span class="pip' + (k < left ? '' : ' gone') + '"></span>';
+      var mid = '<div class="rail-mid"><div class="rail-box" style="background:' + t.color + ';--c:' + t.color + '">'
+        + '<span class="cell-art" style="background-image:url(\'' + BOX_ART[catIdx] + '\')"></span>'
+        + '<span class="rb-name"><span class="cat-icon">' + CAT_ICONS[catIdx] + '</span>' + esc(t.name) + '</span>'
+        + '<span class="rb-game">' + esc(MINI_NAME[t.mini] || '우봉고') + '</span>'
+        + '<span class="pips">' + pips + '</span>'
+        + '<span class="cat-left">남은 <b>' + left + '</b> / ' + t.count + '</span>'
+        + (left === 0 ? '<span class="stamp">소진</span>' : '')
+        + '</div></div>';
+      html += '<div class="board-row' + (left === 0 ? ' is-empty' : '') + '" data-cat="' + catIdx + '">'
+        + railSideButtons(st, "1", t, catIdx, left) + mid + railSideButtons(st, "2", t, catIdx, left) + '</div>';
+    });
+    return html + '</div></div>';
+  }
+  function railTick() {
+    var c = document.getElementById("rv-clock"), b = document.getElementById("rv-bar");
+    if (!c) return;
+    var ends = parseInt(c.getAttribute("data-ends"), 10), left = ends - nowMs();
+    c.textContent = fmtClock(left);
+    c.classList.toggle("is-low", left < 30000);
+    if (b) b.style.width = Math.max(0, Math.min(100, left / SECURE_PHASE_MS * 100)) + "%";
+  }
+  // 플레이어 화면(레일 모드): 버튼은 레일 화면에 있다. 여기선 내 시간, 내 쪽 위치, 종류별 남은 개수와 내가 확보한 호수만 보여 준다.
+  function renderRailWaiting(st, seat) {
+    var msLeft = st.secureEndsAt ? (st.secureEndsAt - nowMs()) : SECURE_PHASE_MS;
+    var pct = Math.max(0, Math.min(100, (msLeft / SECURE_PHASE_MS) * 100));
+    var html = '<main class="stage stage--secure">'
+      + '<div class="side-timer" id="side-timer"><span class="timer-label">택배 확보<br>남은 시간</span><span class="timer-num">' + fmtClock(msLeft) + '</span>'
+      + '<div class="timer-bar"><i style="width:' + pct + '%"></i></div></div>';
+    var mine = st.players[seat].invoices;
+    var busy = !!(railInfo.busy && railInfo.busy[seat]);
+    html += '<div class="card rw" data-rail-wait="1"><h2>' + (busy ? '게임을 푸는 중이에요' : '레일 화면에서 버튼을 눌러 주세요') + '</h2>'
+      + '<p class="rw-sub">내 버튼은 레일 화면의 <b>' + (seat === "1" ? '왼쪽' : '오른쪽') + '</b>에 있어요. 누르면 이 화면에 게임이 떠요.</p><div class="rw-list">';
+    TYPES.forEach(function (t, catIdx) {
+      var left = boardLeft(st, catIdx);
+      var chips = mine.filter(function (inv) { return inv.catIdx === catIdx; })
+        .map(function (inv) { return '<span class="my-chip">' + esc(roomCode(inv.floorIdx, inv.room)) + '</span>'; }).join('');
+      html += '<div class="rw-row' + (left === 0 ? ' is-empty' : '') + '" data-cat="' + catIdx + '" style="--c:' + t.color + '">'
+        + '<span class="rw-ico">' + CAT_ICONS[catIdx] + '</span><span class="rw-name">' + esc(t.name) + '<small>' + esc(MINI_NAME[t.mini] || '우봉고') + '</small></span>'
+        + '<span class="rw-left">남은 <b>' + left + '</b>/' + t.count + '</span><span class="rw-mine">' + (chips || '<small>아직 없음</small>') + '</span></div>';
+    });
+    return html + '</div></div></main>';
+  }
 
   // ---------- 메인 모니터 (2026-10-06, ?view=main) ----------
   // 현장 TV/프로젝터에 띄우는 관전 화면. 요청된 것만 크게 보여준다:
@@ -1389,6 +1588,7 @@ APP_JS_TEMPLATE = r"""
         + '<h2>참가자를 기다리고 있어요</h2>'
         + '<div class="mv-seats">' + mvSeatCard(st, "1", st.ready, "준비") + mvSeatCard(st, "2", st.ready, "준비") + '</div>'
         + '<div class="mv-join">각자 기기에서 이 주소로 들어오세요<b>' + esc(joinUrl) + '</b></div>'
+        + '<div class="mv-join mv-join-rail">레일 화면(공용)은 이 주소로<b>' + esc(location.origin + "/rail?room=" + ROOM) + '</b></div>'
         + '</div></div>';
     }
     else if (st.phase === "secure") {
@@ -1490,6 +1690,7 @@ APP_JS_TEMPLATE = r"""
   function render() {
     document.getElementById("app").innerHTML = renderBody();
     if (MAIN) mainAfterRender();
+    if (RAIL) railTick();
   }
 
   // ---------- event handling ----------
@@ -1505,11 +1706,18 @@ APP_JS_TEMPLATE = r"""
       send({ type: "pick-courier", courier: t.getAttribute("data-courier") });
       return;
     }
-    if (action === "open-cell") {
-      var openId = t.getAttribute("data-cell");
-      var openMeta = cellMeta(openId, state.half);
-      if (openMeta && TYPES[openMeta.catIdx].mini && window.MiniGames) { openMiniGame(openId); return; }
-      local.openCellId = openId; render(); return;
+    if (action === "open-cell") { openCell(t.getAttribute("data-cell")); return; }
+    if (action === "rail-press") {
+      // 레일 화면 전용: side(1/2) 쪽 플레이어에게 그 종류 게임을 띄우라고 서버에 요청한다. 칸 선택/중복 방지는 서버가 한다.
+      var rp = { type: "rail-press", side: t.getAttribute("data-side"), cat: parseInt(t.getAttribute("data-cat"), 10) };
+      var rcell = t.getAttribute("data-cell"); if (rcell) rp.cellId = rcell;
+      send(rp);
+      return;
+    }
+    if (action === "rail-join") {
+      var rc = (document.getElementById("rail-code").value || "").trim().toUpperCase();
+      if (rc) window.location.href = "/rail?room=" + encodeURIComponent(rc);
+      return;
     }
     if (action === "open-type") {
       // 레일 화면의 종류 버튼: 그 종류의 아직 안 가져간 칸 중 첫 번째를 연다 (칸끼리 구별이 없는 종류 전용)
@@ -1526,7 +1734,7 @@ APP_JS_TEMPLATE = r"""
       if (tt.mini && window.MiniGames) { openMiniGame(freeCell.id); return; }
       local.openCellId = freeCell.id; render(); return;
     }
-    if (action === "give-up") { local.openCellId = null; render(); return; }
+    if (action === "give-up") { local.openCellId = null; notifyGameClosed(); render(); return; }
     if (action === "complete-cell") {
       var cid = t.getAttribute("data-cell");
       markPending(cid);
@@ -1602,6 +1810,7 @@ APP_JS_TEMPLATE = r"""
   setInterval(function () {
     if (!state) return;
     if (MAIN) { mainTick(); return; }
+    if (RAIL) { railTick(); return; }
     updateMiniClock();
     if (state.phase === "secure" && state.secureEndsAt) {
       var msLeft = state.secureEndsAt - nowMs();
