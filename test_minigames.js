@@ -1,4 +1,4 @@
-// 2026-10-06: 미니게임 3종(박스 포장 / 불량 검수 / 송장 붙이기) 시험장 검증.
+// 2026-10-06: 미니게임 4종(박스 포장 / 불량 검수 / 송장 붙이기 / 지도 배달(2026-10-07)) 시험장 검증.
 //
 // minigame_proto.html(로컬 파일)을 진짜 브라우저로 열어서 3종을 난이도 1~3 전부 실제로 "플레이"한다
 // (키보드/클릭/마우스 드래그). 정상 클리어뿐 아니라 오입력 3규칙, 잘못된 클릭 잠금, 빗나간 드래그 복귀,
@@ -278,6 +278,202 @@ async function main() {
     assert((await miss()) === 1, "mistake count unchanged by a correct drop");
     log("sticker: 틀린 박스=실수+복귀, 트레이/빈 작업대에 놓은 건 실수 아님, 이후 정답 박스엔 붙음");
   }
+
+
+
+  // ================= 송장 붙이기: 키보드 (2026-10-07) =================
+  {
+    const STK_N = [4, 5, 7], STK_K = [2, 3, 4];
+    const cursorIdx = () => page.evaluate(() => Array.from(document.querySelectorAll(".mg-bx")).findIndex((b) => b.classList.contains("is-cursor")));
+    const boxCodes = () => page.$$eval(".mg-bx .bx-addr b", (els) => els.map((e) => e.textContent));
+    const labelCode = () => page.evaluate(() => { const l = document.querySelector(".mg-label[data-label]:not([data-stuck])"); return l ? l.querySelector(".lb-room").textContent : null; });
+    for (let lv = 1; lv <= 3; lv++) {
+      await launch("sticker", lv);
+      assert((await cursorIdx()) === 0, "keyboard cursor starts on the first box");
+      let guard = 0;
+      for (let done = 0; done < STK_K[lv - 1]; done++) {
+        await waitFor(labelCode, { label: "label ready" });
+        const code = await labelCode(), codes = await boxCodes();
+        // 목표 박스까지 ←→ 로 이동 (한 바퀴 안에 반드시 도착)
+        while (codes[await cursorIdx()] !== code) { await page.keyboard.press("ArrowRight"); assert(++guard < 200, "cursor should reach the matching box"); }
+        await page.keyboard.press("Space");
+        await waitFor(async () => (await page.$$(".mg-bx.is-done")).length === done + 1, { label: "box accepts the label by keyboard" });
+        if (done + 1 < STK_K[lv - 1]) assert(!(await page.$$eval(".mg-bx.is-done", (els) => els.some((e) => e.classList.contains("is-cursor")))), "cursor skips boxes that already have a label");
+      }
+      await waitFor(result, { label: `sticker keyboard L${lv} done` });
+      const r = await result();
+      assert(r.ok && r.kind === "sticker" && r.mistakes === 0, "sticker keyboard clean run: " + JSON.stringify(r));
+      log(`sticker L${lv}: 키보드(←→ 박스 고르기 + 스페이스)만으로 송장 ${STK_K[lv - 1]}장 클리어 (실수 0)`);
+    }
+    // ←→ 는 한 바퀴 돌고, ↑↓ 는 윗줄/아랫줄로 간다 (7개 = 4개+3개 두 줄)
+    await launch("sticker", 3);
+    await page.keyboard.press("ArrowLeft");
+    assert((await cursorIdx()) === 6, "ArrowLeft from the first box wraps to the last");
+    await page.keyboard.press("ArrowRight");
+    assert((await cursorIdx()) === 0, "ArrowRight wraps back to the first");
+    await page.keyboard.press("ArrowDown");
+    assert((await cursorIdx()) >= 4, "ArrowDown moves to the second row, got " + (await cursorIdx()));
+    await page.keyboard.press("ArrowUp");
+    assert((await cursorIdx()) < 4, "ArrowUp moves back to the first row, got " + (await cursorIdx()));
+    await page.keyboard.press("ArrowUp");
+    assert((await cursorIdx()) < 4, "ArrowUp on the first row stays put");
+    // 틀린 박스에 스페이스 = 실수 +1 + 잠깐 멈춤(연타는 또 세지 않음), 송장은 그대로, 이후 맞는 박스엔 붙는다
+    const code = await labelCode(), codes = await boxCodes();
+    while (codes[await cursorIdx()] === code) await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Space"); await page.keyboard.press("Space");
+    assert((await miss()) === 1, "wrong box by keyboard = 1 mistake (the second press during the lock is ignored)");
+    assert((await page.$$(".mg-bx.is-done")).length === 0, "nothing is stuck on a wrong box");
+    await sleep(550);
+    while (codes[await cursorIdx()] !== code) await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("Space");
+    await waitFor(async () => (await page.$$(".mg-bx.is-done")).length === 1, { label: "correct box after the lock" });
+    assert((await miss()) === 1, "a correct attach adds no mistake");
+    log("sticker 키보드: ←→ 한 바퀴/↑↓ 줄 이동, 틀린 박스 = 실수 + 0.45초 멈춤(연타 무시), 이후 맞는 박스엔 붙음");
+  }
+
+  // ================= 지도 배달 (2026-10-07, 귀중품) =================
+  const MAPCFG = [
+    { cols: 5, rows: 4, houses: 8,  targets: 3, flash: 4500, hide: false, blocks: 0 },
+    { cols: 6, rows: 4, houses: 11, targets: 4, flash: 3500, hide: false, blocks: 0 },
+    { cols: 7, rows: 5, houses: 14, targets: 5, flash: 3000, hide: true,  blocks: 5 },
+  ];
+  const DIRV = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+  const mapInfo = () => page.evaluate(() => {
+    const b = document.querySelector(".mg-body");
+    const P = (s) => (s ? s.split(";").filter(Boolean).map((t) => t.split(",").map(Number)) : []);
+    return { grid: b.dataset.grid.split(",").map(Number), depot: b.dataset.depot.split(",").map(Number), blocked: P(b.dataset.blocked), targets: P(b.dataset.targets) };
+  });
+  const courierAt = () => page.evaluate(() => { const c = document.querySelector(".mg-courier"); return [c.style.getPropertyValue("--cx"), c.style.getPropertyValue("--cy")].map(Number); });
+  function bfsDirs(info, from, to) {
+    const [W, H] = info.grid, bl = new Set(info.blocked.map((b) => b.join(",")));
+    const prev = new Map([[from.join(","), null]]); const q = [from];
+    while (q.length) {
+      const p = q.shift();
+      if (p[0] === to[0] && p[1] === to[1]) break;
+      for (const d of Object.keys(DIRV)) {
+        const n = [p[0] + DIRV[d][0], p[1] + DIRV[d][1]], k = n.join(",");
+        if (n[0] < 0 || n[1] < 0 || n[0] >= W || n[1] >= H || bl.has(k) || prev.has(k)) continue;
+        prev.set(k, { from: p, d }); q.push(n);
+      }
+    }
+    const dirs = []; let cur = to.join(",");
+    if (!prev.has(cur)) return null;
+    while (prev.get(cur)) { const s = prev.get(cur); dirs.unshift(s.d); cur = s.from.join(","); }
+    return dirs;
+  }
+  async function walkTo(info, from, to) {
+    const dirs = bfsDirs(info, from, to);
+    assert(dirs, `target ${to} must be reachable from ${from}`);
+    for (const d of dirs) { await page.keyboard.press(KEY[d]); await sleep(85); } // 한 칸 최소 간격(70ms)보다 천천히
+    const at = await courierAt();
+    assert(at[0] === to[0] && at[1] === to[1], `courier should be at ${to}, got ${at}`);
+  }
+  const waitFlashEnd = () => waitFor(async () => (await page.$$(".mg-map.is-flash")).length === 0, { timeout: 7000, label: "flash ends" });
+
+  for (let lv = 1; lv <= 3; lv++) {
+    const cfg = MAPCFG[lv - 1];
+    await launch("map", lv);
+    const info = await mapInfo();
+    assert(info.grid[0] === cfg.cols && info.grid[1] === cfg.rows, `map L${lv} grid ${cfg.cols}x${cfg.rows}, got ${info.grid}`);
+    assert(info.targets.length === cfg.targets, `map L${lv} should have ${cfg.targets} targets`);
+    assert((await page.$$(".mg-tile.is-house")).length === cfg.houses, `map L${lv} should have ${cfg.houses} houses`);
+    assert(info.blocked.length === cfg.blocks && (await page.$$(".mg-tile.is-block")).length === cfg.blocks, `map L${lv} should have ${cfg.blocks} blocked tiles`);
+    const labels = await page.$$eval(".mg-lab", (els) => els.map((e) => e.textContent));
+    assert(new Set(labels).size === labels.length && labels.every((t) => /^[1-5]0[1-9]$/.test(t)), "house labels are unique 3-digit room numbers: " + labels);
+    for (const t of info.targets) assert(bfsDirs(info, info.depot, t), `target ${t} reachable (blocked tiles must never cut a house off)`);
+    // 깜빡임 단계: 목표 N개가 번호(1..N)와 함께 켜지고, 이동/배달은 잠겨 있다
+    assert((await page.$$(".mg-map.is-flash")).length === 1 && (await page.$$(".mg-tile.is-target")).length === cfg.targets, "flash shows all targets");
+    for (let i = 0; i < info.targets.length; i++) {
+      const [tx, ty] = info.targets[i];
+      const ord = await page.textContent(`.mg-tile[data-x="${tx}"][data-y="${ty}"] .mg-ord`);
+      assert(ord === String(i + 1), `target ${i + 1} badge shows its order, got '${ord}'`);
+    }
+    assert((await page.$$(".mg-order .mg-oc")).length === cfg.targets, "order panel lists every target during the flash");
+    await page.keyboard.press("ArrowUp"); await page.keyboard.press("Space");
+    const c0 = await courierAt();
+    assert(c0[0] === info.depot[0] && c0[1] === info.depot[1] && (await miss()) === 0, "keys are ignored while the targets are flashing (no move, no mistake)");
+    if (lv === 2) await shot("map_L2_flash");
+    await waitFlashEnd();
+    assert((await page.$$(".mg-tile.is-target")).length === 0, "targets go dark after the flash");
+    assert((await page.$$(".mg-map.is-labels-hidden")).length === (cfg.hide ? 1 : 0), `map L${lv}: labels ${cfg.hide ? "hidden" : "kept"} after the flash`);
+    if (lv === 3) await shot("map_L3_play");
+    // 순서대로 배달
+    let at = info.depot;
+    for (let i = 0; i < info.targets.length; i++) {
+      assert(!(await result()), "must not finish before the last delivery");
+      await walkTo(info, at, info.targets[i]);
+      at = info.targets[i];
+      await page.keyboard.press("Space");
+      await sleep(60);
+      assert((await page.$$(".mg-tile.is-delivered")).length === i + 1, `delivery ${i + 1} confirmed on the map`);
+      assert((await page.$$(".mg-dot.is-done")).length === i + 1, "progress dots follow");
+    }
+    await waitFor(result, { label: `map L${lv} done` });
+    const r = await result();
+    assert(r.ok && r.kind === "map" && r.level === lv && r.mistakes === 0, "map clean run: " + JSON.stringify(r));
+    log(`map L${lv}: ${cfg.cols}x${cfg.rows} 지도, 집 ${cfg.houses}, 목표 ${cfg.targets}, 공사장 ${cfg.blocks}, 호실 번호 ${cfg.hide ? "숨김" : "유지"} -- 클리어 (${r.ms}ms, 실수 0)`);
+  }
+
+  // 오배달 / 다시 보기 / 막힌 칸
+  {
+    await launch("map", 1);
+    const info = await mapInfo();
+    await waitFlashEnd();
+    // (1) 도로(센터)에서 스페이스 = 실수 + 멈춤, 멈춰 있는 동안의 연타는 또 세지 않는다
+    await page.keyboard.press("Space"); await page.keyboard.press("Space");
+    assert((await miss()) === 1, "Space on a road tile is one mistake; the repeat during the lock does not count again");
+    assert((await page.textContent(".mg-freeze-note")).length > 0, "a lock note is shown");
+    await sleep(900);
+    // (2) 엉뚱한 집(목표가 아닌 집)에서 스페이스 = 실수
+    const targetKeys = new Set(info.targets.map((t) => t.join(",")));
+    const other = await page.$$eval(".mg-tile.is-house", (els) => els.map((e) => [+e.dataset.x, +e.dataset.y]));
+    const wrongHouse = other.find((h) => !targetKeys.has(h.join(",")));
+    await walkTo(info, info.depot, wrongHouse);
+    await page.keyboard.press("Space");
+    assert((await miss()) === 2, "Space on a non-target house is a mistake");
+    assert((await page.$$(".mg-tile.is-delivered")).length === 0, "...and nothing is delivered");
+    await sleep(900);
+    // (3) 첫 목표만 배달한 뒤 "다시 보기": 실수 +1, 남은 목표(2번부터)만 원래 번호로 다시 켜진다
+    await walkTo(info, wrongHouse, info.targets[0]);
+    await page.keyboard.press("Space");
+    await sleep(60);
+    assert((await page.$$(".mg-tile.is-delivered")).length === 1, "first target delivered");
+    await page.click(".mg-replay");
+    assert((await miss()) === 3, "replay costs one mistake");
+    assert((await page.$$(".mg-tile.is-target")).length === info.targets.length - 1, "replay lights only the remaining targets");
+    const [sx, sy] = info.targets[1];
+    assert((await page.textContent(`.mg-tile[data-x="${sx}"][data-y="${sy}"] .mg-ord`)) === "2", "remaining targets keep their original order numbers");
+    await page.click(".mg-replay", { force: true }).catch(() => {});
+    assert((await miss()) === 3, "replay button is disabled during a flash");
+    await waitFlashEnd();
+    // 다시 본 뒤 나머지를 순서대로 -> 완료
+    let at = info.targets[0];
+    for (let i = 1; i < info.targets.length; i++) { await walkTo(info, at, info.targets[i]); at = info.targets[i]; await page.keyboard.press("Space"); await sleep(60); }
+    await waitFor(result, { label: "map done after mistakes" });
+    assert((await result()).mistakes === 3, "final result carries the 3 mistakes");
+    log("map: 도로/엉뚱한 집에서 배달 = 실수 + 0.8초 멈춤(연타 무시), 다시 보기 = 실수 +1 로 남은 목표만 원래 번호로 재점등");
+  }
+  {
+    await launch("map", 3);
+    const info = await mapInfo();
+    await waitFlashEnd();
+    // 막힌 칸(공사장)은 들어갈 수 없다: 도달 가능한 칸 중 공사장과 인접한 곳으로 가서 그쪽으로 밀어 본다
+    const bl = new Set(info.blocked.map((b) => b.join(",")));
+    let probe = null;
+    for (const b of info.blocked) for (const d of Object.keys(DIRV)) {
+      const r = [b[0] - DIRV[d][0], b[1] - DIRV[d][1]];
+      if (r[0] < 0 || r[1] < 0 || r[0] >= info.grid[0] || r[1] >= info.grid[1] || bl.has(r.join(","))) continue;
+      if (bfsDirs(info, info.depot, r)) { probe = { r, d }; break; }
+    }
+    assert(probe, "there is a reachable tile next to a blocked tile");
+    await walkTo(info, info.depot, probe.r);
+    await page.keyboard.press(KEY[probe.d]); await sleep(120);
+    const after = await courierAt();
+    assert(after[0] === probe.r[0] && after[1] === probe.r[1], "courier cannot enter a blocked tile");
+    assert((await miss()) === 0, "bumping a wall/blocked tile is not a mistake");
+    log("map L3: 공사장 칸은 들어갈 수 없고(실수 아님), 모든 집은 공사장에 안 막히고 갈 수 있음");
+  }
+  // 지도 안에서 방향키/스페이스가 게임 본체로 새지 않고, destroy 후엔 반응 없음은 아래 destroy 검사에서 pack으로 확인
 
   // ================= destroy 정리 =================
   await launch("pack", 1);

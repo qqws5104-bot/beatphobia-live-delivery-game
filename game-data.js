@@ -11,7 +11,7 @@
 //   (귀중품만 우봉고를 쓰고, 어떤 퍼즐 이미지를 싣는지는 build_client.py의 PUZZLE_SRC가 정한다 -- 이 숫자와 맞춰야 한다.)
 // mini / miniLevel: (2026-10-06) 이 종류의 칸을 확보할 때 하는 미니게임과 난이도(1~3). miniLevel은 숫자 하나 또는
 //   [전반, 후반] 배열 (2026-10-06: 후반이 더 어렵다 -- 일반 6->8키, 깨지기 8->10개, 확정 층수 박스 5->7개/송장 3->4장). minigames.js의
-//   "pack"(박스 포장) / "inspect"(불량 검수) / "sticker"(송장 붙이기). null이면 기존 우봉고(퍼즐 이미지 +
+//   "pack"(박스 포장) / "inspect"(불량 검수) / "sticker"(송장 붙이기) / "map"(지도 배달 -- 2026-10-07 귀중품의 우봉고를 대체). null이면 기존 우봉고(퍼즐 이미지 +
 //   "완료" 버튼) 그대로. 서버는 이 두 필드를 쓰지 않는다 -- 클라이언트(build_client.py)만 읽는다.
 //   난이도/배치를 바꾸는 곳은 여기 한 군데다. 보상(reward)과 같이 봐야 하는 값(HANDOVER 9.4).
 // fixedFloor: true인 종류는 각 칸의 num(0..count-1)이 곧 FLOORS의 인덱스로 고정된다 (무작위 배정 안 함).
@@ -23,7 +23,7 @@ const TYPES = [
   { key: "fragile", name: "깨지기 쉬운 택배", count: 6, pieces: 3, reward: 5000, penalty: 2500,
     color: "#C7E29A", ink: "#16233F", mini: "inspect", miniLevel: [2, 3] },
   { key: "valuable", name: "귀중품", count: 6, pieces: [3, 4], reward: 10000, penalty: 5000,
-    color: "#F0B84A", ink: "#16233F", mini: null, miniLevel: 0 },
+    color: "#F0B84A", ink: "#16233F", mini: "map", miniLevel: [2, 3] },
   { key: "fixed-floor", name: "확정 층수 택배", count: 6, pieces: 3, fixedFloor: true, reward: 3000, penalty: 2500,
     color: "#6DBBFD", ink: "#16233F", mini: "sticker", miniLevel: [2, 3] },
 ];

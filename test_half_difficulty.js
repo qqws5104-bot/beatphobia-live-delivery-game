@@ -1,6 +1,6 @@
 // 2026-10-06: 전반/후반 난이도가 라이브 게임에서 실제로 다르게 적용되는지 (사용자 요청 수치):
 //   일반택배(박스 포장) 키 6 -> 8 / 깨지기 쉬운(이상 확인) 8 -> 10 / 확정 층수(송장 붙이기) 송장 3 -> 4, 박스 5 -> 7
-//   귀중품(우봉고) 색(조각) 3 -> 4.  전반은 test_minigames_live.js가 확인하므로 여기선 후반만 본다.
+//   귀중품(지도 배달) 난이도 보통 -> 어려움: 6x4 지도/목표 4/번호 유지 -> 7x5 지도/목표 5/공사장 5/번호 숨김.  전반은 test_minigames_live.js가 확인하므로 여기선 후반만 본다.
 // 전반 5라운드를 빠르게 흘려보낸 뒤(test_theft_e2e.js와 같은 흐름) 후반 보드에서 각 종류 칸을 열어 직접 센다.
 // 사전 준비: SECURE_PHASE_MS를 임시로 단축(예: 10 * 1000) + build_client.py 재빌드 + 서버 재시작. 끝나면 원복.
 "use strict";
@@ -134,10 +134,15 @@ async function main() {
   await giveUp();
 
   await openCell("valuable-1");
-  const puzTxt = await bodyText(p1);
-  assert_(puzTxt.includes("조각 4개"), `후반 우봉고: 조각(색) 4개여야 함, got: ${puzTxt.match(/조각 \d+개/)}`);
-  await clickSel(p1, "#puzzle-overlay .btn.danger, #puzzle-overlay [data-action=\"close-puzzle\"]");
-  log("후반 귀중품(우봉고): 색 4개");
+  const mapInfo = await p1.evaluate(() => {
+    const b = document.querySelector("#mg-layer .mg-body");
+    return b ? { grid: b.dataset.grid, targets: b.dataset.targets.split(";").length, blocked: b.dataset.blocked.split(";").filter(Boolean).length } : null;
+  });
+  assert_(mapInfo && mapInfo.grid === "7,5" && mapInfo.targets === 5 && mapInfo.blocked === 5, `후반 지도 배달: 7x5 지도 / 목표 5개 / 공사장 5칸이어야 함, got ${JSON.stringify(mapInfo)}`);
+  await p1.waitForTimeout(3300); // 깜빡임(3초)이 끝나면 호실 번호가 지도에서 사라진다
+  assert_((await countSel(p1, "#mg-layer .mg-map.is-labels-hidden")) === 1, "후반 지도 배달은 깜빡임 뒤 호실 번호가 숨겨져야 함");
+  log("후반 귀중품(지도 배달): 7x5 지도, 목표 5개, 공사장 5칸, 깜빡임 뒤 번호 숨김");
+  await giveUp();
 
   if (errors.length) throw new Error("page errors: " + errors.join(" | "));
   await browser.close();
