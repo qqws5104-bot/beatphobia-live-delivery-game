@@ -67,11 +67,11 @@ async function playOpenGame(page) {
       const pick = await page.evaluate(() => {
         const l = document.querySelector(".mg-label[data-label]:not([data-stuck])");
         if (!l) return null;
-        const want = l.querySelector(".lb-room").textContent, boxes = Array.from(document.querySelectorAll(".mg-bx"));
-        return { want, here: boxes.findIndex((b) => b.classList.contains("is-cursor")), codes: boxes.map((b) => b.querySelector(".bx-addr b").textContent) };
+        const boxes = Array.from(document.querySelectorAll(".mg-bx"));
+        return { want: parseInt(l.getAttribute("data-want"), 10), here: boxes.findIndex((b) => b.classList.contains("is-cursor")) };
       });
       if (!pick) { await sleep(150); continue; }
-      if (pick.codes[pick.here] !== pick.want) { await page.keyboard.press("ArrowRight"); continue; }
+      if (pick.here !== pick.want) { await page.keyboard.press("ArrowRight"); continue; }
       await page.keyboard.press("Space");
       await sleep(450); // 다음 송장이 나오거나 게임이 끝나길 기다림
     }
@@ -179,16 +179,16 @@ async function main() {
   // ---- e. 깨지기 -> 이상 확인 (진짜로 분류/폐기) ----
   await clickSel(p1, openSel("fragile-1"));
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-inspect")) === 1, { label: "깨지기 = 이상 확인" });
-  assert((await p1.$$("#mg-layer .mg-pkg")).length === 10, "fragile starts at level 2 (10 packages)");
+  assert((await p1.$$("#mg-layer .mg-pkg")).length === 9, "fragile starts at level 2 (9 packages)");
   await playOpenGame(p1);
   await waitFor(async () => (await myCount(p1, 1)) === 1, { label: "fragile box secured" });
-  log("깨지기 택배 칸 -> 이상 확인(10개) 완주 -> fragile-1 확보");
+  log("깨지기 택배 칸 -> 이상 확인(9개) 완주 -> fragile-1 확보");
 
   // ---- f. 확정 층수 -> 송장 붙이기 (송장에 그 칸의 층이 찍힘) ----
   await clickSel(p1, openSel("fixed-floor-2"));
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-sticker")) === 1, { label: "확정 층수 = 송장 붙이기" });
   const labelText = await p1.textContent("#mg-layer .mg-label .lb-room");
-  assert(labelText.startsWith(FLOORS[1] + "-"), `sticker label code should start with this cell's floor (${FLOORS[1]}-), got ${labelText}`);
+  assert(/^[A-E]-\d\d$/.test(labelText.trim()), `sticker label shows a letter-number code like B-17, got ${labelText}`);
   await playOpenGame(p1);
   await waitFor(() => isFloorMine(p1, 1), { label: "fixed-floor-2 (1F) secured" });
   // 확보된 칸의 얼굴에는 송장 목적지(호수)가 찍힌다 -- 보드에서 1F 행 칸(fixed-floor 행의 2번째)의 .invoice-label을 읽는다.
@@ -198,7 +198,7 @@ async function main() {
     return lab ? lab.textContent : null;
   });
   assert(/^10\d호$/.test(faceText), `invoice on fixed-floor-2 must be a 1F room (10N호), got ${faceText}`);
-  log(`확정 층수 칸 -> 송장 붙이기(송장에 '${labelText}') 완주 -> 확보, 송장 목적지 ${faceText} (1F)`);
+  log(`확정 층수 칸 -> 송장 붙이기(송장 '${labelText}') 완주 -> 확보, 송장 목적지 ${faceText} (1F)`);
 
   // ---- g. 귀중품 -> 지도 배달 (전반 = 난이도 보통: 6x4 지도, 목표 3, 호실 번호 유지) ----
   await clickSel(p1, openSel("valuable-1"));
@@ -217,11 +217,11 @@ async function main() {
     const pick = await p1.evaluate(() => {
       const l = document.querySelector(".mg-label[data-label]:not([data-stuck])");
       if (!l) return null;
-      const want = l.querySelector(".lb-room").textContent, boxes = Array.from(document.querySelectorAll(".mg-bx"));
-      return { want, here: boxes.findIndex((b) => b.classList.contains("is-cursor")), codes: boxes.map((b) => b.querySelector(".bx-addr b").textContent) };
+      const boxes = Array.from(document.querySelectorAll(".mg-bx"));
+      return { want: parseInt(l.getAttribute("data-want"), 10), here: boxes.findIndex((b) => b.classList.contains("is-cursor")) };
     });
     if (!pick) { await sleep(150); continue; }
-    if (pick.codes[pick.here] !== pick.want) { await p1.keyboard.press("ArrowRight"); continue; }
+    if (pick.here !== pick.want) { await p1.keyboard.press("ArrowRight"); continue; }
     await p1.keyboard.press("Space"); await sleep(450);
   }
   await waitFor(() => isFloorMine(p1, 4), { label: "fixed-floor-5 secured with the keyboard only" });

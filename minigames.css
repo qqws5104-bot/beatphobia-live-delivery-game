@@ -137,8 +137,8 @@
 .mg-progress { text-align: center; margin: 0.7rem 0 0.4rem; font-size: 0.92rem; font-weight: 700; }
 .mg-progress em { font-style: normal; color: var(--mg-accent); font-family: var(--mg-font-display); font-size: 1.1rem; }
 .mg-belt {
-  --w: 92px; --gap: 12px; --pad: 16px;
-  position: relative; height: 128px; overflow: hidden; border-radius: 12px;
+  --w: 232px; --gap: 16px; --pad: 16px;
+  position: relative; height: 158px; overflow: hidden; border-radius: 12px;
   background: linear-gradient(180deg, #f6ead2 0 62%, #8b7355 62% 66%, #5a4a37 66%);
   border: 1px solid var(--mg-line);
 }
@@ -147,7 +147,7 @@
   background: repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.08) 0 14px, transparent 14px 28px);
 }
 .mg-gate {
-  position: absolute; left: calc(var(--pad) - 6px); top: 8px; width: calc(var(--w) + 12px); height: 104px;
+  position: absolute; left: calc(var(--pad) - 6px); top: 8px; width: calc(var(--w) + 12px); height: 134px;
   border: 3px dashed var(--mg-accent); border-radius: 12px; background: rgba(226, 105, 26, 0.08); z-index: 0;
 }
 .mg-gate span {
@@ -156,7 +156,7 @@
 }
 .mg-queue { position: absolute; inset: 0; z-index: 1; --shift: 0; transform: translateX(calc(var(--shift) * (var(--w) + var(--gap)) * -1)); transition: transform 0.2s ease-out; }
 .mg-pkg {
-  position: absolute; top: 14px; left: calc(var(--pad) + var(--i) * (var(--w) + var(--gap))); width: var(--w); height: 92px;
+  position: absolute; top: 14px; left: calc(var(--pad) + var(--i) * (var(--w) + var(--gap))); width: var(--w); height: 122px;
   transition: opacity 0.2s, transform 0.22s ease-in; opacity: 0.88;
 }
 .mg-pkg svg { width: 100%; height: 100%; display: block; overflow: visible; }
@@ -185,6 +185,9 @@
 .mg-bin:focus-visible { outline: 3px solid var(--mg-accent); outline-offset: 2px; }
 .mg-bin-k { font-family: var(--mg-font-display); font-weight: 700; font-size: 1.3rem; line-height: 1; }
 .mg-bin-n { font-size: 0.82rem; font-weight: 800; }
+.mg-bin-ico { width: 1.7rem; height: 1.9rem; flex: 0 0 auto; }
+.mg-bin-s { font-size: 0.66rem; font-weight: 700; color: var(--mg-muted); line-height: 1.2; text-align: center; }
+.mg-discard .mg-bin-n { font-size: 0.78rem; }
 .mg-bin.is-ok { animation: mg-binok 0.2s ease; }
 @keyframes mg-binok { 50% { filter: brightness(1.12); transform: translateY(-3px); } }
 .mg-bin.is-wrong { animation: mg-shake 0.32s ease; border-color: var(--mg-danger); }
@@ -201,6 +204,7 @@
     repeating-linear-gradient(90deg, rgba(122, 90, 48, 0.08) 0 1px, transparent 1px 74px),
     linear-gradient(180deg, #ecdcb8, #e0cba2);
 }
+.mg-stage.is-narrow { aspect-ratio: 520 / 545; }
 .mg-bxs {
   position: absolute; left: 3%; right: 3%; top: 3%; height: 66%;
   display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: var(--ggap, 2.6cqw 3.4cqw);
@@ -234,6 +238,13 @@
 .bx-addr { position: absolute; left: 5%; top: 14%; width: 34%; line-height: 1.1; font-family: var(--mg-font-display); color: #3a2812; transform: rotate(-2deg); }
 .bx-addr i { display: block; font-style: normal; font-size: calc(1.55 * var(--u)); letter-spacing: 0.06em; opacity: 0.75; font-family: var(--mg-font-body); font-weight: 700; }
 .bx-addr b { display: block; font-size: calc(3.3 * var(--u)); font-weight: 700; letter-spacing: 0.02em; white-space: nowrap; }
+.bx-meta { position: absolute; left: 5%; top: 55%; width: 48%; display: flex; gap: calc(0.7 * var(--u)); }
+.bx-hole { display: inline-block; width: 0.62em; height: 0.78em; margin: 0 0.04em; border: 0.1em solid #3a2812; border-radius: 0.1em; background: rgba(255, 252, 240, 0.7); vertical-align: -0.06em; }
+.bx-chip { font-family: var(--mg-font-body); font-style: normal; font-weight: 800; font-size: calc(1.9 * var(--u)); line-height: 1; padding: calc(0.45 * var(--u)) calc(0.8 * var(--u)); border-radius: calc(0.6 * var(--u)); background: rgba(255, 252, 240, 0.85); border: calc(0.2 * var(--u)) solid rgba(60, 38, 14, 0.4); color: #2b1d12; white-space: nowrap; }
+.bx-chip.g0 { background: #ddc08f; } .bx-chip.g1 { background: #c7e29a; } .bx-chip.g2 { background: #f7d37e; }
+.bx-chip.is-hid { background: rgba(60, 38, 14, 0.12); color: rgba(60, 38, 14, 0.55); border-style: dashed; }
+.mg-label .lb-meta { display: flex; gap: 0.8cqw; margin-top: 0.4cqw; }
+.mg-label .bx-chip { --u: 1.3cqw; }
 .bx-slot { /* 송장 자리 -- 모든 박스에 똑같이 있어서 힌트가 되지 않는다 */
   position: absolute; left: 57%; top: 38%; width: 38%; height: 46%; border: calc(0.3 * var(--u)) dashed rgba(60, 38, 14, 0.38); border-radius: calc(0.5 * var(--u));
   background: rgba(255, 252, 240, 0.12);

@@ -138,7 +138,7 @@ async function main() {
   }
 
   // ================= 이상 확인 (벨트 분류) =================
-  const INSPECT = [{ n: 6, bad: 1 }, { n: 10, bad: 3 }, { n: 13, bad: 4 }];
+  const INSPECT = [{ n: 6, bad: 2 }, { n: 9, bad: 3 }, { n: 11, bad: 4 }];
   const inspectSeq = async () => (await page.getAttribute(".mg-body", "data-seq")).split(",");
   for (let lv = 1; lv <= 3; lv++) {
     await launch("inspect", lv);
@@ -165,13 +165,13 @@ async function main() {
     assert((await miss()) === 1, "wrong action counts as a mistake");
     await page.keyboard.press(KEY[seq[0]]); // 잠금 중
     assert((await page.textContent(".mg-found")) === "0", "the correct key during the lock must be ignored");
-    await sleep(560);
+    await sleep(1000);
     await page.keyboard.press(KEY[seq[0]]);
     assert((await page.textContent(".mg-found")) === "1", "after the lock the correct key is accepted");
     for (let i = 1; i < seq.length; i++) await page.keyboard.press(KEY[seq[i]]);
     await waitFor(result, { label: "inspect after-lock done" });
     assert((await result()).mistakes === 1, "inspect mistakes recorded");
-    log("inspect: 틀린 칸=실수+0.45초 잠금(그 사이 입력 무시), 풀리면 정상 진행");
+    log("inspect: 틀린 칸=실수+0.9초 잠금(그 사이 입력 무시), 풀리면 정상 진행");
   }
   // 이상한 택배를 분류 키로 보내거나 멀쩡한 택배를 폐기하면 둘 다 실수
   await launch("inspect", 3);
@@ -187,7 +187,7 @@ async function main() {
       await page.keyboard.press(KEY[wrongKey]);
       expectedMiss++;
       assert((await miss()) === expectedMiss, `mistake #${expectedMiss} (${seq[t] === "space" ? "classified an anomaly" : "discarded a good package"})`);
-      await sleep(560);
+      await sleep(1000);
     }
     while (pos < seq.length) { await page.keyboard.press(KEY[seq[pos]]); pos++; }
     await waitFor(result, { label: "inspect mixed-mistake done" });
@@ -212,9 +212,10 @@ async function main() {
       const rect = (e) => { const r = e.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
       const l = document.querySelector('.mg-label[data-label]:not([data-stuck])');
       const boxes = Array.from(document.querySelectorAll(".mg-bx")).map((b) => ({
-        code: b.querySelector(".bx-addr b").textContent, done: b.classList.contains("is-done"), r: rect(b),
+        code: b.querySelector(".bx-addr b").textContent, hole: !!b.querySelector(".bx-hole"), done: b.classList.contains("is-done"), r: rect(b),
+        chips: Array.from(b.querySelectorAll(".bx-chip")).map((c) => c.textContent.trim()),
       }));
-      return { l: l ? { r: rect(l), code: l.querySelector(".lb-room").textContent } : null, boxes };
+      return { l: l ? { r: rect(l), code: l.querySelector(".lb-room").textContent, want: parseInt(l.getAttribute("data-want"), 10), chips: Array.from(l.querySelectorAll(".bx-chip")).map((c) => c.textContent.trim()) } : null, boxes };
     });
   }
   async function drag(from, to, steps = 12) {
@@ -224,23 +225,50 @@ async function main() {
     await page.mouse.up();
   }
   const ctr = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
-  const BOXES = [4, 6, 8], LABELS = [2, 4, 5];
+  const BOXES = [4, 7, 8], LABELS = [2, 4, 5];
   for (let lv = 1; lv <= 3; lv++) {
     await launch("sticker", lv);
     await page.evaluate(() => window.scrollTo(0, 0));
     const st0 = await stickerState();
     assert(st0.boxes.length === BOXES[lv - 1], `sticker L${lv}: ${BOXES[lv - 1]} boxes, got ${st0.boxes.length}`);
-    assert(new Set(st0.boxes.map((b) => b.code)).size === st0.boxes.length, `sticker L${lv}: all box codes distinct`);
-    assert(st0.boxes.filter((b) => b.code === st0.l.code).length === 1, `sticker L${lv}: the label matches exactly one box`);
+    assert(st0.boxes.every((b) => b.hole), `sticker L${lv}: every box has one hidden character in its code`);
+    assert(st0.boxes.every((b) => b.chips.length === 2), "every box has a 취급 and a 층 slot (known or '?')");
+    assert(st0.l.chips.length === 2 && !st0.l.chips.includes("?"), "the invoice shows all three facts");
+    assert(JSON.parse(await page.getAttribute(".mg-body", "data-plan")).seq.length === LABELS[lv - 1], `sticker L${lv}: ${LABELS[lv - 1]} invoices`);
+    if (lv >= 2) assert(st0.boxes.some((b) => b.chips.includes("?")), "from level 2 some boxes hide their 취급/층, so the code alone is not enough");
     assert((await page.$$(".mg-pad .mg-key")).length === 5, "on-screen pad (4 arrows + space) is shown");
     if (lv === 2) await shot("sticker_L2_start");
+  }
+  // 생성 보장 (여러 번 뽑아서): 송장과 보이는 정보가 전부 맞는 박스는 항상 정확히 하나, 레벨 3은 모든 송장에 "코드만 맞는" 함정 박스가 있다
+  {
+    const bad = await page.evaluate(() => {
+      const out = { notUnique: 0, noTrap: 0, runs: 0 };
+      for (const lv of [2, 3]) for (let i = 0; i < 40; i++) {
+        const host = document.createElement("div"); document.body.appendChild(host);
+        const ctl = MiniGames.start(host, { kind: "sticker", level: lv, testHooks: true, onDone() {}, onCancel() {} });
+        const plan = JSON.parse(host.querySelector(".mg-body").dataset.plan);
+        const boxes = Array.from(host.querySelectorAll(".mg-bx")).map((b) => ({
+          code: b.querySelector(".bx-addr b").innerHTML.replace(/<u class="bx-hole"><\/u>/g, "?"), chips: Array.from(b.querySelectorAll(".bx-chip")).map((c) => c.textContent.trim()),
+        }));
+        const lab = host.querySelector(".mg-label"); const inv = { code: lab.querySelector(".lb-room").textContent, chips: Array.from(lab.querySelectorAll(".bx-chip")).map((c) => c.textContent.trim()) };
+        const codeOk = (b) => b.code.split("").every((ch, j) => ch === "?" || ch === inv.code[j]);
+        const full = boxes.filter((b) => codeOk(b) && b.chips.every((c, j) => c === "?" || c === inv.chips[j]));
+        if (full.length !== 1) out.notUnique++;
+        if (lv === 3 && boxes.filter(codeOk).length < 2) out.noTrap++; // 이 송장(첫 번째)에 코드만 맞는 박스가 따로 있어야 함
+        out.runs++; ctl.destroy(); host.remove();
+      }
+      return out;
+    });
+    assert(bad.notUnique === 0, "the first invoice always matches exactly one box on everything that is visible: " + JSON.stringify(bad));
+    assert(bad.noTrap === 0, "level 3 always has a code-only decoy for the first invoice: " + JSON.stringify(bad));
+    log(`sticker: 80번 뽑아서 송장당 정답 박스 항상 1개, 레벨 3은 항상 코드만 맞는 함정 박스 있음 (${bad.runs}판)`);
   }
   // 마우스로 송장을 끌어다 맞는 박스 위에 놓아도 아무 일도 일어나지 않는다 (붙지도, 실수도 없음)
   await launch("sticker", 1);
   {
     await page.evaluate(() => window.scrollTo(0, 0));
     const st = await stickerState();
-    const right = st.boxes.find((b) => b.code === st.l.code);
+    const right = st.boxes[st.l.want];
     await drag(ctr(st.l.r), ctr(right.r));
     await sleep(200);
     assert((await page.$$('.mg-label[data-stuck]')).length === 0 && (await page.$$('.mg-bx.is-done')).length === 0, "dragging with the mouse no longer attaches anything");
@@ -248,9 +276,8 @@ async function main() {
     assert(Math.abs(st2.l.r.x - st.l.r.x) < 2 && Math.abs(st2.l.r.y - st.l.r.y) < 2, "the label does not move when dragged");
     assert((await miss()) === 0, "mouse drag is not a mistake either, it is just ignored");
     // 화면 패드(터치용)로는 된다: 맞는 박스까지 →, 그다음 SPACE
-    const codes = await page.$$eval(".mg-bx .bx-addr b", (els) => els.map((e) => e.textContent));
     let g = 0;
-    while (codes[await page.evaluate(() => Array.from(document.querySelectorAll(".mg-bx")).findIndex((b) => b.classList.contains("is-cursor")))] !== st.l.code) {
+    while ((await page.evaluate(() => Array.from(document.querySelectorAll(".mg-bx")).findIndex((b) => b.classList.contains("is-cursor")))) !== st.l.want) {
       await page.dispatchEvent('.mg-key[data-k="right"]', "pointerdown"); assert(++g < 50, "pad reaches the box");
     }
     await page.dispatchEvent('.mg-key[data-k="space"]', "pointerdown");
@@ -260,19 +287,35 @@ async function main() {
 
   // ================= 송장 붙이기: 키보드 (2026-10-07) =================
   {
-    const STK_N = [4, 6, 8], STK_K = [2, 4, 5];
+    const STK_N = [4, 7, 8], STK_K = [2, 4, 5];
     const cursorIdx = () => page.evaluate(() => Array.from(document.querySelectorAll(".mg-bx")).findIndex((b) => b.classList.contains("is-cursor")));
-    const boxCodes = () => page.$$eval(".mg-bx .bx-addr b", (els) => els.map((e) => e.textContent));
-    const labelCode = () => page.evaluate(() => { const l = document.querySelector(".mg-label[data-label]:not([data-stuck])"); return l ? l.querySelector(".lb-room").textContent : null; });
+    // 송장이 가리키는 정답 박스 번호 (테스트 훅 data-want). 송장이 아직 안 나왔으면 null.
+    const labelWant = () => page.evaluate(() => { const l = document.querySelector(".mg-label[data-label]:not([data-stuck])"); return l ? parseInt(l.getAttribute("data-want"), 10) : null; });
+    // DOM에 보이는 정보만으로 "송장과 보이는 부분이 전부 맞는 박스"를 센다 -- 재설계(2026-10-07)의 핵심 보장: 항상 정확히 하나.
+    const compatBoxes = () => page.evaluate(() => {
+      const l = document.querySelector(".mg-label[data-label]:not([data-stuck])"); if (!l) return null;
+      const txt = (n) => n.textContent.trim();
+      const invCode = txt(l.querySelector(".lb-room")), chips = Array.from(l.querySelectorAll(".bx-chip")).map(txt);
+      return Array.from(document.querySelectorAll(".mg-bx")).map((b, i) => {
+        const html = b.querySelector(".bx-addr b").innerHTML, bc = html.replace(/<u class="bx-hole"><\/u>/g, "?");
+        const bchips = Array.from(b.querySelectorAll(".bx-chip")).map(txt);
+        let ok = bc.length === invCode.length;
+        for (let j = 0; j < invCode.length && ok; j++) if (bc[j] !== "?" && bc[j] !== invCode[j]) ok = false;
+        if (bchips[0] !== "?" && bchips[0] !== chips[0]) ok = false;
+        if (bchips[1] !== "?" && bchips[1] !== chips[1]) ok = false;
+        return ok && !b.classList.contains("is-done") ? i : -1;
+      }).filter((i) => i >= 0);
+    });
     for (let lv = 1; lv <= 3; lv++) {
       await launch("sticker", lv);
       assert((await cursorIdx()) === 0, "keyboard cursor starts on the first box");
       let guard = 0;
       for (let done = 0; done < STK_K[lv - 1]; done++) {
-        await waitFor(labelCode, { label: "label ready" });
-        const code = await labelCode(), codes = await boxCodes();
+        await waitFor(async () => (await labelWant()) !== null, { label: "label ready" });
+        const want = await labelWant(), cand = await compatBoxes();
+        assert(cand.length === 1 && cand[0] === want, `exactly one box matches everything that is visible (got ${JSON.stringify(cand)}, want ${want})`);
         // 목표 박스까지 ←→ 로 이동 (한 바퀴 안에 반드시 도착)
-        while (codes[await cursorIdx()] !== code) { await page.keyboard.press("ArrowRight"); assert(++guard < 200, "cursor should reach the matching box"); }
+        while ((await cursorIdx()) !== want) { await page.keyboard.press("ArrowRight"); assert(++guard < 200, "cursor should reach the matching box"); }
         await page.keyboard.press("Space");
         await waitFor(async () => (await page.$$(".mg-bx.is-done")).length === done + 1, { label: "box accepts the label by keyboard" });
         if (done + 1 < STK_K[lv - 1]) assert(!(await page.$$eval(".mg-bx.is-done", (els) => els.some((e) => e.classList.contains("is-cursor")))), "cursor skips boxes that already have a label");
@@ -295,17 +338,17 @@ async function main() {
     await page.keyboard.press("ArrowUp");
     assert((await cursorIdx()) < 4, "ArrowUp on the first row stays put");
     // 틀린 박스에 스페이스 = 실수 +1 + 잠깐 멈춤(연타는 또 세지 않음), 송장은 그대로, 이후 맞는 박스엔 붙는다
-    const code = await labelCode(), codes = await boxCodes();
-    while (codes[await cursorIdx()] === code) await page.keyboard.press("ArrowRight");
+    const wantW = await labelWant();
+    while ((await cursorIdx()) === wantW) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Space"); await page.keyboard.press("Space");
     assert((await miss()) === 1, "wrong box by keyboard = 1 mistake (the second press during the lock is ignored)");
     assert((await page.$$(".mg-bx.is-done")).length === 0, "nothing is stuck on a wrong box");
-    await sleep(550);
-    while (codes[await cursorIdx()] !== code) await page.keyboard.press("ArrowRight");
+    await sleep(1000);
+    while ((await cursorIdx()) !== wantW) await page.keyboard.press("ArrowRight");
     await page.keyboard.press("Space");
     await waitFor(async () => (await page.$$(".mg-bx.is-done")).length === 1, { label: "correct box after the lock" });
     assert((await miss()) === 1, "a correct attach adds no mistake");
-    log("sticker 키보드: ←→ 한 바퀴/↑↓ 줄 이동, 틀린 박스 = 실수 + 0.45초 멈춤(연타 무시), 이후 맞는 박스엔 붙음");
+    log("sticker 키보드: ←→ 한 바퀴/↑↓ 줄 이동, 틀린 박스 = 실수 + 0.9초 멈춤(연타 무시), 이후 맞는 박스엔 붙음");
   }
 
   // ================= 지도 배달 (2026-10-07, 귀중품) =================
