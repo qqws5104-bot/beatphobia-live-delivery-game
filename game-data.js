@@ -17,6 +17,13 @@
 // fixedFloor: true인 종류는 각 칸의 num(0..count-1)이 곧 FLOORS의 인덱스로 고정된다 (무작위 배정 안 함).
 // 표시 순서는 이 배열 순서 그대로 보드에 반영된다 (2026-08-27: 확정 층수 택배를 맨 아래로 이동,
 // 깨지기 쉬운 택배는 주황+흰 글씨 대신 연두+검은 글씨로 -- 주황 배경에 흰 글씨만 유독 튀어서 변경).
+// 2026-10-08 (최종 배치, 사용자 결정): 일반 = 박스 포장(pack) / 깨지기 = 이상 확인(inspect) / 귀중품 = 창고 정리(soko, 소코반) /
+//   확정 층수 = 지도 배달(map). 송장 붙이기(sticker)는 빠졌다(코드는 남아 있다). 실물 우봉고로 돌리려면 `python3 set_mini.py ubongo`.
+// (바로 앞서 한 번 실물 우봉고로 되돌렸었다:)
+// 2026-10-08 실물 우봉고 복귀(사용자: "다 재미가 없다 -- 조각을 직접 돌려 끼우고, 시간에 쫓기고, 완성되는 장면이 우봉고의 재미",
+//   확인: 실물 우봉고 조각). 네 종류 모두 mini: null = 퍼즐 이미지 + 실물 조각 + "완료" 버튼. 조각(색) 수는 2~4개가 적당하다는
+//   사용자 지정: 일반 2 / 깨지기 3 / 확정 층수 3 / 귀중품 4. 디지털 미니게임(minigames.js의 pack/inspect/sticker/map)은 코드와 브랜치
+//   digital-minigames에 그대로 있고, 이 필드에 그 이름을 적으면 그 종류만 다시 디지털 게임으로 돌아간다 (퍼즐 이미지는 build_client.py의 PUZZLE_SRC).
 // 2026-10-07 희소성 조정(사용자 요청: "택배를 너무 쉽게 얻어서 우봉고 할 때보다 재미없다" -> "희소성 + 미니게임 난이도 업 둘 다"):
 //   일반 6->4, 깨지기 6->4, 귀중품 6->3 (확정 층수는 층이 6개라 6 그대로) = 24 -> 17칸. 한 하프에 한 사람이 배송할 수 있는 건
 //   라운드 7번 x 1장 이하(실제론 3~5장)라서, 24칸은 두 사람이 다 가져도 남는 공급이었다. 비싼 종류일수록 적게 둔다.
@@ -26,10 +33,10 @@ const TYPES = [
     color: "#C9A576", ink: "#16233F", mini: "pack", miniLevel: [2, 3] },
   { key: "fragile", name: "깨지기 쉬운 택배", count: 4, pieces: 3, reward: 5000, penalty: 2500,
     color: "#C7E29A", ink: "#16233F", mini: "inspect", miniLevel: [2, 3] },
-  { key: "valuable", name: "귀중품", count: 3, pieces: [3, 4], reward: 10000, penalty: 5000,
-    color: "#F0B84A", ink: "#16233F", mini: "map", miniLevel: [2, 3] },
+  { key: "valuable", name: "귀중품", count: 3, pieces: 4, reward: 10000, penalty: 5000,
+    color: "#F0B84A", ink: "#16233F", mini: "soko", miniLevel: [2, 3] },
   { key: "fixed-floor", name: "확정 층수 택배", count: 6, pieces: 3, fixedFloor: true, reward: 3000, penalty: 2500,
-    color: "#6DBBFD", ink: "#16233F", mini: "sticker", miniLevel: [2, 3] },
+    color: "#6DBBFD", ink: "#16233F", mini: "map", miniLevel: [2, 3] },
 ];
 
 // 2026-08-27 신설: 좌석 선택 화면에서 "플레이어 1/2" 대신 고르는 가상 택배사 5종 (사용자 요청 --

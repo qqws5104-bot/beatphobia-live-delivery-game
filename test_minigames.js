@@ -52,89 +52,129 @@ async function main() {
   const miss = async () => parseInt((await page.textContent(".mg-miss")).replace(/\D/g, ""), 10);
   async function shot(name) { if (SHOT_DIR) await page.screenshot({ path: path.join(SHOT_DIR, name + ".png") }); }
 
-  // ================= 박스 포장 =================
-  const PACK_LEN = [4, 8, 10];
+  // ================= 박스 포장 (2026-10-07: 조각 채워 넣기 퍼즐) =================
+  // 테스트 훅: .mg-body[data-plan] = 칸 크기 + 조각별 {presses: 정답 방향까지 회전 횟수, x, y: 정답 위치},
+  //            .mg-body[data-pk]   = "지금 고른 조각, x, y, 회전, 놓은 조각 수"
+  const pkState = async () => (await page.getAttribute(".mg-body", "data-pk")).split(",").map(Number);
+  const pkPlan = async () => JSON.parse(await page.getAttribute(".mg-body", "data-plan"));
+  async function pkMoveTo(tx, ty) {
+    let [, px, py] = await pkState(), g = 0;
+    while (px !== tx || py !== ty) {
+      await page.keyboard.press(px < tx ? "ArrowRight" : px > tx ? "ArrowLeft" : py < ty ? "ArrowDown" : "ArrowUp");
+      [, px, py] = await pkState(); assert(++g < 60, "piece reaches its target cell");
+    }
+  }
+  async function pkPlacePiece(i, plan) { // i번 조각을 정답 방향/위치로 놓는다
+    let [cur] = await pkState(), g = 0;
+    while (cur !== i) { await page.keyboard.press("Tab"); [cur] = await pkState(); assert(++g < 12, "Tab cycles to the wanted piece"); }
+    for (let r = 0; (await pkState())[3] % 4 !== 0 && r < 4; r++) await page.keyboard.press("Space"); // 정답 방향 = 회전 0 (이전에 손으로 돌려 둔 조각도 처리)
+    await pkMoveTo(plan.pieces[i].x, plan.pieces[i].y);
+    await page.keyboard.press("Enter");
+  }
+  async function solvePack() {
+    const plan = await pkPlan();
+    for (let i = 0; i < plan.pieces.length; i++) await pkPlacePiece(i, plan);
+  }
+  const PK = [{ cols: 3, rows: 3, n: 3 }, { cols: 4, rows: 4, n: 4 }, { cols: 5, rows: 4, n: 5 }];
   for (let lv = 1; lv <= 3; lv++) {
     await launch("pack", lv);
-    const seq = (await page.getAttribute(".mg-body", "data-seq")).split(",");
-    assert(seq.length === PACK_LEN[lv - 1], `pack L${lv} should have ${PACK_LEN[lv - 1]} arrows, got ${seq.length}`);
-    for (let i = 2; i < seq.length; i++) assert(!(seq[i] === seq[i - 1] && seq[i] === seq[i - 2]), "no 3 identical keys in a row");
+    const plan = await pkPlan();
+    assert(plan.cols === PK[lv - 1].cols && plan.rows === PK[lv - 1].rows && plan.pieces.length === PK[lv - 1].n, `pack L${lv}: ${PK[lv - 1].cols}x${PK[lv - 1].rows} box, ${PK[lv - 1].n} pieces, got ${JSON.stringify(plan).slice(0, 80)}`);
+    assert((await page.$$(".pk-cell")).length === plan.cols * plan.rows, "the box has cols x rows cells");
+    assert((await page.$$(".pk-piece")).length === plan.pieces.length, "every piece is in the tray");
+    const area = await page.$$eval(".pk-piece .pk-mini.on", (els) => els.length);
+    assert(area === plan.cols * plan.rows, `piece cells add up to the box area (${area} vs ${plan.cols * plan.rows}) -- the puzzle is always solvable`);
     if (lv === 2) await shot("pack_L2_start");
-    for (const k of seq) await page.keyboard.press(KEY[k]);
-    assert(!(await result()), "pack must NOT finish before the final SPACE");
-    assert((await page.$$(".mg-chip.is-done")).length === seq.length, "all arrow chips done before SPACE");
-    if (lv === 2) await shot("pack_L2_before_tape");
-    await page.keyboard.press("Space");
+    await solvePack();
     await waitFor(result, { label: `pack L${lv} done` });
     const r = await result();
     assert(r.ok && r.kind === "pack" && r.level === lv && r.mistakes === 0, "pack clean run result: " + JSON.stringify(r));
-    if (lv === 2) await shot("pack_L2_done");
-    log(`pack L${lv}: ${seq.length}키+SPACE 클리어 (${r.ms}ms, 실수 0)`);
+    log(`pack L${lv}: ${plan.cols}x${plan.rows} 상자를 조각 ${plan.pieces.length}개로 채워 클리어 (${r.ms}ms, 실수 0)`);
   }
+  // 여러 판 뽑아도 항상 풀린다 (정답 배치가 있고, 마지막 조각을 놓는 순간 끝난다)
+  for (let k = 0; k < 8; k++) {
+    await launch("pack", k % 2 ? 3 : 2);
+    await solvePack();
+    await waitFor(result, { label: "random pack solvable" });
+    assert((await result()).mistakes === 0, "random pack solved without mistakes");
+  }
+  log("pack: 무작위로 8판 더 뽑아도 정답 배치로 항상 클리어");
 
-  // 오입력 규칙 1: reset -- 처음부터
-  await launch("pack", 2, "reset");
+  // 조작: 이동은 상자 안으로 제한, 회전/되돌리기/조각 바꾸기, 겹치게 놓으면 실수 + 잠금
+  await launch("pack", 2);
   {
-    const seq = (await page.getAttribute(".mg-body", "data-seq")).split(",");
-    await page.keyboard.press(KEY[seq[0]]); await page.keyboard.press(KEY[seq[1]]);
-    assert((await page.$$(".mg-chip.is-done")).length === 2, "2 chips done before the mistake");
-    const wrong = ["up", "down", "left", "right"].find((d) => d !== seq[2]);
-    await page.keyboard.press(KEY[wrong]);
-    await sleep(250);
-    assert((await page.$$(".mg-chip.is-done")).length === 0, "reset rule: all chips must reset to start after a wrong key");
-    assert((await page.$$(".mg-flap.is-closed")).length === 0, "reset rule: flaps must reopen");
-    assert((await miss()) === 1, "mistake counter should be 1");
-    for (const k of seq) await page.keyboard.press(KEY[k]);
+    const plan = await pkPlan();
+    let [cur, px, py] = await pkState();
+    for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowLeft");
+    for (let i = 0; i < 8; i++) await page.keyboard.press("ArrowUp");
+    [cur, px, py] = await pkState();
+    assert(px === 0 && py === 0, "a piece cannot be moved out of the box (top-left), got " + [px, py]);
+    for (let i = 0; i < 9; i++) await page.keyboard.press("ArrowRight");
+    for (let i = 0; i < 9; i++) await page.keyboard.press("ArrowDown");
+    const [, qx, qy] = await pkState();
+    const dims = await page.$eval(".pk-piece.is-active .pk-mg", (e) => ({ w: parseInt(getComputedStyle(e).getPropertyValue("--cols"), 10), n: e.querySelectorAll(".pk-mini").length }));
+    assert(qx === plan.cols - dims.w && qy <= plan.rows - 1 && qy >= 0, `moved to the far corner but still inside the box: ${[qx, qy]} (piece is ${dims.w} wide)`);
+    // 회전: 4번 돌리면 제자리, 회전 중에도 상자 밖으로 안 나간다
+    const before = await page.$eval(".pk-piece.is-active .pk-mg", (e) => e.innerHTML);
+    for (let i = 0; i < 4; i++) await page.keyboard.press("Space");
+    assert((await page.$eval(".pk-piece.is-active .pk-mg", (e) => e.innerHTML)) === before, "four rotations return to the same orientation");
     await page.keyboard.press("Space");
-    await waitFor(result, { label: "pack reset-rule done" });
-    assert((await result()).mistakes === 1, "recorded mistakes should be 1");
-    log("pack 오입력=reset: 틀리면 입력 전체가 처음부터 다시, 이후 정상 클리어 + 실수 1회 기록");
+    const [, rx, ry, rr] = await pkState();
+    const d2 = await page.$eval(".pk-piece.is-active .pk-mg", (e) => parseInt(getComputedStyle(e).getPropertyValue("--cols"), 10));
+    assert(rr === ((await pkState())[3]) && rx + d2 <= plan.cols, "after rotating, the piece is still inside the box");
+    // Tab: 다른 조각을 고르고, 처음으로 돌아온다
+    const [c0] = await pkState();
+    await page.keyboard.press("Tab");
+    const [c1] = await pkState();
+    assert(c1 !== c0, "Tab selects another piece");
+    for (let i = 0; i < plan.pieces.length - 1; i++) await page.keyboard.press("Tab");
+    assert((await pkState())[0] === c0, "Tab cycles through all pieces and returns");
+    assert((await miss()) === 0, "moving / rotating / switching pieces is free (no mistakes)");
   }
-  // 규칙 2: freeze -- 0.5초 멈췄다가 이어서
-  await launch("pack", 1, "freeze");
+  // 겹치게 놓기 = 실수 +1 + 잠깐 멈춤(그동안 입력 무시), 이후 되돌리기로 풀어 낸다
+  await launch("pack", 2);
   {
-    const seq = (await page.getAttribute(".mg-body", "data-seq")).split(",");
-    await page.keyboard.press(KEY[seq[0]]);
-    const wrong = ["up", "down", "left", "right"].find((d) => d !== seq[1]);
-    await page.keyboard.press(KEY[wrong]);
-    await page.keyboard.press(KEY[seq[1]]); // 정지 중이라 무시돼야 함
-    assert((await page.$$(".mg-chip.is-done")).length === 1, "freeze rule: input during the 0.5s freeze must be ignored");
-    await sleep(650);
-    await page.keyboard.press(KEY[seq[1]]);
-    assert((await page.$$(".mg-chip.is-done")).length === 2, "freeze rule: progress resumes where it left off (not reset)");
-    for (let i = 2; i < seq.length; i++) await page.keyboard.press(KEY[seq[i]]);
-    await page.keyboard.press("Space");
-    await waitFor(result, { label: "pack freeze-rule done" });
-    log("pack 오입력=freeze: 0.5초 정지 중 입력 무시, 풀리면 있던 자리부터 이어서");
+    const plan = await pkPlan();
+    await pkPlacePiece(0, plan);                                        // 0번 조각을 정답 자리에 놓는다
+    assert((await pkState())[4] === 1, "one piece placed");
+    assert((await page.$$(".pk-cell.is-fill")).length > 0 && (await page.$$(".pk-piece.is-placed")).length === 1, "placed cells are filled and the tray piece is dimmed");
+    // 다음 조각을 방금 놓은 조각 위로 옮겨서 놓기
+    await pkMoveTo(0, 0);
+    // 놓은 조각과 겹치는 자리를 찾을 때까지 훑는다 (겹치면 빨갛게 표시됨)
+    for (let yy = 0; yy < plan.rows && !(await page.$$(".pk-cell.is-bad")).length; yy++) {
+      for (let xx = 0; xx < plan.cols && !(await page.$$(".pk-cell.is-bad")).length; xx++) { await page.keyboard.press("ArrowRight"); }
+      if (!(await page.$$(".pk-cell.is-bad")).length) { for (let xx = 0; xx < plan.cols; xx++) await page.keyboard.press("ArrowLeft"); await page.keyboard.press("ArrowDown"); }
+    }
+    assert((await page.$$(".pk-cell.is-bad")).length > 0, "a ghost overlapping a placed piece is shown in red");
+    await page.keyboard.press("Enter"); await page.keyboard.press("Enter");
+    assert((await miss()) === 1, "placing on an occupied cell is one mistake; the repeat during the lock is ignored");
+    assert((await page.textContent(".mg-freeze-note")).length > 0, "a note explains why it failed");
+    assert((await pkState())[4] === 1, "nothing was placed");
+    await sleep(750);
+    // 되돌리기: 마지막으로 놓은 조각이 다시 손에 들리고, 그 칸이 비워진다
+    await page.keyboard.press("Backspace");
+    assert((await pkState())[4] === 0, "undo takes the last piece back");
+    assert((await page.$$(".pk-cell.is-fill")).length === 0, "the box is empty again");
+    assert((await pkState())[0] === 0, "the undone piece is the one in hand");
+    assert((await miss()) === 1, "undo is free");
+    // 되돌린 뒤 정상적으로 끝까지 풀린다
+    await solvePack();
+    await waitFor(result, { label: "pack after undo done" });
+    assert((await result()).mistakes === 1, "the single mistake is recorded in the result");
+    log("pack: 이동은 상자 안으로 제한, 회전/조각 바꾸기(Tab) 자유, 겹치게 놓기 = 실수+잠금, 되돌리기(Backspace) 후 정상 클리어");
   }
-  // 규칙 3: ignore
-  await launch("pack", 1, "ignore");
+  // 화면 버튼(터치용)과 트레이 조각 클릭
+  await launch("pack", 1);
   {
-    const seq = (await page.getAttribute(".mg-body", "data-seq")).split(",");
-    await page.keyboard.press(KEY[seq[0]]);
-    const wrong = ["up", "down", "left", "right"].find((d) => d !== seq[1]);
-    await page.keyboard.press(KEY[wrong]);
-    await sleep(250);
-    assert((await page.$$(".mg-chip.is-done")).length === 1, "ignore rule: progress untouched by a wrong key");
-    assert((await miss()) === 1, "ignore rule still counts the mistake");
-    for (let i = 1; i < seq.length; i++) await page.keyboard.press(KEY[seq[i]]);
-    await page.keyboard.press("Space");
-    await waitFor(result, { label: "pack ignore-rule done" });
-    log("pack 오입력=ignore: 진행 그대로, 실수만 기록");
-  }
-  // 스페이스를 너무 일찍 눌러도 오입력 취급 + 키 반복(e.repeat)은 무시
-  await launch("pack", 1, "reset");
-  {
-    await page.keyboard.press("Space"); // 첫 키는 화살표여야 하므로 오입력
-    assert((await miss()) === 1, "early SPACE counts as a mistake");
-    await page.evaluate(() => {
-      const want = document.querySelector(".mg-body").getAttribute("data-seq").split(",")[0];
-      const key = { up: "ArrowUp", down: "ArrowDown", left: "ArrowLeft", right: "ArrowRight" }[want];
-      document.dispatchEvent(new KeyboardEvent("keydown", { key, code: key, bubbles: true, cancelable: true, repeat: true }));
-    });
-    await sleep(100);
-    assert((await page.$$(".mg-chip.is-done")).length === 0, "auto-repeat keydown must be ignored (holding a key must not spam inputs)");
-    log("pack: 너무 이른 스페이스=오입력, 키 꾹 누름(repeat)은 무시");
+    await page.dispatchEvent('.mg-key[data-pk="next"]', "pointerdown");
+    assert((await pkState())[0] === 1, "on-screen 'next piece' button works");
+    await page.dispatchEvent('.pk-piece[data-pi="2"]', "pointerdown");
+    assert((await pkState())[0] === 2, "tapping a tray piece selects it");
+    const r0 = (await pkState())[3];
+    await page.dispatchEvent('.mg-key[data-pk="rotate"]', "pointerdown");
+    assert((await pkState())[3] === (r0 + 1) % 4, "on-screen rotate works");
+    await page.dispatchEvent('.mg-key[data-pk="right"]', "pointerdown");
+    log("pack: 화면 버튼/트레이 터치로도 조작 가능");
   }
 
   // ================= 이상 확인 (벨트 분류) =================
@@ -424,7 +464,8 @@ async function main() {
     const targetRooms = new Set(inv.map((v) => v.room));
     const decoys = labels.filter((t) => !targetRooms.has(t));
     const similarCount = decoys.filter((t) => inv.some((v) => v.room[0] === t[0] || v.room[2] === t[2])).length;
-    assert(similarCount >= cfg.similar, `map L${lv}: at least ${cfg.similar} decoys look like a target (same floor or same room), got ${similarCount}`);
+    const guaranteed = Math.min(cfg.similar, cfg.targets); // 생성기는 목표 하나당 비슷한 미끼를 최대 하나씩만 보장한다(나머지는 우연)
+    assert(similarCount >= guaranteed, `map L${lv}: at least ${guaranteed} decoys look like a target (same floor or same room), got ${similarCount}`);
     await waitMapShown();
     assert(await page.$eval(".mg-cover", (e) => getComputedStyle(e).display === "none"), "the parcels disappear once the map shows");
     assert(await page.$eval(".mg-tile.is-house .mg-lab", (e) => getComputedStyle(e).visibility !== "hidden"), "house numbers stay visible on the map");
@@ -525,14 +566,97 @@ async function main() {
   await page.keyboard.press("ArrowUp"); await page.keyboard.press("Space"); // 리스너가 남아 있으면 에러/오동작
   log("destroy(): DOM 제거 + 이후 키 입력에 반응 없음 (리스너 정리됨)");
 
+  // ================= 창고 정리 (소코반, 2026-10-08 시험용) =================
+  // 테스트 훅: .mg-body[data-plan] = {rows}(판), .mg-body[data-sk] = "플레이어 x,y, 하역 칸에 들어간 박스 수, 움직임"
+  // 풀이기는 이 파일 안의 BFS (상태 = 플레이어 + 박스 위치 집합).
+  const SK_KEY = { U: "ArrowUp", D: "ArrowDown", L: "ArrowLeft", R: "ArrowRight" };
+  const { skParse, skSolve } = require("./test_soko_solver.js");
+  const skPlan = async () => JSON.parse(await page.getAttribute(".mg-body", "data-plan")).rows;
+  const skState = async () => (await page.getAttribute(".mg-body", "data-sk")).split(",").map(Number);
+  async function skPress(path) { for (const ch of path) await page.keyboard.press(SK_KEY[ch]); }
+
+  for (let lv = 1; lv <= 3; lv++) {
+    await launch("soko", lv);
+    const rows = await skPlan(), P = skParse(rows);
+    assert((await page.$$(".sk-box")).length === P.boxes.length && P.boxes.length === lv, `soko L${lv}: ${lv} boxes`);
+    assert((await page.$$(".sk-cell.is-tgt")).length === P.boxes.length, "one loading spot per box");
+    const sol = skSolve(P, P.player, P.boxes);
+    assert(sol && sol.length > 0, `soko L${lv}: pool puzzle is solvable`);
+    if (lv === 2) await shot("soko_L2_start");
+    await skPress(sol);
+    await waitFor(result, { label: `soko L${lv} done` });
+    const r = await result();
+    assert(r.ok && r.kind === "soko" && r.level === lv && r.mistakes === 0, "soko clean run: " + JSON.stringify(r));
+    log(`soko L${lv}: 박스 ${P.boxes.length}개, 최적 ${sol.length}걸음(밀기 포함) 풀이로 클리어 (${r.ms}ms, 실수 0)`);
+  }
+  // 풀 수 있는 판만 들어 있는가: 풀 전체를 검증하고 난이도 범위(최적 걸음)를 로그로 남긴다
+  {
+    const pool = await page.evaluate(() => { const out = []; for (let lv = 1; lv <= 3; lv++) { for (let k = 0; k < 40; k++) { MiniGames.start(document.getElementById("host"), { kind: "soko", level: lv, testHooks: true, onDone() {} }); out.push([lv, document.querySelector(".mg-body").getAttribute("data-plan")]); } } return out; });
+    await page.evaluate(() => { document.getElementById("host").innerHTML = ""; });
+    const seenRows = new Set(), range = { 1: [999, 0], 2: [999, 0], 3: [999, 0] };
+    for (const [lv, plan] of pool) {
+      const rows = JSON.parse(plan).rows, k = rows.join("|"); if (seenRows.has(k)) continue; seenRows.add(k);
+      const P = skParse(rows), sol = skSolve(P, P.player, P.boxes);
+      assert(sol !== null, `soko L${lv}: every pool puzzle must be solvable\n${rows.join("\n")}`);
+      assert(!P.boxes.some((b) => P.tgt[b]), "no box starts on a loading spot");
+      range[lv] = [Math.min(range[lv][0], sol.length), Math.max(range[lv][1], sol.length)];
+    }
+    log(`soko: 풀의 모든 판(${seenRows.size}개)이 풀림 -- 최적 걸음 범위 L1 ${range[1].join("~")} / L2 ${range[2].join("~")} / L3 ${range[3].join("~")}`);
+  }
+  // 조작: 벽/막힌 박스는 안 움직이고, 되돌리기(Z/Backspace)는 무료, R은 처음부터, 막다른 길 = 실수 +1
+  await launch("soko", 2);
+  {
+    const rows = await skPlan(), P = skParse(rows), W = P.W;
+    const [x0, y0] = await skState();
+    // 벽 쪽으로 계속 누르면 제자리
+    const wallDir = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].find((k, i) => { const d = [[0, -1], [0, 1], [-1, 0], [1, 0]][i]; return P.wall[(y0 + d[1]) * W + x0 + d[0]]; });
+    if (wallDir) { await page.keyboard.press(wallDir); const [x1, y1, , m1] = await skState(); assert(x1 === x0 && y1 === y0 && m1 === 0, "walking into a wall does nothing"); }
+    // 한 걸음 -> 되돌리기
+    const sol = skSolve(P, P.player, P.boxes);
+    await skPress(sol.slice(0, 3));
+    let st = await skState(); assert(st[3] === 3, "3 steps counted");
+    await page.keyboard.press("z"); st = await skState(); assert(st[3] === 2, "z undoes one step");
+    await page.keyboard.press("Backspace"); await page.keyboard.press("Backspace"); st = await skState();
+    assert(st[0] === x0 && st[1] === y0 && st[3] === 0, "undo all the way back to the start position");
+    await page.keyboard.press("Backspace"); assert((await skState())[3] === 0, "undo with empty history does nothing");
+    assert((await miss()) === 0, "walls and undo cost no mistakes");
+    // 막다른 길: 시작 상태에서 가장 짧게 "풀 수 없는 상자"를 만드는 걸음을 찾아 그대로 민다
+    const isCorner = (b) => !P.tgt[b] && (P.wall[b - W] || P.wall[b + W]) && (P.wall[b - 1] || P.wall[b + 1]);
+    const bad = skSolve(P, P.player, P.boxes, (bx) => bx.some(isCorner));
+    assert(bad !== null && bad.length > 0, "a corner trap exists in this puzzle");
+    await skPress(bad);
+    assert((await miss()) === 1, "pushing a box into a dead corner is one mistake");
+    assert((await page.textContent(".mg-freeze-note")).length > 0, "a note explains the trap");
+    assert((await page.$$(".sk-box.is-dead")).length >= 1, "the stuck box is marked");
+    await page.keyboard.press("r"); st = await skState();
+    assert(st[0] === x0 && st[1] === y0 && st[3] === 0 && (await miss()) === 1, "R restarts the puzzle (mistake count stays)");
+    assert((await page.$$(".sk-box.is-dead")).length === 0, "restart clears the stuck mark");
+    await skPress(sol);
+    await waitFor(result, { label: "soko after restart done" });
+    assert((await result()).mistakes === 1, "the single mistake is in the result");
+    log("soko: 벽은 제자리, Z/Backspace 되돌리기 무료, 막다른 길 = 실수 1회 + 안내 + 표시, R = 처음부터(실수는 유지), 이후 정상 클리어");
+  }
+  // 화면 버튼(터치): 방향/되돌리기/처음부터
+  await launch("soko", 1);
+  {
+    const P = skParse(await skPlan()), sol = skSolve(P, P.player, P.boxes);
+    const name = { U: "up", D: "down", L: "left", R: "right" };
+    const [x0, y0] = await skState();
+    const first = sol[0]; await page.dispatchEvent(`.mg-key[data-sk="${name[first]}"]`, "pointerdown");
+    assert((await skState())[3] === 1, "pad button moves");
+    await page.dispatchEvent('.mg-key[data-sk="undo"]', "pointerdown");
+    const st = await skState(); assert(st[0] === x0 && st[1] === y0 && st[3] === 0, "pad undo works");
+    for (const ch of sol) await page.dispatchEvent(`.mg-key[data-sk="${name[ch]}"]`, "pointerdown");
+    await waitFor(result, { label: "soko via pad done" });
+    log("soko: 화면 버튼(터치)으로도 이동/되돌리기/클리어");
+  }
+
   // ================= 시험장 UI 전체 흐름 (실제 버튼) =================
-  await page.goto(URL);
+  await page.goto(URL + "?mgtest=1");
   await page.click('button[data-kind="pack"][data-lv="1"]');
   await page.click('button[data-go="pack"]');
   await waitFor(async () => (await page.$$(".mg-root")).length === 1, { label: "game opened from the UI" });
-  const seq = (await page.getAttribute(".mg-body", "data-seq")).split(",");
-  for (const k of seq) await page.keyboard.press(KEY[k]);
-  await page.keyboard.press("Space");
+  await solvePack();
   await waitFor(async () => (await page.$$("table")).length > 0, { label: "log table after done", timeout: 4000 });
   const txt = await page.textContent("#tables");
   assert(txt.includes("박스 포장") && txt.includes("원/초"), "log shows the run and 원/초");

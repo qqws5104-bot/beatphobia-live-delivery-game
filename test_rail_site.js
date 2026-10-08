@@ -85,7 +85,17 @@ async function main() {
   log("플레이어 화면은 레일 모드(버튼 없음, 내 쪽 안내), 레일 화면엔 양쪽 버튼이 있음");
 
   // ---- 왼쪽(1번) 버튼 -> p1 화면에만 게임 ----
-  const hasGame = (p) => count(p, "#mg-layer .mg-root, #mg-layer .mg-wrap").then((n) => n > 0);
+  // 우봉고 모드(기본, 2026-10-08): 플레이어 화면에 #puzzle-overlay(이미지 + 완료/포기). 디지털 모드: #mg-layer 미니게임. 둘 다 처리한다.
+  const hasGame = (p) => count(p, "#mg-layer .mg-root, #mg-layer .mg-wrap, #puzzle-overlay img").then((n) => n > 0);
+  const finish = (p) => p.evaluate(() => {
+    if (document.querySelector(".mg-root") && window.__mgFinish) return window.__mgFinish();
+    const b = document.querySelector('[data-action="complete-cell"]'); if (b) { b.click(); return true; }
+    return false;
+  });
+  const giveUp = (p) => p.evaluate(() => {
+    const b = document.querySelector('[data-action="give-up"]') || Array.from(document.querySelectorAll("#mg-layer button")).find((x) => x.textContent.trim() === "포기");
+    if (!b) return false; b.click(); return true;
+  });
   await click(rail, railBtn(1, 0));
   await waitFor(() => hasGame(p1), { label: "p1 game opens" });
   await sleep(300);
@@ -96,7 +106,7 @@ async function main() {
   log("왼쪽 버튼 -> 1번 플레이어 화면에만 게임, 그 쪽 버튼 잠금(플레이 중 표시)");
 
   // ---- 끝내면 확보 + 잠금 해제 ----
-  assert(await p1.evaluate(() => window.__mgFinish && window.__mgFinish()), "p1 finish");
+  assert(await finish(p1), "p1 finish");
   await waitFor(async () => (await text(rail, leftOf(0))) === "3", { label: "남은 3개" });
   await waitFor(async () => (await disabled(rail, railBtn(1, 0))) === false, { label: "1번 버튼 풀림" });
   assert((await count(p1, "[data-rail-wait] .rw-row[data-cat='0'] .my-chip")) === 1, "p1 대기 카드에 내가 확보한 호수 칩");
@@ -111,7 +121,7 @@ async function main() {
   // 게임 중 중복 누름은 서버가 무시: 연타해도 게임은 하나
   await click(rail, railBtn(2, 0)); await click(rail, railBtn(2, 1));
   await sleep(300);
-  assert(await p2.evaluate(() => window.__mgFinish && window.__mgFinish()), "p2 finish");
+  assert(await finish(p2), "p2 finish");
   await waitFor(async () => (await text(rail, leftOf(0))) === "2", { label: "남은 2개" });
   log("오른쪽 버튼 -> 2번 플레이어 화면에만 게임, 끝내면 2개로");
 
@@ -119,7 +129,7 @@ async function main() {
   await click(rail, railBtn(1, 1));
   await waitFor(() => hasGame(p1), { label: "p1 fragile game" });
   await waitFor(async () => (await disabled(rail, railBtn(1, 1))) === true, { label: "busy again" });
-  assert(await p1.evaluate(() => { const b = Array.from(document.querySelectorAll("#mg-layer button")).find((x) => x.textContent.trim() === "포기"); if (!b) return false; b.click(); return true; }), "포기 버튼");
+  assert(await giveUp(p1), "포기 버튼");
   await waitFor(async () => !(await hasGame(p1)), { label: "game closed by giving up" });
   await waitFor(async () => (await disabled(rail, railBtn(1, 1))) === false, { label: "포기 -> 버튼 풀림" });
   assert((await text(rail, leftOf(1))) === "4", "포기하면 개수는 그대로");
@@ -128,7 +138,7 @@ async function main() {
   // ---- 확정 층수 택배: 층 버튼 ----
   await click(rail, floorBtn(1, 3, 3)); // 3번째 칸 = 2F
   await waitFor(() => hasGame(p1), { label: "p1 sticker game" });
-  assert(await p1.evaluate(() => window.__mgFinish && window.__mgFinish()), "p1 finish sticker");
+  assert(await finish(p1), "p1 finish sticker");
   await waitFor(async () => (await text(rail, leftOf(3))) === "5", { label: "확정 층수 남은 5" });
   assert(await disabled(rail, floorBtn(1, 3, 3)) && await disabled(rail, floorBtn(2, 3, 3)), "확보된 층은 양쪽에서 잠긴다");
   assert((await disabled(rail, floorBtn(2, 3, 4))) === false, "다른 층은 열려 있다");
@@ -139,7 +149,7 @@ async function main() {
     const side = i % 2 === 0 ? 1 : 2, pg = side === 1 ? p1 : p2;
     await click(rail, railBtn(side, 0));
     await waitFor(() => hasGame(pg), { label: "game " + i });
-    await pg.evaluate(() => window.__mgFinish());
+    await finish(pg);
     await waitFor(async () => (await text(rail, leftOf(0))) === String(1 - i), { label: "남은 " + (1 - i) });
   }
   assert(await disabled(rail, railBtn(1, 0)) && await disabled(rail, railBtn(2, 0)), "소진되면 양쪽 버튼 잠김");

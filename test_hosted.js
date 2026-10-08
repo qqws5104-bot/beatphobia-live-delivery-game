@@ -178,8 +178,8 @@ async function main() {
   // ---- give up: opening a cell and clicking give-up must NOT mark it taken ----
   await clickSel(p1, openSel("normal-1"));
   await waitFor(async () => (await countSel(p1, ".overlay:not(.hidden)")) > 0, { label: "p1 puzzle overlay opens" });
-  // 일반택배 칸은 이제 미니게임(박스 포장) -- 포기 버튼은 .mg-giveup
-  await clickSel(p1, '.mg-giveup');
+  // 포기 버튼: 우봉고 오버레이는 [data-action="give-up"], 디지털 미니게임은 .mg-giveup
+  await clickSel(p1, '[data-action="give-up"], .mg-giveup');
   await p1.waitForTimeout(200);
   const normal1StillOpen = await countSel(p1, openSel("normal-1"));
   const takenCountAfterGiveUp = await takenTotal(p1);

@@ -773,6 +773,84 @@
   .mg-stage { width: 88%; margin-left: auto; margin-right: auto; } /* 송장 붙이기 작업대: 아주 낮은 화면에서 조금 줄인다(cqw 단위라 내용도 같이 줄어듦) */
 }
 
+/* ================= 박스 포장 (조각 채워 넣기 퍼즐) ================= */
+.pk-wrap { container-type: inline-size; display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; align-items: flex-start; margin-top: 0.5rem; }
+.pk-box {
+  --cell: min(13cqw, 64px);
+  display: grid; grid-template-columns: repeat(var(--cols), var(--cell)); grid-auto-rows: var(--cell); gap: 3px; padding: 8px;
+  border-radius: 10px; background: #8a6a3a; border: 3px solid #6b4e26; box-shadow: inset 0 0 0 3px #b08d55, 0 6px 14px rgba(43, 29, 18, 0.25);
+}
+.pk-box.is-shake { animation: mg-shake 0.32s ease; }
+.pk-cell { border-radius: 4px; background: #e6d3a8; box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -2px 0 rgba(60, 38, 14, 0.18); transition: background 0.08s; }
+.pk-cell.is-fill { background: var(--pc); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.35), inset 0 -3px 0 rgba(0, 0, 0, 0.22); }
+.pk-cell.is-ghost { background: color-mix(in srgb, var(--pc) 62%, #fffcf4); outline: 3px solid var(--pc); outline-offset: -3px; }
+.pk-cell.is-bad { background: rgba(199, 64, 45, 0.62); outline: 3px solid var(--mg-danger); outline-offset: -3px; }
+.pk-tray { display: flex; flex-wrap: wrap; gap: 8px; align-content: flex-start; justify-content: center; max-width: 240px; min-width: 150px; }
+.pk-piece {
+  font: inherit; cursor: pointer; padding: 6px; min-width: 62px; min-height: 62px; display: flex; align-items: center; justify-content: center;
+  border-radius: 10px; background: var(--mg-panel); border: 2px solid var(--mg-line); border-bottom-width: 4px;
+}
+.pk-piece.is-active { border-color: var(--pc); background: color-mix(in srgb, var(--pc) 14%, #fffcf4); transform: translateY(-2px); box-shadow: 0 4px 0 color-mix(in srgb, var(--pc) 40%, transparent); }
+.pk-piece.is-placed { opacity: 0.38; cursor: default; }
+.pk-mg { --m: min(3.4cqw, 17px); display: grid; grid-template-columns: repeat(var(--cols), var(--m)); grid-auto-rows: var(--m); gap: 2px; }
+.pk-mini { border-radius: 2px; background: transparent; }
+.pk-mini.on { background: var(--pc); }
+.pk-pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; width: min(100%, 460px); margin: 0.5rem auto 0; }
+.pk-pad .mg-key { min-height: 46px; padding: 0 0.3rem; }
+.pk-pad .pk-act { grid-column: span 1; font-size: 0.74rem; line-height: 1.15; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.pk-pad .pk-act small { font-size: 0.6rem; opacity: 0.65; letter-spacing: 0.08em; }
+@container (max-width: 520px) { .pk-box { --cell: min(15cqw, 56px); } .pk-tray { max-width: none; } }
+
+/* ================= 창고 정리 (소코반) ================= */
+.sk-wrap { container-type: inline-size; display: flex; justify-content: center; }
+.sk-board {
+  --cell: min(calc(94cqw / var(--cols)), 56px);
+  position: relative; width: calc(var(--cell) * var(--cols)); height: calc(var(--cell) * var(--rows));
+  border-radius: 8px; overflow: hidden; background: #cdb88f; box-shadow: 0 0 0 3px #7a5a30;
+}
+.sk-board.is-shake { animation: mg-shake 0.32s ease; }
+.sk-floor { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-template-rows: repeat(var(--rows), 1fr); }
+.sk-cell { display: block; background: #e8d9b6; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.12); }
+.sk-cell.is-wall {
+  background: repeating-linear-gradient(0deg, #8a6a42 0 7px, #75583a 7px 8px), #8a6a42;
+  box-shadow: inset 0 0 0 1px rgba(43, 29, 18, 0.35);
+}
+.sk-cell.is-tgt {
+  background: repeating-linear-gradient(45deg, #f6dc7a 0 6px, #f0c94a 6px 12px);
+  box-shadow: inset 0 0 0 2px #c99a00;
+}
+.sk-box, .sk-man {
+  position: absolute; left: 0; top: 0; width: var(--cell); height: var(--cell);
+  transform: translate(calc(var(--x) * var(--cell)), calc(var(--y) * var(--cell)));
+  transition: transform 90ms ease-out; pointer-events: none;
+}
+.sk-box svg, .sk-man svg { width: 100%; height: 100%; display: block; }
+.sk-bx-body { fill: #c9a576; stroke: #6b4e26; stroke-width: 1.8; }
+.sk-bx-top { fill: #ddc08f; stroke: #6b4e26; stroke-width: 1.8; }
+.sk-bx-tape { fill: #ead8b0; opacity: 0.95; }
+.sk-bx-ok { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
+.sk-box.is-in .sk-bx-body { fill: #6fbf86; }
+.sk-box.is-in .sk-bx-top { fill: #93d3a6; }
+.sk-box.is-in .sk-bx-ok { opacity: 1; }
+.sk-box.is-dead .sk-bx-body { fill: #d98a7d; }
+.sk-box.is-dead .sk-bx-top { fill: #e6a99f; }
+.sk-man { z-index: 2; }
+.sk-m-face { fill: #f2c9a0; stroke: #6b4e26; stroke-width: 1.4; }
+.sk-m-cap { fill: #E8681C; stroke: #8f3d0c; stroke-width: 1.4; }
+.sk-m-brim { fill: #c4561a; }
+.sk-m-body { fill: #2f4a7d; stroke: #1c2e52; stroke-width: 1.4; }
+.sk-m-eye { fill: #2b1d12; }
+@keyframes sk-bump {
+  0%, 100% { transform: translate(calc(var(--x) * var(--cell)), calc(var(--y) * var(--cell))); }
+  30% { transform: translate(calc(var(--x) * var(--cell) - 4px), calc(var(--y) * var(--cell))); }
+  65% { transform: translate(calc(var(--x) * var(--cell) + 3px), calc(var(--y) * var(--cell))); }
+}
+.sk-man.is-bump { animation: sk-bump 0.18s ease; }
+.sk-status { display: flex; justify-content: center; gap: 1.6rem; margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--mg-muted); }
+.sk-status b { color: var(--mg-ink); font-family: var(--mg-font-display); font-size: 1rem; }
+.sk-pad { grid-template-columns: repeat(4, 1fr); }
+.sk-pad .pk-act { grid-column: span 2; }
+
 /* mainview.css -- 메인 모니터(?view=main) 전용 스타일. 큰 TV/프로젝터 화면용이라 모든 크기를 vh/vw로 잡는다.
  * 플레이어 화면과 같은 색 토큰(--bg, --gold, --ink ...)을 쓰고, 이 화면은 body.main-view 일 때만 적용된다. */
 body.main-view { overflow: hidden; }
@@ -868,7 +946,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
  * 똑같이 쓸 수 있게 만들었다.
  *
  *   var ctl = MiniGames.start(hostElement, {
- *     kind: "pack" | "inspect" | "sticker" | "map",
+ *     kind: "pack" | "inspect" | "sticker" | "map" | "soko",
  *     level: 1 | 2 | 3,              // 쉬움 / 보통 / 어려움
  *     label: "B08호",                // 송장 붙이기에서 송장에 찍을 목적지 (없으면 임의 생성)
  *     onDone:   function (res) {},   // res = { ok:true, kind, level, ms, mistakes }
@@ -886,6 +964,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
     inspect: { name: "이상 확인" },
     sticker: { name: "송장 붙이기" },
     map:     { name: "지도 배달" },
+    soko:    { name: "창고 정리" },
   };
   var LEVEL_NAME = ["쉬움", "보통", "어려움"];
 
@@ -916,123 +995,244 @@ body.main-view #app { height: 100vh; min-height: 0; }
   function fmtSec(ms) { return (ms / 1000).toFixed(1) + "초"; }
 
   // ======================================================================
-  // 박스 포장 -- 화면에 뜬 방향키 순서대로 누르고, 마지막은 스페이스바(테이프)
+  // 박스 포장 -- 상자 칸에 물건(조각)들을 돌리고 옮겨서 빈틈없이 채워 넣기 (우봉고식 퍼즐)
+  //   ← ↑ ↓ → 조각 이동   SPACE 회전   ENTER 놓기   BACKSPACE 되돌리기   TAB 다른 조각 고르기
+  // 2026-10-07 재설계 (사용자 피드백: "방향키 6키 -> 15키 -> 30키는 손가락 노동이다. 우봉고에서 가져올 건 해결 과정 --
+  //   내가 판단하고, 직접 조작하고, 실수하면 다시 생각하는 것"). 예전엔 화면에 뜬 방향키 순서를 따라 누르는 게임이었다.
+  // 퍼즐은 항상 풀리게 만든다: 칸을 조각들로 무작위 분할(`makePackPlan`)한 뒤 조각을 돌려서 보여 준다. 정답 배치는 하나가 아니어도 된다 --
+  // 빈틈없이 채우기만 하면 끝. 놓은 조각은 되돌릴 수 있어서 "여기 놓으면 나머지가 안 들어가네" -> 되돌리고 다시 생각하는 시행착오가 핵심.
+  // 겹치게 놓으려 하면 실수 +1 (움직이는 건 자유, ENTER로 확정할 때만 판정). 조각 수/칸 크기가 난이도.
   // ======================================================================
-  // 2026-10-07 난이도 업: 레벨 2(전반) 6 -> 8, 레벨 3(후반) 8 -> 10. (레벨 1은 시험장 전용)
-  var PACK_LEN = [4, 8, 10]; // 방향키 개수 (+ 마지막 스페이스)
-  var DIRS = ["up", "down", "left", "right"];
-  var GLYPH = { up: "↑", down: "↓", left: "←", right: "→" };
+  var PACK_CFG = [
+    { cols: 3, rows: 3, sizes: [3, 3, 3] },          // 쉬움 (시험장 전용)
+    { cols: 4, rows: 4, sizes: [4, 4, 4, 4] },       // 보통 (전반): 4칸짜리 4조각
+    { cols: 5, rows: 4, sizes: [3, 4, 4, 4, 5] },    // 어려움 (후반): 3~5칸짜리 5조각
+  ];
+  var PACK_COLORS = ["#E8681C", "#2F8F52", "#3E7CB1", "#B5527F", "#C99A00", "#7B5EA7"];
+  var PACK_LOCK_MS = 600;   // 겹치는 자리에 놓으려다 틀린 뒤 멈춤 (ENTER 연타로 때려 맞추기 방지)
+
+  function normCells(cells) {
+    var mx = 1e9, my = 1e9;
+    cells.forEach(function (p) { if (p[0] < mx) mx = p[0]; if (p[1] < my) my = p[1]; });
+    return cells.map(function (p) { return [p[0] - mx, p[1] - my]; });
+  }
+  function rotCells(cells, n) { // 시계 방향 90도 n번 (화면 y는 아래로 증가)
+    var out = cells.map(function (p) { return [p[0], p[1]]; });
+    for (var r = 0; r < ((n % 4) + 4) % 4; r++) out = out.map(function (p) { return [-p[1], p[0]]; });
+    return normCells(out);
+  }
+  function cellsKey(cells) { return cells.map(function (p) { return p[0] + "." + p[1]; }).sort().join("|"); }
+  function canonShape(cells) { // 회전해서 같아지는 모양은 같은 키
+    var best = null;
+    for (var r = 0; r < 4; r++) { var k = cellsKey(rotCells(cells, r)); if (best === null || k < best) best = k; }
+    return best;
+  }
+  function boxDims(cells) {
+    var w = 0, h = 0;
+    cells.forEach(function (p) { if (p[0] + 1 > w) w = p[0] + 1; if (p[1] + 1 > h) h = p[1] + 1; });
+    return { w: w, h: h };
+  }
+
+  // cols x rows 칸을 sizes 크기의 연결된 조각들로 쪼갠다 (무작위로 자라게 한 뒤, 막히면 다시). 모양이 서로 다른 조각들을 선호한다.
+  function makePackPlan(cfg) {
+    var W = cfg.cols, H = cfg.rows, N = W * H, K = cfg.sizes.length, fallback = null;
+    for (var attempt = 0; attempt < 800; attempt++) {
+      var owner = [], cells = [], remain = cfg.sizes.slice(), ok = true, i;
+      for (i = 0; i < N; i++) owner.push(-1);
+      var seeds = shuffle(owner.map(function (_, ix) { return ix; })).slice(0, K);
+      for (i = 0; i < K; i++) { owner[seeds[i]] = i; cells.push([[seeds[i] % W, Math.floor(seeds[i] / W)]]); remain[i]--; }
+      for (;;) {
+        var open = [];
+        for (i = 0; i < K; i++) if (remain[i] > 0) open.push(i);
+        if (!open.length) break;
+        var pi = open[rand(open.length)], fr = [];
+        cells[pi].forEach(function (p) {
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(function (d) {
+            var x = p[0] + d[0], y = p[1] + d[1];
+            if (x >= 0 && y >= 0 && x < W && y < H && owner[y * W + x] === -1) fr.push([x, y]);
+          });
+        });
+        if (!fr.length) { ok = false; break; }
+        var pick = fr[rand(fr.length)];
+        owner[pick[1] * W + pick[0]] = pi; cells[pi].push(pick); remain[pi]--;
+      }
+      if (!ok) continue;
+      var pieces = cells.map(function (cs) {
+        var mx = 1e9, my = 1e9;
+        cs.forEach(function (p) { if (p[0] < mx) mx = p[0]; if (p[1] < my) my = p[1]; });
+        return { cells: normCells(cs), sx: mx, sy: my };
+      });
+      var seen = {}, distinct = true;
+      pieces.forEach(function (pc) { var k = canonShape(pc.cells); if (seen[k]) distinct = false; seen[k] = 1; });
+      // 1x4 막대(I)가 둘 이상이거나 한 줄짜리 조각이 너무 많으면 심심해서 거른다
+      var lines = pieces.filter(function (pc) { var d = boxDims(pc.cells); return d.w === 1 || d.h === 1; }).length;
+      if (lines > 1) distinct = false;
+      if (distinct || attempt > 500) return pieces;
+      if (!fallback) fallback = pieces;
+    }
+    return fallback;
+  }
 
   function packGame(body, c) {
-    var len = PACK_LEN[c.level - 1];
-    var seq = [];
-    while (seq.length < len) {
-      var d = DIRS[rand(4)], n = seq.length;
-      if (n >= 2 && seq[n - 1] === d && seq[n - 2] === d) continue; // 같은 키 3연속은 지루하니 제외
-      seq.push(d);
-    }
-    body.setAttribute("data-seq", seq.join(","));
+    var cfg = PACK_CFG[c.level - 1], W = cfg.cols, H = cfg.rows;
+    var solved = makePackPlan(cfg);
+    // 트레이 순서는 섞고, 각 조각은 무작위로 돌려서 시작한다 (정답 모양 그대로 보이면 안 된다)
+    var order = shuffle(solved.map(function (_, i) { return i; }));
+    var pieces = order.map(function (si, ti) {
+      var sp = solved[si], r0 = rand(4);
+      return { base: sp.cells, rot: r0, r0: r0, sx: sp.sx, sy: sp.sy, placed: false, x: 0, y: 0, color: PACK_COLORS[ti % PACK_COLORS.length] };
+    });
+    if (c.testHooks) body.setAttribute("data-plan", JSON.stringify({ cols: W, rows: H, pieces: pieces.map(function (p) { return { presses: (4 - p.r0) % 4, x: p.sx, y: p.sy }; }) }));
 
-    var chipsHtml = seq.map(function (d) { return '<span class="mg-chip" data-k="' + d + '">' + GLYPH[d] + "</span>"; }).join("")
-      + '<span class="mg-chip is-space" data-k="space">SPACE</span>';
+    var cellsHtml = "";
+    for (var i = 0; i < W * H; i++) cellsHtml += '<div class="pk-cell"></div>';
     body.innerHTML =
-      '<div class="mg-pack-stage"><div class="mg-box">'
-      + '<div class="mg-box-inner"></div>'
-      + '<div class="mg-flap mg-flap-up" data-flap="up"></div><div class="mg-flap mg-flap-down" data-flap="down"></div>'
-      + '<div class="mg-flap mg-flap-left" data-flap="left"></div><div class="mg-flap mg-flap-right" data-flap="right"></div>'
-      + '<div class="mg-tape">TAPE</div></div></div>'
+      '<div class="pk-wrap"><div class="pk-box" style="--cols:' + W + ';--rows:' + H + '">' + cellsHtml + '</div>'
+      + '<div class="pk-tray"></div></div>'
       + '<p class="mg-freeze-note"></p>'
-      + '<div class="mg-seq">' + chipsHtml + "</div>"
-      + '<div class="mg-pad">'
-      + '<button type="button" class="mg-key" data-k="up" aria-label="위">↑</button>'
-      + '<button type="button" class="mg-key" data-k="left" aria-label="왼쪽">←</button>'
-      + '<button type="button" class="mg-key" data-k="down" aria-label="아래">↓</button>'
-      + '<button type="button" class="mg-key" data-k="right" aria-label="오른쪽">→</button>'
-      + '<button type="button" class="mg-key" data-k="space" aria-label="스페이스">SPACE · 테이프</button>'
+      + '<div class="pk-pad">'
+      + '<button type="button" class="mg-key" data-pk="up" aria-label="위">↑</button>'
+      + '<button type="button" class="mg-key" data-pk="left" aria-label="왼쪽">←</button>'
+      + '<button type="button" class="mg-key" data-pk="down" aria-label="아래">↓</button>'
+      + '<button type="button" class="mg-key" data-pk="right" aria-label="오른쪽">→</button>'
+      + '<button type="button" class="mg-key pk-act" data-pk="rotate">회전<small>SPACE</small></button>'
+      + '<button type="button" class="mg-key pk-act" data-pk="place">놓기<small>ENTER</small></button>'
+      + '<button type="button" class="mg-key pk-act" data-pk="undo">되돌리기<small>⌫</small></button>'
+      + '<button type="button" class="mg-key pk-act" data-pk="next">조각 바꾸기<small>TAB</small></button>'
       + "</div>";
-
-    var box = body.querySelector(".mg-box");
-    var tape = body.querySelector(".mg-tape");
+    var boxCells = Array.prototype.slice.call(body.querySelectorAll(".pk-cell"));
+    var tray = body.querySelector(".pk-tray");
     var note = body.querySelector(".mg-freeze-note");
-    var chips = Array.prototype.slice.call(body.querySelectorAll(".mg-chip"));
-    var flaps = {};
-    Array.prototype.forEach.call(body.querySelectorAll(".mg-flap"), function (f) { flaps[f.getAttribute("data-flap")] = f; });
-    var idx = 0, locked = false;
+    var boxEl = body.querySelector(".pk-box");
+    var cur = 0, px = 0, py = 0, locked = false, stack = [];
+
+    function shape(p) { return rotCells(p.base, p.rot); }
+    function clampPos() {
+      var d = boxDims(shape(pieces[cur]));
+      px = clamp(px, 0, W - d.w); py = clamp(py, 0, H - d.h);
+    }
+    function occupancy() {
+      var occ = [], i;
+      for (i = 0; i < W * H; i++) occ.push(-1);
+      pieces.forEach(function (p, pi) {
+        if (!p.placed) return;
+        shape(p).forEach(function (q) { occ[(p.y + q[1]) * W + (p.x + q[0])] = pi; });
+      });
+      return occ;
+    }
+    function ghostCells() { return shape(pieces[cur]).map(function (q) { return [px + q[0], py + q[1]]; }); }
+    function overlaps() {
+      var occ = occupancy();
+      return ghostCells().some(function (q) { return occ[q[1] * W + q[0]] >= 0; });
+    }
+    function unplaced() { return pieces.filter(function (p) { return !p.placed; }).length; }
 
     function paint() {
-      chips.forEach(function (ch, i) {
-        ch.classList.toggle("is-done", i < idx);
-        ch.classList.toggle("is-current", i === idx);
-        ch.classList.remove("is-bad");
+      var occ = occupancy(), ghost = {}, bad = overlaps();
+      if (!c.isFinished() && !pieces[cur].placed) ghostCells().forEach(function (q) { ghost[q[1] * W + q[0]] = 1; });
+      boxCells.forEach(function (el, i) {
+        var o = occ[i];
+        el.className = "pk-cell" + (o >= 0 ? " is-fill" : "") + (ghost[i] ? (bad ? " is-bad" : " is-ghost") : "");
+        if (o >= 0) el.style.setProperty("--pc", pieces[o].color);
+        else if (ghost[i]) el.style.setProperty("--pc", pieces[cur].color);
+        else el.style.removeProperty("--pc");
       });
+      tray.innerHTML = pieces.map(function (p, pi) {
+        var sh = shape(p), d = boxDims(sh), m = {};
+        sh.forEach(function (q) { m[q[1] * d.w + q[0]] = 1; });
+        var g = "";
+        for (var yy = 0; yy < d.h; yy++) for (var xx = 0; xx < d.w; xx++) g += '<i class="pk-mini' + (m[yy * d.w + xx] ? " on" : "") + '"></i>';
+        return '<button type="button" class="pk-piece' + (p.placed ? " is-placed" : "") + (pi === cur && !p.placed ? " is-active" : "") + '" data-pi="' + pi + '" style="--pc:' + p.color + '" aria-label="조각 ' + (pi + 1) + '">'
+          + '<span class="pk-mg" style="--cols:' + d.w + '">' + g + "</span></button>";
+      }).join("");
+      note.textContent = note.dataset.keep === "1" ? note.textContent : "";
+      if (c.testHooks) body.setAttribute("data-pk", [cur, px, py, pieces[cur].rot, stack.length].join(","));
     }
-    function reopenAll() {
-      Object.keys(flaps).forEach(function (k) { flaps[k].classList.remove("is-closed"); });
-      tape.classList.remove("is-on");
+    function say(msg, ms) {
+      note.textContent = msg; note.dataset.keep = "1";
+      c.later(function () { note.dataset.keep = ""; note.textContent = ""; }, ms || 900);
+    }
+    function select(i) {
+      cur = i;
+      var p = pieces[cur];
+      if (!p.placed) { var d = boxDims(shape(p)); px = clamp(px, 0, W - d.w); py = clamp(py, 0, H - d.h); }
+    }
+    function nextFree(from) {
+      for (var k = 1; k <= pieces.length; k++) { var j = (from + k) % pieces.length; if (!pieces[j].placed) return j; }
+      return from;
     }
 
-    function press(k) {
-      if (locked || c.isFinished()) return;
-      var want = idx < len ? seq[idx] : "space";
-      if (k === want) {
-        if (idx < len) {
-          flaps[k].classList.add("is-closed");
-          restartAnim(flaps[k], "is-pop");
-        } else {
-          // 테이프를 붙이는 순간 아직 열려 있던 덮개도 같이 닫혀야 "봉해진 상자"로 보인다
-          Object.keys(flaps).forEach(function (k) { flaps[k].classList.add("is-closed"); });
-          tape.classList.add("is-on");
+    function act(a) {
+      if (c.isFinished() || locked) return;
+      if (a === "left" || a === "right" || a === "up" || a === "down") {
+        if (pieces[cur].placed) return;
+        px += a === "left" ? -1 : a === "right" ? 1 : 0; py += a === "up" ? -1 : a === "down" ? 1 : 0;
+        clampPos();
+      } else if (a === "rotate") {
+        if (pieces[cur].placed) return;
+        pieces[cur].rot = (pieces[cur].rot + 1) % 4; clampPos();
+      } else if (a === "next") {
+        select(nextFree(cur));
+      } else if (a === "undo") {
+        if (!stack.length) return;
+        var li = stack.pop(), lp = pieces[li];
+        lp.placed = false; cur = li; px = lp.x; py = lp.y; clampPos();
+      } else if (a === "place") {
+        if (pieces[cur].placed) return;
+        if (overlaps()) {
+          c.addMistake();
+          locked = true;
+          restartAnim(boxEl, "is-shake");
+          say("겹쳐서 놓을 수 없어요 — 자리나 방향을 바꿔 보세요", PACK_LOCK_MS);
+          c.later(function () { locked = false; paint(); }, PACK_LOCK_MS);
+          paint();
+          return;
         }
-        idx++;
-        paint();
-        if (idx === len + 1) c.later(c.finish, 280);
-        return;
+        var p = pieces[cur]; p.placed = true; p.x = px; p.y = py; stack.push(cur);
+        if (stack.length === pieces.length) {
+          paint();
+          say("상자가 가득 찼어요!", 1500);
+          c.later(c.finish, 420);
+          return;
+        }
+        select(nextFree(cur));
       }
-      // ---- 오입력 ----
-      c.addMistake();
-      restartAnim(box, "is-shake");
-      var cur = chips[idx]; if (cur) { cur.classList.add("is-bad"); }
-      var rule = config.mistakeRule;
-      if (rule === "reset") {
-        idx = 0;
-        reopenAll();
-        note.textContent = "틀렸어요 — 처음부터!";
-        c.later(function () { note.textContent = ""; }, 900);
-        c.later(paint, 160);
-      } else if (rule === "freeze") {
-        locked = true;
-        note.textContent = "잠깐 멈춤 (0.5초)";
-        c.later(function () { locked = false; note.textContent = ""; paint(); }, 500);
-      } else { // ignore
-        c.later(paint, 160);
-      }
+      paint();
     }
 
     function onKey(e) {
-      if (e.repeat || c.isFinished()) return;
-      var k = null;
-      if (e.key === "ArrowUp") k = "up";
-      else if (e.key === "ArrowDown") k = "down";
-      else if (e.key === "ArrowLeft") k = "left";
-      else if (e.key === "ArrowRight") k = "right";
-      else if (e.code === "Space" || e.key === " ") k = "space";
-      if (!k) return;
+      if (e.repeat && e.key !== "ArrowLeft" && e.key !== "ArrowRight" && e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+      if (c.isFinished()) return;
+      var a = null;
+      if (e.key === "ArrowLeft") a = "left";
+      else if (e.key === "ArrowRight") a = "right";
+      else if (e.key === "ArrowUp") a = "up";
+      else if (e.key === "ArrowDown") a = "down";
+      else if (e.code === "Space" || e.key === " ") a = "rotate";
+      else if (e.key === "Enter") a = "place";
+      else if (e.key === "Backspace" || e.key === "z" || e.key === "Z") a = "undo";
+      else if (e.key === "Tab") a = "next";
+      if (!a) return;
       e.preventDefault();
       e.stopPropagation(); // 게임 본체의 전역 스페이스바/방향키 핸들러가 이 키를 따로 처리하지 않게 막는다
-      press(k);
+      act(a);
     }
     document.addEventListener("keydown", onKey, true);
     c.onCleanup(function () { document.removeEventListener("keydown", onKey, true); });
-
-    Array.prototype.forEach.call(body.querySelectorAll(".mg-key"), function (b) {
-      b.addEventListener("pointerdown", function (e) { e.preventDefault(); press(b.getAttribute("data-k")); });
+    Array.prototype.forEach.call(body.querySelectorAll(".mg-key[data-pk]"), function (b) {
+      b.addEventListener("pointerdown", function (e) { e.preventDefault(); act(b.getAttribute("data-pk")); });
+    });
+    tray.addEventListener("pointerdown", function (e) { // 트레이의 조각을 누르면 그 조각을 고른다
+      var t = e.target.closest ? e.target.closest(".pk-piece") : null;
+      if (!t || c.isFinished() || locked) return;
+      var pi = parseInt(t.getAttribute("data-pi"), 10);
+      if (pieces[pi].placed) return;
+      e.preventDefault(); select(pi); paint();
     });
     paint();
     return {
       hint: function () {
-        var r = config.mistakeRule;
-        return "화면에 뜬 순서대로 방향키를 누르고, 마지막은 스페이스바로 테이프를 붙이세요. "
-          + (r === "reset" ? "한 번 틀리면 처음부터 다시 해야 해요." : r === "freeze" ? "틀리면 0.5초 멈춰요." : "틀린 키는 무시돼요.");
+        return "조각들을 상자 칸에 빈틈없이 채우세요. 방향키(←↑↓→)로 조각을 옮기고, 스페이스로 돌리고, 엔터로 놓아요. 안 맞으면 백스페이스로 되돌리고, 탭으로 다른 조각을 고를 수 있어요. 겹치게 놓으면 실수!";
       },
     };
   }
@@ -1041,21 +1241,19 @@ body.main-view #app { height: 100vh; min-height: 0; }
   // 이상 확인 (택배 검수) -- 벨트로 들어오는 택배의 "앞면 · 옆면 · 송장"을 서로 맞춰 보고,
   //   셋이 모두 같은 종류를 가리키면 그 종류 칸으로 보내고, 하나라도 다르면 폐기한다.
   //   ← 일반   ↓ 깨지기   → 귀중품   SPACE 정보가 안 맞는 택배 폐기
-  // 2026-10-07 재설계 (사용자 피드백: "분류 + 이상품 SPACE는 반응속도 게임이다. 앞면+옆면+송장 정보를 주고 두 정보가
-  //   일치하지 않을 때만 폐기하게 해서 판단이 들어가게"). 세 정보는 서로 다른 방식으로 표현된다:
-  //     앞면 = 띠 모양/색 (일반=베이지 띠, 깨지기=빨간 줄무늬 띠, 귀중품=금색 리본)
+  // 2026-10-07 재설계 (사용자 피드백: "분류 + 이상품 SPACE는 반응속도 게임이다. 두 정보가 일치하지 않을 때만 폐기하게 해서
+  //   판단이 들어가게") + 같은 날 "정보가 너무 많아 오히려 복잡하다" -> 단서를 두 개로 줄였다:
   //     옆면 = 취급 그림 (일반=위 화살표 박스, 깨지기=유리잔, 귀중품=보석)
   //     송장 = 내용물 글자 (예: 옷/책 = 일반, 유리컵/도자기 = 깨지기, 시계/노트북 = 귀중품)
-  //   그래서 눈으로 "반응"하는 게 아니라 세 가지를 읽고 같은 종류인지 판단해야 한다. 이상한 택배는 셋 중 하나만 다른 종류를 가리킨다.
-  //   (스크래치 같은 겉 흠집은 판단과 무관한 장식이다 -- "흠집 = 폐기"로 찍지 못하게 하는 미끼.)
+  //   둘이 같은 종류면 그 칸으로, 서로 다르면 SPACE 폐기. 앞면 띠/흠집 같은 추가 정보는 없다(맨 상자).
   // 분류 3종은 게임의 실제 카테고리(일반/깨지기/귀중품)와 같은 색을 쓴다.
   // 내부 kind 키는 그대로 "inspect" (game-data.js의 TYPES.mini와 시험장이 이 이름을 쓴다).
   // ======================================================================
-  //   n 택배 수, bad 정보가 안 맞는 택배 수, hard 송장 내용물을 덜 뻔한 단어로(0 쉬움/1 어려움), decoy 멀쩡한 택배에 스크래치 넣을 확률
+  //   n 택배 수, bad 그림과 글자가 안 맞는 택배 수, hard 송장 내용물을 덜 뻔한 단어로(0 쉬움/1 어려움)
   var INSPECT_CFG = [
-    { n: 6,  bad: 2, hard: 0, decoy: 0 },
-    { n: 9,  bad: 3, hard: 0, decoy: 0.4 },
-    { n: 11, bad: 4, hard: 1, decoy: 0.5 },
+    { n: 6,  bad: 2, hard: 0 },
+    { n: 9,  bad: 3, hard: 0 },
+    { n: 11, bad: 4, hard: 1 },
   ];
   var CLASSES = [
     { key: "left",  name: "일반",   tag: "일반",   color: "#C9A576", light: "#ddc08f", keyGlyph: "←", hint: "옷 · 책 · 생활용품" },
@@ -1084,38 +1282,21 @@ body.main-view #app { height: 100vh; min-height: 0; }
       + '<path d="M-10 -6h20M-3 -6l3 14 3-14" fill="none" stroke="#3a2812" stroke-width="1.1"/>'; // 보석
   }
 
-  // 택배 하나를 그린다: 앞면(띠) + 옆면(그림) + 송장(내용물). item = { front, side, slip(단어), bad }.
-  function pkgSvg(item, cfg) {
-    var F = CLASSES[item.front], tapeX = 14 + rand(34);
+  // 택배 하나를 그린다: 옆면(그림) + 송장(내용물). 앞면은 모두 같은 맨 상자(정보 없음). item = { side, slip(단어), bad }.
+  function pkgSvg(item) {
     var s = '<svg viewBox="0 0 190 100" aria-hidden="true">'
       + '<ellipse cx="95" cy="92" rx="88" ry="5" fill="rgba(43,29,18,.18)"/>'
-      // 앞면
-      + '<rect x="6" y="24" width="70" height="62" rx="3" fill="' + F.color + '" stroke="#6b4e26" stroke-width="1.8"/>'
-      + '<rect x="6" y="24" width="70" height="12" rx="3" fill="' + F.light + '" stroke="#6b4e26" stroke-width="1.8"/>';
-    if (item.front === 0) {
-      s += '<rect x="' + tapeX + '" y="24" width="14" height="34" fill="#ead8b0" opacity=".95"/>';
-    } else if (item.front === 1) {
-      s += '<rect x="' + tapeX + '" y="24" width="14" height="34" fill="#d6452f"/>'
-        + '<path d="M' + tapeX + ' 33l14-6M' + tapeX + ' 42l14-6M' + tapeX + ' 51l14-6" stroke="#fff" stroke-width="2.4"/>';
-    } else {
-      s += '<rect x="35" y="24" width="12" height="62" fill="#b8841f"/><rect x="6" y="50" width="70" height="10" fill="#b8841f"/>'
-        + '<circle cx="41" cy="55" r="7" fill="#e0a82e" stroke="#8a5f12" stroke-width="1.4"/>';
-    }
-    // 옆면: 같은 박스의 옆, 취급 그림
+      + '<rect x="6" y="24" width="70" height="62" rx="3" fill="#cfae7a" stroke="#6b4e26" stroke-width="1.8"/>'
+      + '<rect x="6" y="24" width="70" height="12" rx="3" fill="#ddc08f" stroke="#6b4e26" stroke-width="1.8"/>'
+      + '<rect x="34" y="24" width="14" height="34" fill="#ead8b0" opacity=".95"/>';
+    // 옆면: 취급 그림
     s += '<polygon points="76,24 104,16 104,78 76,86" fill="#d9b982" stroke="#6b4e26" stroke-width="1.8" stroke-linejoin="round"/>'
       + '<g transform="translate(90 51) scale(0.95)">' + sideIcon(item.side) + '</g>';
     // 송장: 종이 라벨, 내용물 글자
     s += '<rect x="112" y="22" width="72" height="62" rx="2.5" fill="#fffefa" stroke="#9a8460" stroke-width="1.4"/>'
       + '<rect x="112" y="22" width="72" height="11" rx="2.5" fill="#E8681C"/>'
       + '<text x="148" y="30.5" text-anchor="middle" font-size="8" font-weight="800" fill="#fff8ef" letter-spacing="2">송장</text>'
-      + '<text x="118" y="46" font-size="6.5" font-weight="700" fill="#8a7256">내용물</text>'
-      + '<text x="148" y="64" text-anchor="middle" font-size="' + (item.slip.length > 3 ? 14 : 17) + '" font-weight="800" fill="#2b1d12">' + item.slip + '</text>'
-      + '<rect x="118" y="73" width="60" height="5" fill="#2b1d12" opacity=".8"/>';
-    if (!item.bad && cfg.decoy && Math.random() < cfg.decoy) {
-      // 정보가 맞는 택배에도 가벼운 스크래치 -- "흠집이 보이면 폐기"로 찍지 못하게 한다
-      var sy = 44 + rand(30), sx = 12 + rand(40);
-      s += '<path d="M' + sx + ' ' + sy + 'h' + (8 + rand(10)) + '" stroke="rgba(60,33,10,.4)" stroke-width="1.2" stroke-linecap="round" fill="none"/>';
-    }
+      + '<text x="148" y="62" text-anchor="middle" font-size="' + (item.slip.length > 3 ? 14 : 17) + '" font-weight="800" fill="#2b1d12">' + item.slip + '</text>';
     return s + "</svg>";
   }
 
@@ -1124,10 +1305,10 @@ body.main-view #app { height: 100vh; min-height: 0; }
     shuffle(Array.apply(null, { length: cfg.n }).map(function (_, i) { return i; })).slice(0, cfg.bad).forEach(function (i) { badAt[i] = true; });
     var items = [];
     for (var i = 0; i < cfg.n; i++) {
-      var cls = rand(3), parts = [cls, cls, cls], bad = !!badAt[i];
-      if (bad) { var odd = rand(3), other = (cls + 1 + rand(2)) % 3; parts[odd] = other; }
-      var pool = SLIP_WORDS[parts[2]], words = cfg.hard && Math.random() < 0.6 ? pool[1] : pool[0];
-      items.push({ cls: cls, bad: bad, front: parts[0], side: parts[1], slip: words[rand(words.length)] });
+      var cls = rand(3), bad = !!badAt[i], sideCls = cls, slipCls = cls;
+      if (bad) { var other = (cls + 1 + rand(2)) % 3; if (Math.random() < 0.5) sideCls = other; else slipCls = other; }
+      var pool = SLIP_WORDS[slipCls], words = cfg.hard && Math.random() < 0.6 ? pool[1] : pool[0];
+      items.push({ cls: cls, bad: bad, side: sideCls, slip: words[rand(words.length)] });
     }
     return items;
   }
@@ -1150,13 +1331,13 @@ body.main-view #app { height: 100vh; min-height: 0; }
       + '<p class="mg-progress">처리 <em class="mg-found">0</em> / ' + cfg.n + '개</p>'
       + '<p class="mg-freeze-note"></p>'
       + '<div class="mg-bins">' + binsHtml + '</div>'
-      + '<button type="button" class="mg-bin mg-discard" data-a="space" aria-label="정보가 안 맞는 택배 폐기"><span class="mg-bin-k">SPACE</span><span class="mg-bin-n">앞면·옆면·송장이 하나라도 다르면 폐기</span></button>';
+      + '<button type="button" class="mg-bin mg-discard" data-a="space" aria-label="정보가 안 맞는 택배 폐기"><span class="mg-bin-k">SPACE</span><span class="mg-bin-n">그림과 글자가 다르면 폐기</span></button>';
 
     var queue = body.querySelector(".mg-queue");
     var doneEl = body.querySelector(".mg-found");
     var note = body.querySelector(".mg-freeze-note");
     var els = items.map(function (it, i) {
-      var d = el("div", "mg-pkg", pkgSvg(it, cfg));
+      var d = el("div", "mg-pkg", pkgSvg(it));
       d.style.setProperty("--i", i);
       queue.appendChild(d);
       return d;
@@ -1185,7 +1366,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
       locked = true;
       restartAnim(els[idx], "mg-shake");
       if (btn) restartAnim(btn, "is-wrong");
-      note.textContent = items[idx].bad && a !== "space" ? "앞면·옆면·송장이 안 맞는 택배예요 — 폐기!" : (a === "space" ? "세 정보가 모두 같은 종류예요" : "다른 칸이에요 — 세 정보를 다시 보세요");
+      note.textContent = items[idx].bad && a !== "space" ? "그림과 글자가 달라요 — 폐기!" : (a === "space" ? "그림과 글자가 같은 종류예요" : "다른 칸이에요 — 그림과 글자를 다시 보세요");
       c.later(function () { locked = false; note.textContent = ""; }, INSPECT_LOCK_MS);
     }
 
@@ -1208,7 +1389,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
       b.addEventListener("pointerdown", function (e) { e.preventDefault(); act(b.getAttribute("data-a")); });
     });
     setFront();
-    return { hint: function () { return "택배의 앞면(띠) · 옆면(그림) · 송장(내용물)이 모두 같은 종류를 가리키면 그 칸으로 보내세요 (← 일반 · ↓ 깨지기 · → 귀중품). 하나라도 다르면 SPACE로 폐기! 흠집은 상관없어요. 틀리면 잠깐 멈춰요."; } };
+    return { hint: function () { return "옆면 그림과 송장 글자가 같은 종류면 그 칸으로(← 일반 · ↓ 깨지기 · → 귀중품), 서로 다르면 SPACE로 폐기. 틀리면 잠깐 멈춰요."; } };
   }
 
   // ======================================================================
@@ -1247,7 +1428,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
   function makeStickerPlan(level, n, k) {
     var hide = STK_HIDE[level - 1];
     var best = null;
-    for (var attempt = 0; attempt < 900; attempt++) {
+    for (var attempt = 0; attempt < 4000; attempt++) {
       // 모든 박스가 비슷해 보이도록 숫자는 작은 집합(3개)에서만, 글자도 2개에서만 뽑는다
       var digits = shuffle(["1", "2", "3", "7", "8", "9"]).slice(0, 3), letters = shuffle(STK_LETTERS).slice(0, 2);
       var used = {}, boxes = [], guard = 0;
@@ -1663,7 +1844,218 @@ body.main-view #app { height: 100vh; min-height: 0; }
     };
   }
 
-  var GAMES = { pack: packGame, inspect: inspectGame, sticker: stickerGame, map: mapGame };
+  // ======================================================================
+  // 창고 정리 (소코반) -- 방향키로 걸으며 택배 박스를 밀어 노란 하역 칸에 모두 넣기
+  //   ← ↑ ↓ → 이동(박스는 밀기만 가능, 당기기 없음)   Z / BACKSPACE 되돌리기(무료)   R 처음부터
+  //   2026-10-08: 실물 우봉고 복귀 뒤 "우봉고가 아닌 형태로 우봉고처럼 생각이 필요한 미니게임" 후보로 추가한 시험용 게임.
+  //   (사용자: 키보드로 진행하는 게 좋다.) 한 번 잘못 밀면 다시 생각해야 하는 시행착오 + 박스가 하나씩 제자리에 들어가는 완성 장면이 목적.
+  //   판은 gen 스크립트(역방향 당기기로 섞은 뒤 BFS 풀이기로 최적 이동 수를 검증)로 미리 만들어 SOKO_POOL에 넣었다 -- 전부 풀 수 있다.
+  //   판 형식: '#' 벽, ' ' 바닥, '.' 하역 칸, '$' 박스, '@' 플레이어, '+' 하역 칸 위 플레이어.
+  //   막다른 길(박스가 풀 수 없는 위치에 끼임)을 만들면 실수 +1이 기록되고 안내가 뜬다 -- 되돌리기는 무료.
+  // ======================================================================
+  var SOKO_POOL = /*SOKO_POOL*/[
+    // 레벨 1 (8판)
+    [["######","#  ###","#  $@#","#   .#","######"],
+     ["######","# #  #","#@$  #","#.   #","######"],
+     ["######","#   .#","#  $@#","#  ###","######"],
+     ["######","#.   #","#@$  #","###  #","######"],
+     ["######","###  #","#@$  #","#.   #","######"],
+     ["######","#.   #","#@$  #","# #  #","######"],
+     ["######","#  # #","#  $@#","#   .#","######"],
+     ["######","#   .#","#  $@#","#  # #","######"]],
+    // 레벨 2 (16판)
+    [["#######","####  #","#@$   #","#   $ #","#..   #","#######"],
+     ["#######","# .   #","# # # #","# $ $@#","# #.  #","#######"],
+     ["#######","#   #.#","#   #.#","##$  $#","# @   #","#######"],
+     ["#######","#   #.#","#  $@ #","#  #$ #","# .#  #","#######"],
+     ["#######","#     #","# .#$ #","#   $@#","#  .# #","#######"],
+     ["#######","#  .  #","#   $@#","### $##","#.    #","#######"],
+     ["#######","##.@ ##","#  $$ #","#.  # #","#     #","#######"],
+     ["#######","#  #  #","# $#. #","#@$   #","#.#   #","#######"],
+     ["#######","#.#   #","#  #  #","#  $$ #","#. #@ #","#######"],
+     ["#######","#.  # #","# $#  #","#@$   #","#   #.#","#######"],
+     ["#######","#.  # #","##.   #","#@$ $ #","# #   #","#######"],
+     ["#######","# ##@ #","#  $$ #","# .   #","# . # #","#######"],
+     ["#######","#  @. #","#  $$ #","# #.# #","#     #","#######"],
+     ["#######","#..   #","### $ #","#   $@#","#   # #","#######"],
+     ["#######","##  . #","# @$  #","# $#  #","## .  #","#######"],
+     ["#######","#  .  #","#   $@#","# $## #","#  . ##","#######"]],
+    // 레벨 3 (16판)
+    [["########","#   $@.#","# # $###","# # $  #","#    ..#","########"],
+     ["########","#   #  #","##  #$ #","#  . $@#","# $ .#.#","########"],
+     ["########","#  #   #","#+$ .  #","#.#$$  #","#    # #","########"],
+     ["########","#    #.#","# $ $#.#","##  .$@#","#   #  #","########"],
+     ["########","##    .#","# $##  #","#@$  $ #","#.#   .#","########"],
+     ["########","#   . ##","# # #$ #","# $ $+ #","#    #.#","########"],
+     ["########","#.  .  #","# $ #$ #","###@$  #","#.   # #","########"],
+     ["########","##     #","# $  $@#","# $ # .#","#   #..#","########"],
+     ["########","#     ##","# # #$ #","# $  $@#","# .. #.#","########"],
+     ["########","#  #   #","#  #$$.#","#    $@#","#  .##.#","########"],
+     ["########","#    # #","# $$## #","#    $@#","# . .. #","########"],
+     ["########","# ##   #","#@$   .#","# $$#. #","#   # .#","########"],
+     ["########","#. . # #","#    $@#","# #$#$ #","#  .  ##","########"],
+     ["########","# . .###","# $. $@#","# #  $ #","# #    #","########"],
+     ["########","#    . #","#@$  $ #","### #$ #","#  .# .#","########"],
+     ["########","#     .#","# $#$ ##","##   $@#","#.. #  #","########"]]
+  ]/*END_SOKO_POOL*/;
+  var SOKO_STEP_MS = 85;  // 방향키를 꾹 누를 때 한 칸씩 가는 최소 간격
+  var SOKO_DIRS = { up: [0, -1], down: [0, 1], left: [-1, 0], right: [1, 0] };
+
+  function sokoParse(rows) {
+    var H = rows.length, W = 0, y, x, i;
+    rows.forEach(function (r) { W = Math.max(W, r.length); });
+    var wall = [], tgt = [], boxes = [], player = 0;
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var ch = rows[y].charAt(x) || "#"; i = y * W + x;
+      wall[i] = ch === "#"; tgt[i] = ch === "." || ch === "*" || ch === "+";
+      if (ch === "$" || ch === "*") boxes.push(i);
+      if (ch === "@" || ch === "+") player = i;
+    }
+    return { W: W, H: H, wall: wall, tgt: tgt, boxes: boxes, player: player };
+  }
+  // 풀 수 없게 된 박스: 하역 칸이 아닌 구석, 또는 양 끝이 벽으로 막힌 벽 줄(그 줄에 하역 칸이 없음)
+  function sokoDead(S, i) {
+    if (S.tgt[i]) return false;
+    var W = S.W, x = i % W, y = (i / W) | 0, k, side;
+    var open = function (xx, yy) { return xx >= 0 && yy >= 0 && xx < W && yy < S.H && !S.wall[yy * W + xx]; };
+    var wU = !open(x, y - 1), wD = !open(x, y + 1), wL = !open(x - 1, y), wR = !open(x + 1, y);
+    if ((wU || wD) && (wL || wR)) return true;
+    // 벽을 따라 늘어선 줄 검사 (옆으로만 밀 수 있다)
+    for (side = 0; side < 4; side++) {
+      var vertWall = side < 2 ? (side === 0 ? wU : wD) : (side === 2 ? wL : wR);
+      if (!vertWall) continue;
+      var horiz = side < 2, dx = horiz ? 1 : 0, dy = horiz ? 0 : 1, nx = side === 0 ? 0 : side === 1 ? 0 : side === 2 ? -1 : 1, ny = side === 0 ? -1 : side === 1 ? 1 : 0;
+      var hasT = false, closed = true, dir;
+      for (dir = -1; dir <= 1; dir += 2) {
+        var cx = x, cy = y;
+        for (;;) {
+          if (S.tgt[cy * W + cx]) hasT = true;
+          var ax = cx + dx * dir, ay = cy + dy * dir;
+          if (!open(ax, ay)) break;                       // 줄 끝이 벽
+          if (open(ax + nx, ay + ny)) { closed = false; break; } // 이 칸은 벽을 벗어나 있다 -> 빠져나갈 수 있음
+          cx = ax; cy = ay;
+        }
+        if (!closed) break;
+      }
+      if (closed && !hasT) return true;
+    }
+    return false;
+  }
+
+  var SK_BOX_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true"><rect x="4" y="7" width="32" height="28" rx="2.5" class="sk-bx-body"/><rect x="4" y="7" width="32" height="8" rx="2.5" class="sk-bx-top"/><rect x="16" y="7" width="8" height="17" class="sk-bx-tape"/><path class="sk-bx-ok" d="M12 25l6 6 11-12"/></svg>';
+  var SK_MAN_SVG = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="14" r="7.5" class="sk-m-face"/><path d="M11.5 12.5c0-6 4-8.5 8.5-8.5s8.5 2.5 8.5 8.5Z" class="sk-m-cap"/><rect x="19" y="10" width="14" height="3.4" rx="1.6" class="sk-m-brim"/><path d="M9 36c0-8 5-13 11-13s11 5 11 13Z" class="sk-m-body"/><circle cx="16.6" cy="15" r="1.1" class="sk-m-eye"/><circle cx="23.4" cy="15" r="1.1" class="sk-m-eye"/></svg>';
+
+  function sokoGame(body, c) {
+    var pool = SOKO_POOL[c.level - 1] && SOKO_POOL[c.level - 1].length ? SOKO_POOL[c.level - 1] : SOKO_POOL[1];
+    var rows = pool[rand(pool.length)];
+    var S = sokoParse(rows), W = S.W, H = S.H, N = W * H;
+    var start = { p: S.player, boxes: S.boxes.slice() };
+    var p = start.p, boxes = start.boxes.slice(), hist = [], lastStep = 0, stuck = false, moves = 0;
+    if (c.testHooks) body.setAttribute("data-plan", JSON.stringify({ rows: rows }));
+
+    var floorHtml = "", i;
+    for (i = 0; i < N; i++) floorHtml += '<i class="sk-cell' + (S.wall[i] ? " is-wall" : S.tgt[i] ? " is-tgt" : "") + '"></i>';
+    var boxHtml = boxes.map(function () { return '<span class="sk-box">' + SK_BOX_SVG + "</span>"; }).join("");
+    body.innerHTML =
+      '<div class="sk-wrap"><div class="sk-board" style="--cols:' + W + ';--rows:' + H + '">'
+      + '<div class="sk-floor">' + floorHtml + "</div>" + boxHtml + '<span class="sk-man">' + SK_MAN_SVG + "</span></div></div>"
+      + '<p class="sk-status"><span>박스 <b class="sk-in">0</b> / ' + boxes.length + '</span><span>움직임 <b class="sk-moves">0</b></span></p>'
+      + '<p class="mg-freeze-note"></p>'
+      + '<div class="pk-pad sk-pad">'
+      + '<button type="button" class="mg-key" data-sk="up" aria-label="위">↑</button>'
+      + '<button type="button" class="mg-key" data-sk="left" aria-label="왼쪽">←</button>'
+      + '<button type="button" class="mg-key" data-sk="down" aria-label="아래">↓</button>'
+      + '<button type="button" class="mg-key" data-sk="right" aria-label="오른쪽">→</button>'
+      + '<button type="button" class="mg-key pk-act" data-sk="undo">되돌리기<small>Z · ⌫</small></button>'
+      + '<button type="button" class="mg-key pk-act" data-sk="restart">처음부터<small>R</small></button>'
+      + "</div>";
+    var boxEls = Array.prototype.slice.call(body.querySelectorAll(".sk-box"));
+    var manEl = body.querySelector(".sk-man"), inEl = body.querySelector(".sk-in"), movesEl = body.querySelector(".sk-moves");
+    var note = body.querySelector(".mg-freeze-note"), boardEl = body.querySelector(".sk-board");
+
+    function place(node, idx) { node.style.setProperty("--x", idx % W); node.style.setProperty("--y", (idx / W) | 0); }
+    function onTarget() { return boxes.filter(function (b) { return S.tgt[b]; }).length; }
+    function anyDead() { return boxes.some(function (b) { return sokoDead(S, b); }); }
+    function paint() {
+      place(manEl, p);
+      boxEls.forEach(function (e, bi) { place(e, boxes[bi]); e.classList.toggle("is-in", !!S.tgt[boxes[bi]]); e.classList.toggle("is-dead", sokoDead(S, boxes[bi])); });
+      inEl.textContent = onTarget(); movesEl.textContent = moves;
+      if (!stuck) note.textContent = "";
+      if (c.testHooks) body.setAttribute("data-sk", [p % W, (p / W) | 0, onTarget(), moves].join(","));
+    }
+    function act(a) {
+      if (c.isFinished()) return;
+      if (a === "undo") {
+        if (!hist.length) return;
+        var h = hist.pop(); p = h.p; boxes = h.boxes; moves = Math.max(0, moves - 1);
+        stuck = anyDead(); note.textContent = stuck ? "박스가 막다른 곳에 끼어 있어요 — 더 되돌리세요 (Z)" : "";
+        paint(); return;
+      }
+      if (a === "restart") {
+        p = start.p; boxes = start.boxes.slice(); hist = []; moves = 0; stuck = false; note.textContent = ""; paint(); return;
+      }
+      var d = SOKO_DIRS[a]; if (!d) return;
+      var x = p % W, y = (p / W) | 0, nx = x + d[0], ny = y + d[1];
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) return;
+      var ni = ny * W + nx; if (S.wall[ni]) { restartAnim(manEl, "is-bump"); return; }
+      var bi = boxes.indexOf(ni), nb = boxes;
+      if (bi >= 0) {
+        var mx = nx + d[0], my = ny + d[1];
+        if (mx < 0 || my < 0 || mx >= W || my >= H) { restartAnim(manEl, "is-bump"); return; }
+        var mi = my * W + mx;
+        if (S.wall[mi] || boxes.indexOf(mi) >= 0) { restartAnim(manEl, "is-bump"); return; }
+        nb = boxes.slice(); nb[bi] = mi;
+      }
+      hist.push({ p: p, boxes: boxes.slice() });
+      p = ni; boxes = nb; moves++;
+      if (bi >= 0) {
+        var dead = anyDead();
+        if (dead && !stuck) {
+          c.addMistake();
+          note.textContent = "박스가 막다른 곳에 끼었어요 — Z로 되돌려 보세요";
+          restartAnim(boardEl, "is-shake");
+        }
+        stuck = dead;
+      }
+      paint();
+      if (onTarget() === boxes.length) {
+        note.textContent = "창고 정리 끝!";
+        c.later(c.finish, 420);
+      }
+    }
+
+    function onKey(e) {
+      if (c.isFinished()) return;
+      var a = null;
+      if (e.key === "ArrowLeft") a = "left";
+      else if (e.key === "ArrowRight") a = "right";
+      else if (e.key === "ArrowUp") a = "up";
+      else if (e.key === "ArrowDown") a = "down";
+      else if (e.key === "Backspace" || e.key === "z" || e.key === "Z") a = "undo";
+      else if (e.key === "r" || e.key === "R") a = "restart";
+      if (!a) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.repeat) {
+        if (a === "restart") return;
+        var now = performance.now(); if (now - lastStep < SOKO_STEP_MS) return; lastStep = now;
+      } else lastStep = performance.now();
+      act(a);
+    }
+    document.addEventListener("keydown", onKey, true);
+    c.onCleanup(function () { document.removeEventListener("keydown", onKey, true); });
+    Array.prototype.forEach.call(body.querySelectorAll(".mg-key[data-sk]"), function (b) {
+      b.addEventListener("pointerdown", function (e) { e.preventDefault(); act(b.getAttribute("data-sk")); });
+    });
+    paint();
+    return {
+      hint: function () {
+        return "방향키(←↑↓→)로 걸으며 박스를 밀어 노란 하역 칸에 모두 넣으세요. 박스는 밀기만 되고 당길 수는 없어요! 구석에 끼면 Z(백스페이스)로 되돌리고, R로 처음부터 다시 해요.";
+      },
+    };
+  }
+
+  var GAMES = { pack: packGame, inspect: inspectGame, sticker: stickerGame, map: mapGame, soko: sokoGame };
 
   // ======================================================================
   // 공통 진행: 헤더(제목/시간/실수/포기), 타이머, 완료 배너, 정리
@@ -1751,7 +2143,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
 (function () {
   "use strict";
 
-  var TYPES = [{"key": "normal", "name": "일반택배", "count": 4, "pieces": 2, "reward": 2500, "penalty": 1000, "color": "#C9A576", "ink": "#16233F", "mini": "pack", "miniLevel": [2, 3]}, {"key": "fragile", "name": "깨지기 쉬운 택배", "count": 4, "pieces": 3, "reward": 5000, "penalty": 2500, "color": "#C7E29A", "ink": "#16233F", "mini": "inspect", "miniLevel": [2, 3]}, {"key": "valuable", "name": "귀중품", "count": 3, "pieces": [3, 4], "reward": 10000, "penalty": 5000, "color": "#F0B84A", "ink": "#16233F", "mini": "map", "miniLevel": [2, 3]}, {"key": "fixed-floor", "name": "확정 층수 택배", "count": 6, "pieces": 3, "fixedFloor": true, "reward": 3000, "penalty": 2500, "color": "#6DBBFD", "ink": "#16233F", "mini": "sticker", "miniLevel": [2, 3]}];
+  var TYPES = [{"key": "normal", "name": "일반택배", "count": 4, "pieces": 2, "reward": 2500, "penalty": 1000, "color": "#C9A576", "ink": "#16233F", "mini": "pack", "miniLevel": [2, 3]}, {"key": "fragile", "name": "깨지기 쉬운 택배", "count": 4, "pieces": 3, "reward": 5000, "penalty": 2500, "color": "#C7E29A", "ink": "#16233F", "mini": "inspect", "miniLevel": [2, 3]}, {"key": "valuable", "name": "귀중품", "count": 3, "pieces": 4, "reward": 10000, "penalty": 5000, "color": "#F0B84A", "ink": "#16233F", "mini": "soko", "miniLevel": [2, 3]}, {"key": "fixed-floor", "name": "확정 층수 택배", "count": 6, "pieces": 3, "fixedFloor": true, "reward": 3000, "penalty": 2500, "color": "#6DBBFD", "ink": "#16233F", "mini": "map", "miniLevel": [2, 3]}];
   // 2026-08-28: 전반/후반이 서로 다른 21장 퍼즐 이미지 세트를 쓴다 (build_client.py의 REF_DIR_1/
   // REF_DIR_2 참고). 보드 구조(id/catIdx/num)는 동일하고 src(이미지)만 다르므로 배열을 통째로
   // 두 벌 두고, cellMeta(id, half)가 half에 맞는 쪽에서 찾는다.
@@ -2145,7 +2537,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
   // TYPES[catIdx].mini(game-data.js)가 있는 종류의 칸은 우봉고 대신 minigames.js의 게임을 띄운다
   // (null이면 기존 우봉고 이미지 + "완료" 버튼). 게임은 #app이 아니라 #mg-layer에 mount한다 -- 이유는 CSS 주석 참고.
   // 서버는 이 게임을 모른다: 클라이언트가 끝까지 풀었다고 판정하면 예전과 똑같은 secure-cell 하나만 보낸다.
-  var MINI_NAME = { pack: "박스 포장", inspect: "이상 확인", sticker: "송장 붙이기", map: "지도 배달" };
+  var MINI_NAME = { pack: "박스 포장", inspect: "이상 확인", sticker: "송장 붙이기", map: "지도 배달", soko: "창고 정리" };
   // ?mgtest=1 이면 불량 검수의 정답 칸에 data-defect를 노출한다 (자동 테스트 전용 -- 일반 플레이엔 안 붙음).
   var TEST_HOOKS = /[?&]mgtest=1(&|$)/.test(location.search);
   var mg = null; // { cellId, ctl }

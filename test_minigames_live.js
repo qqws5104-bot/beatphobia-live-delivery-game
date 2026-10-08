@@ -2,7 +2,7 @@
 //
 // test_minigames.js는 시험장 페이지에서 게임 자체를 검증하고, 이 파일은 그 게임이 실제 게임에 붙었을 때의
 // 통합 문제를 본다:
-//   - 카테고리별로 올바른 게임이 뜨는가 (일반=박스 포장 / 깨지기=이상 확인 / 확정 층수=송장 붙이기 / 귀중품=지도 배달)
+//   - 카테고리별로 올바른 게임이 뜨는가 (일반=박스 포장 / 깨지기=이상 확인 / 확정 층수=지도 배달 / 귀중품=창고 정리 -- 2026-10-08 배치)
 //   - 진짜로 풀면 칸이 확보되고(secure-cell), 포기하면 확보되지 않는가
 //   - ★ 플레이 도중에 상대가 칸을 확보해 서버 상태 브로드캐스트가 와도 내 게임이 안 날아가는가
 //     (render()가 #app을 통째로 갈아엎기 때문에, 미니게임을 #app 안에 두면 이게 깨진다)
@@ -13,6 +13,7 @@
 "use strict";
 const { chromium } = require("playwright");
 const { COURIERS, FLOORS, TYPES } = require("./game-data.js");
+const { skParse, skSolve } = require("./test_soko_solver.js");
 const COURIER_NAME = {};
 COURIERS.forEach((c) => { COURIER_NAME[c.key] = c.name; });
 
@@ -48,6 +49,26 @@ const myCount = (page, cat) => countSel(page, `.board-row[data-cat="${cat}"] .my
 const isFloorMine = (page, floorIdx) => page.evaluate((i) => { const f = Array.from(document.querySelectorAll('.board-row[data-cat="3"] .floor-btn'))[i]; return !!f && f.classList.contains("mine"); }, floorIdx);
 const isFloorOpenable = (page, id) => countSel(page, `[data-action="open-cell"][data-cell="${id}"]`).then((n) => n === 1);
 
+// 박스 포장 봇(2026-10-07 조각 퍼즐): data-plan(정답 배치) / data-pk(현재 조각, x, y, 회전, 놓은 수) 훅으로 조각을 하나씩 돌려 옮겨 엔터.
+const pkState = async (page) => (await page.getAttribute("#mg-layer .mg-body", "data-pk")).split(",").map(Number);
+const pkPlan = async (page) => JSON.parse(await page.getAttribute("#mg-layer .mg-body", "data-plan"));
+async function pkPlace(page, i, plan) {
+  let [cur] = await pkState(page), g = 0;
+  while (cur !== i) { await page.keyboard.press("Tab"); [cur] = await pkState(page); assert(++g < 12, "Tab cycles to the wanted piece"); }
+  for (let r = 0; (await pkState(page))[3] % 4 !== 0 && r < 4; r++) await page.keyboard.press("Space");
+  let [, px, py] = await pkState(page); g = 0;
+  const { x: tx, y: ty } = plan.pieces[i];
+  while (px !== tx || py !== ty) {
+    await page.keyboard.press(px < tx ? "ArrowRight" : px > tx ? "ArrowLeft" : py < ty ? "ArrowDown" : "ArrowUp");
+    [, px, py] = await pkState(page); assert(++g < 60, "piece reaches its target cell");
+  }
+  await page.keyboard.press("Enter");
+}
+async function pkSolve(page, from) { // from번째 조각부터 끝까지
+  const plan = await pkPlan(page);
+  for (let i = from || 0; i < plan.pieces.length; i++) await pkPlace(page, i, plan);
+}
+
 // 열려 있는 미니게임을 진짜로 푼다 (사람이 하는 것과 같은 입력: 키보드 / 마우스 드래그).
 async function playOpenGame(page) {
   const kind = await page.evaluate(() => {
@@ -55,11 +76,18 @@ async function playOpenGame(page) {
     const m = r && r.className.match(/mg-kind-(\w+)/);
     return m ? m[1] : null;
   });
-  if (kind === "pack" || kind === "inspect") {
+  if (kind === "pack") {
+    await pkSolve(page);
+  } else if (kind === "inspect") {
     const seq = (await page.getAttribute("#mg-layer .mg-body", "data-seq")).split(",");
     for (const k of seq) await page.keyboard.press(KEY[k]);
   } else if (kind === "map") {
     await playMap(page);
+  } else if (kind === "soko") {
+    const rows = JSON.parse(await page.getAttribute("#mg-layer .mg-body", "data-plan")).rows, P = skParse(rows);
+    const path = skSolve(P, P.player, P.boxes);
+    const SK = { U: "ArrowUp", D: "ArrowDown", L: "ArrowLeft", R: "ArrowRight" };
+    for (const ch of path) await page.keyboard.press(SK[ch]);
   } else if (kind === "sticker") {
     // 송장 붙이기는 키보드 전용: 송장 코드와 같은 박스까지 ←로 커서를 옮기고 스페이스.
     for (let guard = 0; guard < 80; guard++) {
@@ -145,8 +173,8 @@ async function main() {
   // (보드가 그려지는 순간과 "택배 확보" 문구가 뜨는 순간이 같은 틱이 아닐 수 있어 기다린다 -- 한 번 이 경쟁 상태로 실패함)
   await waitFor(async () => (await bodyText(p1)).includes("지도 배달"), { label: "board game names rendered" });
   const board = await bodyText(p1);
-  for (const name of ["박스 포장", "이상 확인", "송장 붙이기", "지도 배달"]) assert(board.includes(name), `board should name the game '${name}'`);
-  log("보드에 카테고리별 게임 이름 표시: 박스 포장 / 이상 확인 / 송장 붙이기 / 지도 배달");
+  for (const name of ["박스 포장", "이상 확인", "창고 정리", "지도 배달"]) assert(board.includes(name), `board should name the game '${name}'`);
+  log("보드에 카테고리별 게임 이름 표시: 박스 포장 / 이상 확인 / 창고 정리(귀중품) / 지도 배달(확정 층수)");
 
   // ---- b. 일반택배 -> 박스 포장, 남은 확보 시간 표시 ----
   await clickSel(p1, openSel("normal-1"));
@@ -156,21 +184,20 @@ async function main() {
   log(`일반택배 칸 -> 박스 포장 열림, 확보 남은 시간 ${clock} 표시`);
 
   // ---- c. ★ 플레이 도중 상대의 확보로 상태 브로드캐스트가 와도 내 게임이 유지되는가 ----
-  const seq = (await p1.getAttribute("#mg-layer .mg-body", "data-seq")).split(",");
-  await p1.keyboard.press(KEY[seq[0]]); await p1.keyboard.press(KEY[seq[1]]);
-  assert((await countSel(p1, "#mg-layer .mg-chip.is-done")) === 2, "2 chips done before the broadcast");
+  const pkPlan1 = await pkPlan(p1);
+  await pkPlace(p1, 0, pkPlan1); await pkPlace(p1, 1, pkPlan1);
+  assert((await pkState(p1))[4] === 2, "2 pieces placed before the broadcast");
   await clickSel(p2, openSel("normal-2"));
   await waitFor(async () => (await countSel(p2, "#mg-layer .mg-root")) === 1, { label: "p2 game open" });
   await p2.evaluate(() => window.__mgFinish());                      // p2가 칸 하나 확보 -> 서버가 p1에게도 state 브로드캐스트
   await waitFor(async () => (await myCount(p2, 0)) === 1, { label: "p2 secured one normal box" });
   await sleep(300);                                                   // p1 쪽 render() 이후까지 여유
   assert((await countSel(p1, "#mg-layer .mg-kind-pack")) === 1, "p1's game must still be open after a state broadcast");
-  assert((await countSel(p1, "#mg-layer .mg-chip.is-done")) === 2, "p1's progress (2 chips) must survive the broadcast");
+  assert((await pkState(p1))[4] === 2, "p1's progress (2 placed pieces) must survive the broadcast");
   log("★ 플레이 도중 상대가 칸을 확보해 상태 브로드캐스트가 와도 내 게임/진행도 유지됨");
 
   // ---- d. 박스 포장을 진짜로 끝내면 확보 ----
-  for (let i = 2; i < seq.length; i++) await p1.keyboard.press(KEY[seq[i]]);
-  await p1.keyboard.press("Space");
+  await pkSolve(p1, 2);
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "pack closes after completion" });
   await waitFor(async () => (await myCount(p1, 0)) === 1, { label: "normal box secured on p1" });
   assert((await countSel(p1, openSel("normal-3"))) === 1, "the normal-box button stays available (2 left)");
@@ -184,13 +211,13 @@ async function main() {
   await waitFor(async () => (await myCount(p1, 1)) === 1, { label: "fragile box secured" });
   log("깨지기 택배 칸 -> 이상 확인(9개) 완주 -> fragile-1 확보");
 
-  // ---- f. 확정 층수 -> 송장 붙이기 (송장에 그 칸의 층이 찍힘) ----
+  // ---- f. 확정 층수 -> 지도 배달 (2026-10-08: 칸이 곧 배송 층, 전반 = 6x4 지도 / 목표 3) ----
   await clickSel(p1, openSel("fixed-floor-2"));
-  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-sticker")) === 1, { label: "확정 층수 = 송장 붙이기" });
-  const labelText = await p1.textContent("#mg-layer .mg-label .lb-room");
-  assert(/^[A-E]-\d\d$/.test(labelText.trim()), `sticker label shows a letter-number code like B-17, got ${labelText}`);
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-map")) === 1, { label: "확정 층수 = 지도 배달" });
+  const mapBody = await p1.evaluate(() => { const b = document.querySelector("#mg-layer .mg-body"); return { grid: b.dataset.grid, targets: b.dataset.targets.split(";").length }; });
+  assert(mapBody.grid === "6,4" && mapBody.targets === 3, "전반 지도 배달은 6x4 지도 / 목표 3개, got " + JSON.stringify(mapBody));
   await playOpenGame(p1);
-  await waitFor(() => isFloorMine(p1, 1), { label: "fixed-floor-2 (1F) secured" });
+  await waitFor(() => isFloorMine(p1, 1), { label: "fixed-floor-2 (1F) secured by really playing the map game" });
   // 확보된 칸의 얼굴에는 송장 목적지(호수)가 찍힌다 -- 보드에서 1F 행 칸(fixed-floor 행의 2번째)의 .invoice-label을 읽는다.
   const faceText = await p1.evaluate(() => {
     const f = Array.from(document.querySelectorAll('.board-row[data-cat="3"] .floor-btn'))[1];
@@ -198,38 +225,20 @@ async function main() {
     return lab ? lab.textContent : null;
   });
   assert(/^10\d호$/.test(faceText), `invoice on fixed-floor-2 must be a 1F room (10N호), got ${faceText}`);
-  log(`확정 층수 칸 -> 송장 붙이기(송장 '${labelText}') 완주 -> 확보, 송장 목적지 ${faceText} (1F)`);
+  log(`확정 층수 칸 -> 지도 배달(6x4, 송장 3장) 진짜로 플레이해서 완주 -> 확보, 송장 목적지 ${faceText} (1F)`);
 
-  // ---- g. 귀중품 -> 지도 배달 (전반 = 난이도 보통: 6x4 지도, 목표 3, 호실 번호 유지) ----
+  // ---- g. 귀중품 -> 창고 정리(소코반) (전반 = 난이도 보통: 박스 2개) ----
   await clickSel(p1, openSel("valuable-1"));
-  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-map")) === 1, { label: "귀중품 = 지도 배달" });
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-soko")) === 1, { label: "귀중품 = 창고 정리" });
   assert((await countSel(p1, ".puzzle-frame")) === 0, "valuable no longer shows the Ubongo puzzle image");
-  const mapBody = await p1.evaluate(() => { const b = document.querySelector("#mg-layer .mg-body"); return { grid: b.dataset.grid, targets: b.dataset.targets.split(";").length }; });
-  assert(mapBody.grid === "6,4" && mapBody.targets === 3, "전반 지도 배달은 6x4 지도 / 목표 3개, got " + JSON.stringify(mapBody));
+  assert((await countSel(p1, "#mg-layer .sk-box")) === 2, "전반 창고 정리는 박스 2개");
   await playOpenGame(p1);
-  await waitFor(async () => (await myCount(p1, 2)) === 1, { label: "valuable secured by really playing the map game" });
-  log("귀중품 칸 -> 지도 배달(6x4, 송장 3장) 진짜로 플레이해서 완주 -> valuable 확보");
-
-  // ---- f2. 송장 붙이기를 키보드만으로 (2026-10-07): ←→로 박스 고르고 스페이스 ----
-  await clickSel(p1, openSel("fixed-floor-5"));
-  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-sticker")) === 1, { label: "sticker for fixed-floor-5" });
-  for (let guard = 0; await countSel(p1, "#mg-layer .mg-root") === 1 && guard < 40; guard++) {
-    const pick = await p1.evaluate(() => {
-      const l = document.querySelector(".mg-label[data-label]:not([data-stuck])");
-      if (!l) return null;
-      const boxes = Array.from(document.querySelectorAll(".mg-bx"));
-      return { want: parseInt(l.getAttribute("data-want"), 10), here: boxes.findIndex((b) => b.classList.contains("is-cursor")) };
-    });
-    if (!pick) { await sleep(150); continue; }
-    if (pick.here !== pick.want) { await p1.keyboard.press("ArrowRight"); continue; }
-    await p1.keyboard.press("Space"); await sleep(450);
-  }
-  await waitFor(() => isFloorMine(p1, 4), { label: "fixed-floor-5 secured with the keyboard only" });
-  log("확정 층수 칸 -> 송장 붙이기를 키보드(←→ + 스페이스)만으로 완주 -> 확보");
+  await waitFor(async () => (await myCount(p1, 2)) === 1, { label: "valuable secured by really playing the soko game" });
+  log("귀중품 칸 -> 창고 정리(박스 2개) 진짜로 플레이해서 완주 -> valuable 확보");
 
   // ---- h. 포기: 확보되지 않음 ----
   await clickSel(p1, openSel("fixed-floor-3"));
-  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-sticker")) === 1, { label: "sticker open for give-up" });
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-map")) === 1, { label: "map open for give-up" });
   await clickSel(p1, "#mg-layer .mg-giveup");
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "give-up closes" });
   assert(await isFloorOpenable(p1, "fixed-floor-3"), "giving up must not secure the cell");
@@ -246,7 +255,7 @@ async function main() {
   const toastText = (pg) => pg.evaluate(() => { const t = document.getElementById("toast"); return t ? t.textContent : ""; });
   // (1) 확정 층수: 내가 하던 그 층을 상대가 먼저 확보 -> 내 게임이 닫히고 안내가 뜬다 (선점자 우선)
   await clickSel(p1, openSel("fixed-floor-4"));
-  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-sticker")) === 1, { label: "p1 sticker for fixed-floor-4" });
+  await waitFor(async () => (await countSel(p1, "#mg-layer .mg-kind-map")) === 1, { label: "p1 map for fixed-floor-4" });
   await p2Finish("fixed-floor-4");
   await waitFor(async () => (await countSel(p1, "#mg-layer .mg-root")) === 0, { label: "p1 game closes when the opponent takes the floor first" });
   assert((await toastText(p1)).includes("먼저 확보"), "p1 should be told the floor was taken first, got: " + (await toastText(p1)));

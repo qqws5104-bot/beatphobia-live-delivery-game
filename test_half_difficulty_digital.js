@@ -1,8 +1,8 @@
-// 2026-10-08: 실물 우봉고 복귀 후 확보 단계 검증 (전반/후반 퍼즐 이미지 + 조각 수 + 완료/포기).
-//   종류별 조각(색) 수 = 일반 2 / 깨지기 3 / 귀중품 4 / 확정 층수 3 (사용자: "2~4개가 제일 적당").
-//   전반과 후반은 서로 다른 이미지 세트를 쓴다. "완료"는 자기 신고(서버는 이미지를 모른다), "포기"는 아무 일도 안 일어난다.
-// 사전 준비: SECURE_PHASE_MS를 임시로 단축(40 * 1000 -- 전반에 칸을 여러 번 열어 보므로 너무 짧으면 안 됨) + build_client.py 재빌드 + 서버 재시작. 끝나면 원복.
-// (디지털 미니게임 버전은 test_half_difficulty_digital.js -- python3 set_mini.py digital 상태에서 돈다.)
+// 2026-10-06: 전반/후반 난이도가 라이브 게임에서 실제로 다르게 적용되는지 (사용자 요청 수치):
+//   일반택배(박스 포장) 키 6 -> 8 / 깨지기 쉬운(이상 확인) 8 -> 10 / 확정 층수(송장 붙이기) 송장 3 -> 4, 박스 5 -> 7
+//   후반(L3) 난이도: 박스 포장 키 10개 / 이상 확인 11개 / 송장 붙이기 박스 8·송장 5 / 지도 7x5·송장 4·공사장 6 (2026-10-07 난이도 상향).
+// 전반 7라운드를 빠르게 흘려보낸 뒤(test_theft_e2e.js와 같은 흐름) 후반 보드에서 각 종류 칸을 열어 직접 센다.
+// 사전 준비: SECURE_PHASE_MS를 임시로 단축(예: 10 * 1000) + build_client.py 재빌드 + 서버 재시작. 끝나면 원복.
 "use strict";
 const { chromium } = require("playwright");
 const { COURIERS } = require("./game-data.js");
@@ -75,41 +75,11 @@ async function main() {
   await pressSpace(p1); await pressSpace(p2);
   await waitFor(async () => (await bodyText(p1)).includes("택배 확보"), { label: "전반 secure phase" });
   log("전반 secure phase 진입 -- 아무것도 확보하지 않음(전반 결과는 이 테스트와 무관)");
-  const PIECES = { normal: 2, fragile: 3, valuable: 4, "fixed-floor": 3 };
-  const NAME = { normal: "일반택배", fragile: "깨지기 쉬운 택배", valuable: "귀중품", "fixed-floor": "확정 층수 택배" };
-  const CAT = { normal: 0, fragile: 1, valuable: 2 };
-  const openOverlay = async (id) => {
-    const kind = id.replace(/-\d+$/, "");
-    await clickSel(p1, kind === "fixed-floor" ? '[data-action="open-cell"][data-cell="' + id + '"]' : '.rail-btn[data-action="open-type"][data-cat="' + CAT[kind] + '"]');
-    await waitFor(async () => (await countSel(p1, "#puzzle-overlay img")) === 1, { label: "puzzle overlay for " + id, timeout: 4000 });
-    return p1.evaluate(() => ({ head: document.querySelector("#puzzle-overlay .puzzle-frame > div").textContent, src: document.querySelector("#puzzle-overlay img").src.length + ":" + document.querySelector("#puzzle-overlay img").src.slice(-60) }));
-  };
-  const closeOverlay = async () => { await clickSel(p1, '[data-action="give-up"]'); await waitFor(async () => (await countSel(p1, "#puzzle-overlay img")) === 0, { label: "overlay closes" }); };
-  const imgs = { 1: {}, 2: {} };
-  async function checkHalf(half) {
-    for (const id of ["normal-1", "fragile-1", "valuable-1", "fixed-floor-3"]) {
-      const kind = id.replace(/-\d+$/, "");
-      const o = await openOverlay(id);
-      assert_(o.head.includes(NAME[kind]) && o.head.includes("조각 " + PIECES[kind] + "개"), `${half === 1 ? "전반" : "후반"} ${NAME[kind]}: 조각 ${PIECES[kind]}개여야 함, got '${o.head}'`);
-      imgs[half][kind] = o.src;
-      await closeOverlay();
-    }
-    log(`${half === 1 ? "전반" : "후반"} 우봉고: 일반 2 / 깨지기 3 / 귀중품 4 / 확정 층수 3 조각 표시`);
-  }
-  await waitFor(async () => (await bodyText(p1)).includes("우봉고"), { label: "board names the game 우봉고" });
-  await checkHalf(1);
-  // 포기 = 확보 안 됨, 완료 = 확보됨(자기 신고)
-  await openOverlay("normal-1"); await closeOverlay();
-  assert_((await countSel(p1, '.board-row[data-cat="0"] .my-chip')) === 0, "포기하면 확보되지 않는다");
-  await openOverlay("normal-1");
-  await clickSel(p1, '[data-action="complete-cell"]');
-  await waitFor(async () => (await countSel(p1, '.board-row[data-cat="0"] .my-chip')) === 1, { label: "완료 -> 확보 (my-chip)" });
-  log("포기 -> 미확보, 완료 -> 확보(호수 칩 생김)");
 
   await waitFor(async () => {
     const t1 = await bodyText(p1), t2 = await bodyText(p2);
     return t1.includes("엘리베이터") && t2.includes("엘리베이터");
-  }, { label: "전반 elevator phase (idle gate) 도달", timeout: 50000 });
+  }, { label: "전반 elevator phase (idle gate) 도달", timeout: 15000 });
   log("전반 elevator phase 진입");
 
   // 전반 5라운드: 확보한 게 없어 배송도 없다 -- idle/result 게이트만 통과시키며 흘려보낸다.
@@ -131,10 +101,53 @@ async function main() {
   await waitFor(async () => (await bodyText(p1)).includes("택배 확보"), { label: "후반 secure phase", timeout: 8000 });
   log("후반 secure phase 진입");
 
-  // ---- 후반 보드: 같은 조각 수, 다른 이미지 ----
-  await checkHalf(2);
-  for (const kind of Object.keys(PIECES)) assert_(imgs[1][kind] !== imgs[2][kind], `${NAME[kind]}: 전반과 후반은 다른 퍼즐 이미지여야 함`);
-  log("전반/후반 퍼즐 이미지가 서로 다름");
+  // ---- 후반 보드에서 종류별 게임 열어서 난이도 확인 ----
+  const CAT_IDX = { normal: 0, fragile: 1, valuable: 2 };
+  const openCell = async (id) => { // 레일 화면: 확정 층수는 층 버튼(open-cell), 나머지는 종류 버튼(open-type)
+    const kind = id.replace(/-\d+$/, "");
+    await clickSel(p1, kind === "fixed-floor" ? '[data-action="open-cell"][data-cell="' + id + '"]' : '.rail-btn[data-action="open-type"][data-cat="' + CAT_IDX[kind] + '"]');
+    await p1.waitForTimeout(500);
+  };
+  const giveUp = async () => {
+    // 미니게임의 포기 버튼(텍스트 '포기')을 누른다
+    await p1.evaluate(() => { const b = Array.from(document.querySelectorAll("#mg-layer button")).find((x) => x.textContent.trim() === "포기"); if (b) b.click(); });
+    await p1.waitForTimeout(300);
+  };
+
+  await openCell("normal-1");
+  const packInfo = await p1.evaluate(() => {
+    const b = document.querySelector("#mg-layer .mg-body");
+    let plan = null; try { plan = JSON.parse(b.dataset.plan); } catch (e) {}
+    return { cells: document.querySelectorAll("#mg-layer .pk-box .pk-cell").length, pieces: document.querySelectorAll("#mg-layer .pk-piece").length, plan: plan && { cols: plan.cols, rows: plan.rows, n: plan.pieces.length } };
+  });
+  assert_(packInfo.plan && packInfo.plan.cols * packInfo.plan.rows === 20 && packInfo.plan.n === 5 && packInfo.cells === 20, `후반 박스 포장: 5x4 상자 / 조각 5개여야 함, got ${JSON.stringify(packInfo)}`);
+  log("후반 일반택배(박스 포장): 5x4 상자, 조각 5개");
+  await giveUp();
+
+  await openCell("fragile-1");
+  const inspTxt = await bodyText(p1);
+  assert_(/\/\s*11\s*개/.test(inspTxt), `후반 이상 확인: 택배 11개여야 함, got: ${inspTxt.match(/처리[^\n]*/)}`);
+  log("후반 깨지기 쉬운 택배(이상 확인): 판단 11회");
+  await giveUp();
+
+  // 2026-10-08 배치: 확정 층수 = 지도 배달, 귀중품 = 창고 정리 (송장 붙이기는 빠짐)
+  await openCell("fixed-floor-3");
+  const mapInfo = await p1.evaluate(() => {
+    const b = document.querySelector("#mg-layer .mg-body");
+    return b ? { grid: b.dataset.grid, targets: b.dataset.targets.split(";").length, blocked: b.dataset.blocked.split(";").filter(Boolean).length } : null;
+  });
+  assert_(mapInfo && mapInfo.grid === "7,5" && mapInfo.targets === 4 && mapInfo.blocked === 6, `후반 지도 배달: 7x5 지도 / 목표 4개 / 공사장 6칸이어야 함, got ${JSON.stringify(mapInfo)}`);
+  assert_((await countSel(p1, "#mg-layer .mg-map.is-covered")) === 1 && (await countSel(p1, "#mg-layer .mg-parcel")) === 4, "후반 지도 배달은 송장 택배 4개가 먼저 뜨고 지도는 가려져 있어야 함");
+  await p1.waitForTimeout(3100); // 송장 단계(2.5초)가 끝나면 지도가 뜬다
+  assert_((await countSel(p1, "#mg-layer .mg-map.is-covered")) === 0, "송장 단계가 끝나면 지도가 떠야 함");
+  log("후반 확정 층수(지도 배달): 7x5 지도, 송장 4장, 공사장 6칸, 송장 -> 지도 순서");
+  await giveUp();
+
+  await openCell("valuable-1");
+  const skBoxes = await countSel(p1, "#mg-layer .sk-box");
+  assert_(skBoxes === 3, `후반 창고 정리: 박스 3개여야 함, got ${skBoxes}`);
+  log("후반 귀중품(창고 정리): 박스 3개");
+  await giveUp();
 
   if (errors.length) throw new Error("page errors: " + errors.join(" | "));
   await browser.close();

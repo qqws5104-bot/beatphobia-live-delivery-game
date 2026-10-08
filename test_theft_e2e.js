@@ -113,8 +113,8 @@ async function main() {
 
   // p2가 확정 층수 택배의 B1칸(fixed-floor-1)을 확보 -- floorIdx가 확정적으로 0(B1)이 된다.
   await clickSel(p2, '[data-action="open-cell"][data-cell="fixed-floor-1"]');
-  await waitFor(async () => (await countSel(p2, ".mg-root")) > 0, { label: "p2 확정 층수 미니게임(송장 붙이기) 열림" });
-  await p2.evaluate(() => window.__mgFinish());
+  await waitFor(async () => (await countSel(p2, ".mg-root, #puzzle-overlay img")) > 0, { label: "p2 확정 층수 칸 열림(우봉고 오버레이 또는 디지털 미니게임)" });
+  await p2.evaluate(() => { if (document.querySelector(".mg-root") && window.__mgFinish) return window.__mgFinish(); const b = document.querySelector('[data-action="complete-cell"]'); if (b) b.click(); });
   await waitFor(async () => (await countSel(p2, ".floor-btn.mine")) > 0, { label: "p2 fixed-floor-1 확보 확인" });
   log("p2가 B1행 확정 층수 택배 확보 완료");
 
