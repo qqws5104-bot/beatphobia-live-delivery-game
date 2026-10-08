@@ -51,7 +51,7 @@ async function waitFor(fn, { timeout = 10000, interval = 100, label = "condition
   }
 }
 
-// 방금 연 칸을 "풀었다"로 처리한다: 미니게임 칸(박스 포장/이상 확인/송장 붙이기)은 테스트 훅으로,
+// 방금 연 칸을 "풀었다"로 처리한다: 미니게임 칸은 테스트 훅으로,
 // 우봉고 칸(귀중품)은 기존 "완료" 버튼으로.
 // 2026-10-06 레일 화면: 일반/깨지기/귀중품은 종류 버튼(open-type), 확정 층수만 층 버튼(open-cell)으로 연다.
 const CAT_IDX = { normal: 0, fragile: 1, valuable: 2, "fixed-floor": 3 };

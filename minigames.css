@@ -470,3 +470,56 @@
 .sk-status b { color: var(--mg-ink); font-family: var(--mg-font-display); font-size: 1rem; }
 .sk-pad { grid-template-columns: repeat(4, 1fr); }
 .sk-pad .pk-act { grid-column: span 2; }
+
+/* ================= 소코반류 시험용 게임 5종 (빙판 배송 / 배달 경로 / 쌍둥이 배달 / 컨베이어 잇기 / 택배 쌓기) ================= */
+/* 빙판 배송 */
+.sk-cell.is-ice { background: linear-gradient(135deg, #e4f3fb, #cbe6f5); box-shadow: inset 0 0 0 1px rgba(80, 140, 180, 0.18); }
+.sk-cell.is-rock { background: radial-gradient(circle at 35% 30%, #a9b2ba, #6c7680 70%); box-shadow: inset 0 0 0 2px rgba(43, 54, 66, 0.35); border-radius: 30%; }
+.ic-item.is-gone { opacity: 0; transform: translate(calc(var(--x) * var(--cell)), calc(var(--y) * var(--cell))) scale(0.4); }
+.ic-item { transition: opacity 0.15s, transform 0.15s; }
+.ic-man { transition-property: transform; transition-timing-function: cubic-bezier(.25, .8, .35, 1); }
+
+/* 쌍둥이 배달 */
+.sk-cell.is-tgt.tw-ga { background: repeating-linear-gradient(45deg, #ffd9b5 0 6px, #ffc58a 6px 12px); box-shadow: inset 0 0 0 2px #e2691a; }
+.sk-cell.is-tgt.tw-gb { background: repeating-linear-gradient(45deg, #cfe3fb 0 6px, #aecdf3 6px 12px); box-shadow: inset 0 0 0 2px #2f6fb8; }
+.sk-cell.tw-ga, .sk-cell.tw-gb { display: flex; align-items: center; justify-content: center; font-family: var(--mg-font-display); font-weight: 700; font-size: calc(var(--cell) * 0.5); color: rgba(43, 29, 18, 0.55); }
+.sk-man b { position: absolute; right: 2px; bottom: 0; font-family: var(--mg-font-display); font-size: calc(var(--cell) * 0.34); line-height: 1; color: #fff; text-shadow: 0 0 3px #2b1d12, 0 0 3px #2b1d12; }
+.tw-b .sk-m-cap { fill: #2f6fb8; stroke: #1c4a82; }
+.tw-b .sk-m-brim { fill: #245b99; }
+.tw-b .sk-m-body { fill: #8a5a2a; stroke: #5a3a18; }
+.sk-man.is-home { filter: drop-shadow(0 0 4px #2f8f52); }
+
+/* 배달 경로 */
+.sk-cell.is-road { background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.18); }
+.sk-cell.is-road.is-trail { background: #f7dca0; }
+.sk-cell.is-road.is-start { box-shadow: inset 0 0 0 3px #e2691a; }
+.rt-board .sk-cell.is-wall { background: repeating-linear-gradient(45deg, #b9b2a2 0 5px, #a9a190 5px 10px); box-shadow: inset 0 0 0 1px rgba(60, 50, 30, 0.25); }
+.rt-line { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.rt-line polyline { stroke: #e2691a; stroke-width: 0.22; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+.rt-man { z-index: 2; }
+.sk-board.is-doomed { box-shadow: 0 0 0 3px var(--mg-danger); }
+
+/* 컨베이어 잇기 */
+.pp-wrap { position: relative; width: min(100%, 440px); margin: 0 auto; padding: 0 3.2rem; }
+.pp-board { --cell: min(calc((100cqw - 6.4rem) / var(--cols)), 64px); display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 4px; padding: 4px; background: #7a5a30; border-radius: 10px; }
+.pp-in, .pp-out { position: absolute; top: calc(4px + (100% - 8px) * (var(--r) + 0.5) / var(--rows)); transform: translateY(-50%); font-size: 0.68rem; font-weight: 800; color: var(--mg-muted); white-space: nowrap; }
+.pp-in { left: 0; } .pp-out { right: 0; }
+.pp-tile { aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px; background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.2); cursor: pointer; display: block; }
+.pp-tile svg { width: 100%; height: 100%; display: block; transition: transform 0.12s; }
+.pp-arm, .pp-hub { fill: #a9a08a; }
+.pp-tile.is-flow { background: #dff1fb; }
+.pp-tile.is-flow .pp-arm, .pp-tile.is-flow .pp-hub { fill: #3c8fd6; }
+.pp-tile.is-cursor { outline: 3px solid var(--mg-accent); outline-offset: -3px; }
+
+/* 택배 쌓기 (하노이) */
+.hn-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(100%, 460px); margin: 0 auto; }
+.hn-peg { position: relative; height: 190px; border-radius: 10px; background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.2); display: flex; align-items: flex-end; justify-content: center; }
+.hn-peg.is-cursor { box-shadow: inset 0 0 0 3px var(--mg-accent); background: #f8ebc6; }
+.hn-peg.is-shake { animation: mg-shake 0.32s ease; }
+.hn-pole { position: absolute; bottom: 0; width: 8px; height: 88%; background: #8a6a42; border-radius: 4px 4px 0 0; }
+.hn-stack { position: relative; width: 100%; display: flex; flex-direction: column-reverse; align-items: center; gap: 3px; padding-bottom: 6px; }
+.hn-box { width: var(--w); height: 26px; border-radius: 4px; position: relative; background: hsl(calc(28 + var(--k) * 24) 62% 62%); border: 2px solid rgba(80, 50, 20, 0.6); }
+.hn-box i { position: absolute; left: 50%; top: 0; bottom: 0; width: 12%; transform: translateX(-50%); background: rgba(255, 244, 214, 0.75); }
+.hn-hand { position: relative; height: 38px; width: min(100%, 460px); margin: 6px auto 0; }
+.hn-held { position: absolute; top: 0; left: calc((var(--p) * 33.33%) + 0.5%); width: 32%; display: flex; justify-content: center; transition: left 0.1s; }
+.hn-held .hn-box { margin: 0 auto; }

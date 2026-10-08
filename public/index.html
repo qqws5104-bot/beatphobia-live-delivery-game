@@ -851,6 +851,59 @@
 .sk-pad { grid-template-columns: repeat(4, 1fr); }
 .sk-pad .pk-act { grid-column: span 2; }
 
+/* ================= 소코반류 시험용 게임 5종 (빙판 배송 / 배달 경로 / 쌍둥이 배달 / 컨베이어 잇기 / 택배 쌓기) ================= */
+/* 빙판 배송 */
+.sk-cell.is-ice { background: linear-gradient(135deg, #e4f3fb, #cbe6f5); box-shadow: inset 0 0 0 1px rgba(80, 140, 180, 0.18); }
+.sk-cell.is-rock { background: radial-gradient(circle at 35% 30%, #a9b2ba, #6c7680 70%); box-shadow: inset 0 0 0 2px rgba(43, 54, 66, 0.35); border-radius: 30%; }
+.ic-item.is-gone { opacity: 0; transform: translate(calc(var(--x) * var(--cell)), calc(var(--y) * var(--cell))) scale(0.4); }
+.ic-item { transition: opacity 0.15s, transform 0.15s; }
+.ic-man { transition-property: transform; transition-timing-function: cubic-bezier(.25, .8, .35, 1); }
+
+/* 쌍둥이 배달 */
+.sk-cell.is-tgt.tw-ga { background: repeating-linear-gradient(45deg, #ffd9b5 0 6px, #ffc58a 6px 12px); box-shadow: inset 0 0 0 2px #e2691a; }
+.sk-cell.is-tgt.tw-gb { background: repeating-linear-gradient(45deg, #cfe3fb 0 6px, #aecdf3 6px 12px); box-shadow: inset 0 0 0 2px #2f6fb8; }
+.sk-cell.tw-ga, .sk-cell.tw-gb { display: flex; align-items: center; justify-content: center; font-family: var(--mg-font-display); font-weight: 700; font-size: calc(var(--cell) * 0.5); color: rgba(43, 29, 18, 0.55); }
+.sk-man b { position: absolute; right: 2px; bottom: 0; font-family: var(--mg-font-display); font-size: calc(var(--cell) * 0.34); line-height: 1; color: #fff; text-shadow: 0 0 3px #2b1d12, 0 0 3px #2b1d12; }
+.tw-b .sk-m-cap { fill: #2f6fb8; stroke: #1c4a82; }
+.tw-b .sk-m-brim { fill: #245b99; }
+.tw-b .sk-m-body { fill: #8a5a2a; stroke: #5a3a18; }
+.sk-man.is-home { filter: drop-shadow(0 0 4px #2f8f52); }
+
+/* 배달 경로 */
+.sk-cell.is-road { background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.18); }
+.sk-cell.is-road.is-trail { background: #f7dca0; }
+.sk-cell.is-road.is-start { box-shadow: inset 0 0 0 3px #e2691a; }
+.rt-board .sk-cell.is-wall { background: repeating-linear-gradient(45deg, #b9b2a2 0 5px, #a9a190 5px 10px); box-shadow: inset 0 0 0 1px rgba(60, 50, 30, 0.25); }
+.rt-line { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.rt-line polyline { stroke: #e2691a; stroke-width: 0.22; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
+.rt-man { z-index: 2; }
+.sk-board.is-doomed { box-shadow: 0 0 0 3px var(--mg-danger); }
+
+/* 컨베이어 잇기 */
+.pp-wrap { position: relative; width: min(100%, 440px); margin: 0 auto; padding: 0 3.2rem; }
+.pp-board { --cell: min(calc((100cqw - 6.4rem) / var(--cols)), 64px); display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 4px; padding: 4px; background: #7a5a30; border-radius: 10px; }
+.pp-in, .pp-out { position: absolute; top: calc(4px + (100% - 8px) * (var(--r) + 0.5) / var(--rows)); transform: translateY(-50%); font-size: 0.68rem; font-weight: 800; color: var(--mg-muted); white-space: nowrap; }
+.pp-in { left: 0; } .pp-out { right: 0; }
+.pp-tile { aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px; background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.2); cursor: pointer; display: block; }
+.pp-tile svg { width: 100%; height: 100%; display: block; transition: transform 0.12s; }
+.pp-arm, .pp-hub { fill: #a9a08a; }
+.pp-tile.is-flow { background: #dff1fb; }
+.pp-tile.is-flow .pp-arm, .pp-tile.is-flow .pp-hub { fill: #3c8fd6; }
+.pp-tile.is-cursor { outline: 3px solid var(--mg-accent); outline-offset: -3px; }
+
+/* 택배 쌓기 (하노이) */
+.hn-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(100%, 460px); margin: 0 auto; }
+.hn-peg { position: relative; height: 190px; border-radius: 10px; background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.2); display: flex; align-items: flex-end; justify-content: center; }
+.hn-peg.is-cursor { box-shadow: inset 0 0 0 3px var(--mg-accent); background: #f8ebc6; }
+.hn-peg.is-shake { animation: mg-shake 0.32s ease; }
+.hn-pole { position: absolute; bottom: 0; width: 8px; height: 88%; background: #8a6a42; border-radius: 4px 4px 0 0; }
+.hn-stack { position: relative; width: 100%; display: flex; flex-direction: column-reverse; align-items: center; gap: 3px; padding-bottom: 6px; }
+.hn-box { width: var(--w); height: 26px; border-radius: 4px; position: relative; background: hsl(calc(28 + var(--k) * 24) 62% 62%); border: 2px solid rgba(80, 50, 20, 0.6); }
+.hn-box i { position: absolute; left: 50%; top: 0; bottom: 0; width: 12%; transform: translateX(-50%); background: rgba(255, 244, 214, 0.75); }
+.hn-hand { position: relative; height: 38px; width: min(100%, 460px); margin: 6px auto 0; }
+.hn-held { position: absolute; top: 0; left: calc((var(--p) * 33.33%) + 0.5%); width: 32%; display: flex; justify-content: center; transition: left 0.1s; }
+.hn-held .hn-box { margin: 0 auto; }
+
 /* mainview.css -- 메인 모니터(?view=main) 전용 스타일. 큰 TV/프로젝터 화면용이라 모든 크기를 vh/vw로 잡는다.
  * 플레이어 화면과 같은 색 토큰(--bg, --gold, --ink ...)을 쓰고, 이 화면은 body.main-view 일 때만 적용된다. */
 body.main-view { overflow: hidden; }
@@ -946,7 +999,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
  * 똑같이 쓸 수 있게 만들었다.
  *
  *   var ctl = MiniGames.start(hostElement, {
- *     kind: "pack" | "inspect" | "sticker" | "map" | "soko",
+ *     kind: "pack" | "inspect" | "sticker" | "map" | "soko" | "ice" | "route" | "twin" | "pipe" | "hanoi",
  *     level: 1 | 2 | 3,              // 쉬움 / 보통 / 어려움
  *     label: "B08호",                // 송장 붙이기에서 송장에 찍을 목적지 (없으면 임의 생성)
  *     onDone:   function (res) {},   // res = { ok:true, kind, level, ms, mistakes }
@@ -965,6 +1018,11 @@ body.main-view #app { height: 100vh; min-height: 0; }
     sticker: { name: "송장 붙이기" },
     map:     { name: "지도 배달" },
     soko:    { name: "창고 정리" },
+    ice:     { name: "빙판 배송" },
+    route:   { name: "배달 경로" },
+    twin:    { name: "쌍둥이 배달" },
+    pipe:    { name: "컨베이어 잇기" },
+    hanoi:   { name: "택배 쌓기" },
   };
   var LEVEL_NAME = ["쉬움", "보통", "어려움"];
 
@@ -2055,7 +2113,594 @@ body.main-view #app { height: 100vh; min-height: 0; }
     };
   }
 
-  var GAMES = { pack: packGame, inspect: inspectGame, sticker: stickerGame, map: mapGame, soko: sokoGame };
+  // ======================================================================
+  // 2026-10-08 소코반 같은 류의 시험용 게임 4종 + 하노이 (사용자: "다 게임 테스트로만 만들어보자").
+  // 전부 키보드 + 되돌리기(Z / Backspace, 무료) + 처음부터(R) + 터치용 화면 버튼. 시험장 전용 -- TYPES.mini에는 연결하지 않았다.
+  //   ice   빙판 배송     방향키로 미끄러져 하역 칸에 정확히 멈추기 (택배는 지나가면 수거)
+  //   route 배달 경로     방향키로 선을 그어 모든 길을 한 번씩만 지나기 (한붓그리기)
+  //   twin  쌍둥이 배달   방향키 하나로 두 택배원이 동시에 움직여 각자의 하역 칸에 넣기
+  //   pipe  컨베이어 잇기 커서로 타일을 골라 SPACE로 돌려 입구에서 출구까지 잇기
+  //   hanoi 택배 쌓기     큰 상자 위에 작은 상자만 올려 가며 탑을 옆 칸으로 옮기기
+  //   빙판/쌍둥이 판은 오프라인 생성기 + BFS로 풀이를 검증한 풀, 한붓그리기/컨베이어는 항상 풀리게 만드는 방식으로 실행 중 생성한다.
+  // ======================================================================
+  var ICE_POOL = /*ICE_POOL*/[
+    // 레벨 1 (30판)
+    [[" #    ", "      ", "# ## S", " # G  ", "    # "],
+     [" # S  ", " #  ##", "#     ", "     G", " #    "],
+     ["#     ", "     #", "    # ", " S#G #", "     #"],
+     ["#  S##", "    G#", "      ", "  #   ", "      "],
+     ["# #   ", " S    ", " #    ", "   G  ", "#  # #"],
+     ["# # S ", "    # ", " # #  ", "   G  ", "  #   "],
+     ["     #", "   # G", " #  # ", "      ", "  S  #"],
+     ["    S ", " #    ", " G##  ", "  #  #", "  #   "],
+     ["      ", "  #   ", " #  G#", "#S    ", " #    "],
+     ["   S#G", "   ## ", "#  ## ", "      ", "      "],
+     ["  S   ", "      ", "     #", " ##  G", "# #   "],
+     ["   # #", "S     ", "    # ", "#G    ", "   #  "],
+     ["  #   ", "  ##S ", "   G# ", "      ", " ##   "],
+     ["S    #", "   # #", " #    ", "    # ", "  G # "],
+     ["      ", "   ###", "G#    ", "#S    ", " #    "],
+     [" #G   ", "      ", "   ## ", "  #   ", "#S   #"],
+     ["  G   ", " S   #", "   # #", "# #   ", "  #   "],
+     ["  S  #", "  ##G ", "      ", "#     ", "    # "],
+     ["#  ## ", "     #", "#     ", "  G#S ", "      "],
+     ["#   # ", "     #", "  #   ", "   #S ", " G #  "],
+     ["   G #", " S    ", "#    #", "    ##", "      "],
+     ["    ##", "      ", "    S ", "#     ", "   G #"],
+     ["#S   #", "G     ", "#     ", "   ###", "      "],
+     ["     #", "     S", " #   G", "  # # ", "   #  "],
+     ["#     ", "G #   ", " #    ", "# #   ", "   #S "],
+     ["#    #", "S     ", "   ## ", "#G    ", "   #  "],
+     ["      ", " #   G", "#S   #", "      ", "#  #  "],
+     ["S    #", "      ", " # #  ", "  #G #", "  #   "],
+     ["S   G ", "      ", "  #   ", "#  #  ", "#  #  "],
+     ["   #  ", " #  #S", "      ", " #G # ", "  #   "]],
+    // 레벨 2 (30판)
+    [["  #   G", " #     ", "P  # # ", "#S #  #", " # # # ", "  #    "],
+     ["# S    ", "   G#  ", "  #P#  ", " ###   ", "#   #  ", "   #   "],
+     ["P #G   ", "    #  ", "       ", "#     S", "#    ##", "       "],
+     ["#  #   ", "#   P #", "       ", "   ##  ", "#      ", " G## S "],
+     [" #     ", "#  ## #", "# #P   ", " #  G# ", "    S #", " #     "],
+     ["  ## ##", " #G #  ", "  #    ", "      #", " #  P S", "     # "],
+     ["  #   P", " #G # #", " # #   ", " #  S  ", "       ", " ##   #"],
+     ["  #G   ", " S   ##", "#     #", "   ### ", "P##    ", "   #   "],
+     ["#   #  ", " # P## ", " #     ", " # S   ", " G #   ", "  #    "],
+     ["  S#   ", "G    # ", "#      ", "   #   ", "    #P ", "###   #"],
+     ["   #   ", "       ", " #     ", "#  #  #", "  #G#S ", " P  ###"],
+     ["P  #  #", "     S#", " ##   #", "#    G ", "     ##", "   #   "],
+     [" #S  # ", "#     #", "#    G ", "#    # ", " P#  # ", "       "],
+     ["#  #S#G", "#    # ", "#      ", "  #  # ", "    P  ", "#    # "],
+     ["#  # # ", "    #  ", " #  G  ", " #   # ", " #     ", "# S# P "],
+     ["  G   #", "   #  #", "     # ", "P    #S", "#      ", "##   ##"],
+     ["P #G# #", " #     ", "  S #  ", "  #    ", "# # #  ", "      #"],
+     ["   G   ", "   P#  ", " #    #", "    #  ", "# #  # ", " #  ##S"],
+     ["     # ", " #   G ", "    #  ", " S  # #", "P    ##", " # #   "],
+     ["#   #G ", "#  P   ", "     # ", "   S   ", " #    #", "    # #"],
+     ["#   # P", "#   G  ", "  #    ", "##  S# ", "   #   ", "       "],
+     ["  S#P  ", "  #    ", "     # ", "#     #", "# #G   ", "# # #  "],
+     ["  # #  ", "       ", "###   #", " #     ", "     # ", "PG#   S"],
+     ["   #   ", "# ##   ", " P     ", "#  ### ", "   #S  ", "  ##  G"],
+     ["#   # P", "  ##   ", "     ##", " S    #", "     # ", "#G   # "],
+     ["      #", "      #", "  G#   ", "##    #", "S  # P ", " # #  #"],
+     ["     # ", "  #  # ", " # # ##", "#   P  ", "S#  #  ", "      G"],
+     ["###    ", " # #   ", "    #  ", "   P ##", " ##   G", "#S     "],
+     [" P#   #", "     # ", "# #G   ", "  ###  ", "   S # ", " #    #"],
+     ["    G# ", " #  #  ", "      #", "##  #  ", "#PS    ", " ##    "]],
+    // 레벨 3 (30판)
+    [["   #  # ", "  P ## P", "#      #", "   #    ", " #    G ", " ## # ##", "#  S#   "],
+     ["#      S", " #      ", "#  P#   ", "   P  G#", "  #  #  ", "#      #", "# #  ## "],
+     ["##      ", "    #   ", "  #  #  ", " #G P#  ", "   #  # ", "P#  S  #", "##    # "],
+     ["# ##    ", " # S    ", "     # P", "# #  ###", "      P#", " ## #  G", "   #    "],
+     ["       #", "  ##  # ", "##   S G", "## ##  #", "   P #  ", "   #P # ", "#       "],
+     ["   G #  ", "  #  #  ", "     #  ", "SP      ", " #  #   ", " ##   ##", "P#   ###"],
+     [" #   #  ", " P     #", " ##    P", " S  # # ", " # # # G", "#    #  ", " # # # #"],
+     [" ##  # #", "# #  P# ", "#  ##   ", "  #SP  #", "#    #  ", "  # #  G", "    #   "],
+     ["#  # P# ", "  ##  # ", " S   ###", " #     G", " #  # # ", "        ", " #  P   "],
+     ["    #  #", "  #    #", "   GP#  ", "   # ## ", "   ## ##", "P  #S## ", "      # "],
+     ["#  #  # ", "P G ##  ", "  ## # S", "       #", "P   #   ", "    ## #", "  #     "],
+     ["        ", "#  S   #", "G     # ", "  ### ##", " P #    ", " #   #  ", "# # P#  "],
+     ["  #G # #", "   S#  P", "#       ", "     # P", "#  # #  ", "##  ##  ", "   ##   "],
+     ["#   P   ", "P## #   ", "        ", "  #  #  ", "     #  ", "#  #   G", "S ## # #"],
+     ["#       ", "    # P#", " ##     ", " ##    S", "G   ##  ", "P#     #", "   #    "],
+     ["    S  #", "        ", " # P##  ", " ##     ", " G ##P  ", "#    # #", "#    ###"],
+     ["#   ### ", "#  P  # ", "     S  ", "#  ##   ", " #    P#", "    #G  ", "  #     "],
+     ["   # #G ", "     P  ", "    ### ", "S       ", "  #  ## ", " # ##  P", "    ##  "],
+     [" #  #P  ", "P ## #  ", "#     # ", "    # # ", "#      G", "##  S## ", " #      "],
+     ["  # #P# ", " #   P  ", "    # S#", "###  ###", " #     #", "  ##    ", "#G      "],
+     ["#   # #G", " #   P  ", " #  #   ", "   P    ", " #S# # #", " #  #   ", " #     #"],
+     ["  ##   #", "     # #", "# ### PG", "  #  ## ", "S#P     ", "    # # ", "  #   # "],
+     ["P  # #  ", "   S  # ", "###     ", "     # #", "      # ", " P   ###", "  ##G   "],
+     [" ### GSP", "#     # ", "#      #", "   #P#  ", "##      ", "      # ", "    ## #"],
+     ["## P    ", "     ###", "  ##   #", "    #   ", "  #   PG", "   ##S# ", "     # #"],
+     ["#G  # # ", "   ##  #", "    S # ", "    P   ", " # # ## ", "       #", "  ##  P "],
+     [" #     #", "     #P#", "# P G # ", "  # ##  ", "#  #    ", "    #   ", " S #  # "],
+     ["        ", "  #   # ", "#   #GS#", "#   P  #", "  P  #  ", " #  #   ", "##   ## "],
+     ["  #  P  ", "##      ", " #S  #  ", "     #  ", "  #G    ", " #P   ##", " #   ###"],
+     [" # P#   ", "#     # ", "   #### ", "     ###", "  ##    ", " # S    ", " PG##   "]]
+  ]/*END_ICE_POOL*/;
+  var TWIN_POOL = /*TWIN_POOL*/[
+    // 레벨 1 (30판)
+    [{rows:["     ", "    a", "# ## ", "#   b", " # AB"]},
+     {rows:["a ## ", " B   ", " A   ", "# #  ", "  b  "]},
+     {rows:["#A  #", "     ", " b#a ", " ##  ", " B   "]},
+     {rows:["   b ", " A# a", "#   #", " #B# ", "     "]},
+     {rows:["##b# ", "     ", "   a ", "BA  #", "    #"]},
+     {rows:["     ", " #  #", "#  B ", "#  A ", "#  ab"]},
+     {rows:[" #  a", "  A# ", "    #", "B  # ", " # b "]},
+     {rows:["  #  ", "  A  ", "  Ba ", "###  ", "# b  "]},
+     {rows:["     ", "  # b", "B  # ", "    a", "  A# "]},
+     {rows:["  ## ", "a    ", " b  #", "  A# ", "    B"]},
+     {rows:["#    ", "    b", "#a   ", " #  B", "  # A"]},
+     {rows:["#    ", " b## ", "  a A", "    #", "  # B"]},
+     {rows:["#B   ", "  A# ", "#    ", "#  a ", "  b# "]},
+     {rows:["# b  ", "  #a ", "     ", "A#B  ", " #  #"]},
+     {rows:["ab  #", "  ## ", "    #", "     ", "  AB#"]},
+     {rows:[" ##  ", "###  ", "b    ", " BA  ", "    a"]},
+     {rows:[" A## ", "  a #", " bB  ", "   ##", "     "]},
+     {rows:["     ", "   # ", "#b aA", " #   ", "   #B"]},
+     {rows:[" B   ", " #ab#", "#    ", "#    ", "#A   "]},
+     {rows:["a ## ", "     ", "bA# B", "#  # ", "     "]},
+     {rows:[" #  B", "b aA ", "  #  ", "#    ", "#   #"]},
+     {rows:["#a B ", "   #b", "     ", "  A #", "  ## "]},
+     {rows:[" #   ", "  a A", "b    ", "  #B#", " # # "]},
+     {rows:["     ", "#    ", "B  # ", " ba#A", "  #  "]},
+     {rows:["     ", " b   ", "#   #", "#aB  ", "A  # "]},
+     {rows:["    a", "B# bA", "  #  ", " ##  ", "    #"]},
+     {rows:["  #  ", "#a   ", "  # b", " B   ", " A  #"]},
+     {rows:["    #", "#A #a", "  B  ", " b # ", "#    "]},
+     {rows:["  #  ", " #  #", "   # ", "  AaB", " b#  "]},
+     {rows:["#  B ", "ba## ", "   A ", "#   #", "     "]}],
+    // 레벨 2 (30판)
+    [{rows:["b B   ", "  # # ", "    a#", "A  ###", "  #   "]},
+     {rows:["    A#", " a#  b", " ##  #", "  #   ", "  B  #"]},
+     {rows:["B  # #", "a#    ", "      ", " #  b#", "A  ## "]},
+     {rows:["  #   ", "B    A", "#  #  ", "   b# ", "  #  a"]},
+     {rows:[" b   B", "A   # ", "    a ", " ###  ", "  # # "]},
+     {rows:["  # # ", "A  # #", " #  # ", "   b  ", " B#a #"]},
+     {rows:["#  A  ", " #    ", "###  b", "# #  #", "B    a"]},
+     {rows:["#     ", "#    A", "# ##  ", "  b # ", " B #a "]},
+     {rows:[" #   A", "      ", " ## B ", "   # #", "#a   b"]},
+     {rows:["  #   ", " ##  #", "B Ab# ", "      ", "a # # "]},
+     {rows:["#    #", "# ##  ", "  # # ", "B a b ", "  #A  "]},
+     {rows:["# #  b", "#  #  ", "   #  ", " a #  ", "    BA"]},
+     {rows:["  b # ", "  #  #", "a#    ", " BA   ", "  ### "]},
+     {rows:[" #  b ", " A    ", "   # #", "  #a  ", "# B# #"]},
+     {rows:[" a#B  ", "  ##  ", " A    ", "##b # ", "#  #  "]},
+     {rows:["   a# ", "B##   ", "  # ##", "A    b", "  #  #"]},
+     {rows:["  b   ", "  ##  ", "   # A", " B #  ", " #   a"]},
+     {rows:["# # # ", "a b  #", " #B   ", "     #", "# # A "]},
+     {rows:["  b   ", " #   #", "#  # a", " ##  #", " AB   "]},
+     {rows:["#b   #", "##  # ", "     #", " A #a ", "#B    "]},
+     {rows:["B #  a", "  ##b ", "# #   ", "#    #", "A     "]},
+     {rows:["   B#b", " #  A ", "a     ", "     #", "## ## "]},
+     {rows:["  #  b", "   A #", "  ##a#", "   #  ", "  B ##"]},
+     {rows:["# #a #", "  A   ", "      ", " #   #", "b  B##"]},
+     {rows:["  #   ", " # # #", "#  ##B", " #A   ", " b a  "]},
+     {rows:[" #    ", "A     ", "  a#  ", " ##   ", " b#B# "]},
+     {rows:["   ## ", "#A    ", "   #B ", "#  a# ", "  #b# "]},
+     {rows:["# b a ", " #    ", " A#   ", "  #  #", "  B  #"]},
+     {rows:[" b    ", "  #A a", "  # B#", "  ##  ", "   ## "]},
+     {rows:[" #   B", "#  #A#", "  ##  ", "  b   ", "#a#   "]}],
+    // 레벨 3 (30판)
+    [{rows:["   # #", "     #", "#  b #", "#     ", "##   a", "  AB  "],mirror:true},
+     {rows:["   #b ", "#     ", "#     ", "  # #A", "##    ", "B  a  "],mirror:true},
+     {rows:["##  # ", "  A #a", "   ## ", "B # # ", " b    ", "#     "],mirror:true},
+     {rows:["  #   ", " ##  A", "# #   ", "#     ", "Ba#   ", " # b  "],mirror:true},
+     {rows:["#  #  ", " # #B ", "#b #  ", "  a   ", "  #   ", "  A## "],mirror:true},
+     {rows:["  #  a", "#     ", "  b  #", " #   #", " A  # ", "##B   "],mirror:true},
+     {rows:[" B## a", "      ", " ###  ", " # #  ", "   b#A", "      "],mirror:true},
+     {rows:["     a", " b    ", "##  A ", "# # # ", "   #  ", "   #B "],mirror:true},
+     {rows:["     #", "    b ", "#     ", "#a# A ", "   # #", "B#    "],mirror:true},
+     {rows:["  #   ", "  #a# ", "  # # ", "  B   ", "      ", "# ##Ab"],mirror:true},
+     {rows:["   #  ", "B#  A#", "  #   ", "##b   ", "  #a  ", " ##   "],mirror:true},
+     {rows:[" ##   ", "##   b", " B #  ", "      ", "# #a  ", " A #  "],mirror:true},
+     {rows:["    ##", " #    ", "   b  ", "  B #A", "   #  ", " a## #"],mirror:true},
+     {rows:["#  B  ", "#a#   ", "     #", "# b  #", "# #A  ", "     #"],mirror:true},
+     {rows:[" #   #", "  ##  ", "B  #A ", "#    b", " #    ", " #a   "],mirror:true},
+     {rows:["  # # ", "   B# ", " ab   ", " #    ", "##    ", "#  #A "],mirror:true},
+     {rows:["# #b  ", " #  # ", "#     ", "# # a ", "      ", "A B#  "],mirror:true},
+     {rows:[" #A   ", "#  b #", " #    ", " #a   ", "     B", "# ## #"],mirror:true},
+     {rows:[" #  ##", "  b   ", " A#   ", "# B   ", "   #  ", " #  a#"],mirror:true},
+     {rows:[" # ## ", "  #   ", "  a# A", "  #   ", "#    b", "  # B "],mirror:true},
+     {rows:["A     ", " Ba  #", "   # #", "# # b ", "     #", "#     "],mirror:true},
+     {rows:["### b#", "      ", "      ", "##B  A", "##  # ", "a     "],mirror:true},
+     {rows:["  ##  ", " #   #", "    a ", "  A# B", "# # b ", "      "],mirror:true},
+     {rows:["# #  b", "   # #", "# A   ", "   a  ", "# # # ", "#   B "],mirror:true},
+     {rows:["#A   #", "  ##  ", "  ##  ", "ba #  ", "B     ", "     #"],mirror:true},
+     {rows:["a B## ", "      ", "#  #  ", "b  A# ", "      ", " ###  "],mirror:true},
+     {rows:["#  # B", "###A  ", "   #  ", "#  #  ", "  a  #", "   b  "],mirror:true},
+     {rows:["#    #", "#     ", "ab#B  ", "  # # ", "   #A ", "  #   "],mirror:true},
+     {rows:[" #   #", " #   b", "    # ", "   # #", "##   A", "B   a#"],mirror:true},
+     {rows:["  # # ", "   a# ", "##    ", " b  # ", "#A #B ", "    # "],mirror:true}]
+  ]/*END_TWIN_POOL*/;
+  var DIR_KEYS = { ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right" };
+
+  // 공통: 키보드/버튼 연결. onAct(a)는 a = up|down|left|right|undo|restart|space.
+  function bindPad(body, c, attr, onAct, keyMap) {
+    function onKey(e) {
+      if (c.isFinished()) return;
+      var a = DIR_KEYS[e.key] || null;
+      if (!a) {
+        if (e.key === "Backspace" || e.key === "z" || e.key === "Z") a = "undo";
+        else if (e.key === "r" || e.key === "R") a = "restart";
+        else if (e.code === "Space" || e.key === " ") a = "space";
+        else if (e.key === "Enter") a = "enter";
+        else if (keyMap && keyMap[e.key]) a = keyMap[e.key];
+      }
+      if (!a) return;
+      e.preventDefault(); e.stopPropagation();
+      if (e.repeat && a !== "up" && a !== "down" && a !== "left" && a !== "right") return;
+      onAct(a);
+    }
+    document.addEventListener("keydown", onKey, true);
+    c.onCleanup(function () { document.removeEventListener("keydown", onKey, true); });
+    Array.prototype.forEach.call(body.querySelectorAll(".mg-key[" + attr + "]"), function (b) {
+      b.addEventListener("pointerdown", function (e) { e.preventDefault(); onAct(b.getAttribute(attr)); });
+    });
+  }
+  function arrowPad(attr, extra) {
+    return '<button type="button" class="mg-key" ' + attr + '="up" aria-label="위">↑</button>'
+      + '<button type="button" class="mg-key" ' + attr + '="left" aria-label="왼쪽">←</button>'
+      + '<button type="button" class="mg-key" ' + attr + '="down" aria-label="아래">↓</button>'
+      + '<button type="button" class="mg-key" ' + attr + '="right" aria-label="오른쪽">→</button>' + (extra || "");
+  }
+  function actBtn(attr, name, label, sub) { return '<button type="button" class="mg-key pk-act" ' + attr + '="' + name + '">' + label + (sub ? "<small>" + sub + "</small>" : "") + "</button>"; }
+  function gridCells(S, cls) { var h = "", i; for (i = 0; i < S.W * S.H; i++) h += '<i class="sk-cell ' + cls(i) + '"></i>'; return h; }
+  function placeAt(node, idx, W) { node.style.setProperty("--x", idx % W); node.style.setProperty("--y", (idx / W) | 0); }
+  function slotAt(W, idx) { return [idx % W, (idx / W) | 0]; }
+
+  // ---------- 빙판 배송 ----------
+  function iceParse(rows) {
+    var H = rows.length, W = 0, x, y;
+    rows.forEach(function (r) { W = Math.max(W, r.length); });
+    var wall = [], S = 0, G = 0, P = [];
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var ch = rows[y].charAt(x) || " ", i = y * W + x;
+      wall[i] = ch === "#"; if (ch === "S") S = i; if (ch === "G") G = i; if (ch === "P") P.push(i);
+    }
+    return { W: W, H: H, wall: wall, S: S, G: G, P: P };
+  }
+  function iceSlide(S, from, d) { // d = [dx, dy]; 벽/바위/가장자리 직전까지. 지나간 칸 목록도 돌려준다
+    var x = from % S.W, y = (from / S.W) | 0, path = [];
+    for (;;) {
+      var nx = x + d[0], ny = y + d[1];
+      if (nx < 0 || ny < 0 || nx >= S.W || ny >= S.H || S.wall[ny * S.W + nx]) break;
+      x = nx; y = ny; path.push(y * S.W + x);
+    }
+    return { to: y * S.W + x, path: path };
+  }
+  function iceGame(body, c) {
+    var pool = ICE_POOL[c.level - 1] && ICE_POOL[c.level - 1].length ? ICE_POOL[c.level - 1] : ICE_POOL[1];
+    var rows = pool[rand(pool.length)], S = iceParse(rows), W = S.W;
+    var p = S.S, got = {}, hist = [], moves = 0, sliding = false;
+    if (c.testHooks) body.setAttribute("data-plan", JSON.stringify({ rows: rows }));
+    var floor = gridCells(S, function (i) { return S.wall[i] ? "is-rock" : i === S.G ? "is-tgt" : "is-ice"; });
+    var items = S.P.map(function (i) { return '<span class="sk-box ic-item">' + SK_BOX_SVG + "</span>"; }).join("");
+    body.innerHTML = '<div class="sk-wrap"><div class="sk-board" style="--cols:' + W + ';--rows:' + S.H + '"><div class="sk-floor">' + floor + "</div>"
+      + items + '<span class="sk-man ic-man">' + SK_MAN_SVG + "</span></div></div>"
+      + '<p class="sk-status"><span>택배 <b class="ic-got">0</b> / ' + S.P.length + "</span><span>미끄러짐 <b class=\"ic-moves\">0</b></span></p>"
+      + '<p class="mg-freeze-note"></p><div class="pk-pad sk-pad">' + arrowPad("data-ic", actBtn("data-ic", "undo", "되돌리기", "Z · ⌫") + actBtn("data-ic", "restart", "처음부터", "R")) + "</div>";
+    var man = body.querySelector(".ic-man"), itemEls = Array.prototype.slice.call(body.querySelectorAll(".ic-item"));
+    var gotEl = body.querySelector(".ic-got"), movesEl = body.querySelector(".ic-moves"), note = body.querySelector(".mg-freeze-note"), boardEl = body.querySelector(".sk-board");
+    function count() { return Object.keys(got).length; }
+    function paint(dist) {
+      man.style.transitionDuration = Math.max(90, (dist || 1) * 55) + "ms";
+      placeAt(man, p, W);
+      itemEls.forEach(function (e, k) { placeAt(e, S.P[k], W); e.classList.toggle("is-gone", !!got[S.P[k]]); });
+      gotEl.textContent = count(); movesEl.textContent = moves;
+      if (c.testHooks) body.setAttribute("data-ic", [p % W, (p / W) | 0, count(), moves].join(","));
+    }
+    function act(a) {
+      if (c.isFinished()) return;
+      if (a === "undo") { if (!hist.length) return; var h = hist.pop(); p = h.p; got = h.got; moves--; sliding = false; note.textContent = ""; paint(1); return; }
+      if (a === "restart") { p = S.S; got = {}; hist = []; moves = 0; sliding = false; note.textContent = ""; paint(1); return; }
+      var d = SOKO_DIRS[a]; if (!d || sliding) return;
+      var r = iceSlide(S, p, d);
+      if (r.to === p) { restartAnim(man, "is-bump"); return; }
+      hist.push({ p: p, got: JSON.parse(JSON.stringify(got)) });
+      r.path.forEach(function (i) { if (S.P.indexOf(i) >= 0) got[i] = 1; });
+      var dist = r.path.length; p = r.to; moves++;
+      sliding = true; c.later(function () { sliding = false; }, Math.max(90, dist * 55) - 10);
+      paint(dist);
+      if (p === S.G && count() === S.P.length) { note.textContent = "배송 완료!"; c.later(c.finish, Math.max(90, dist * 55) + 330); }
+      else if (p === S.G) note.textContent = "하역 칸에 멈췄지만 택배를 아직 다 못 모았어요";
+      else note.textContent = "";
+    }
+    bindPad(body, c, "data-ic", act);
+    paint(1);
+    return { hint: function () { return "방향키를 누르면 벽이나 바위에 부딪힐 때까지 쭉 미끄러져요. 노란 하역 칸에 정확히 멈추세요. 박스는 지나가기만 해도 실려요. Z로 되돌리고 R로 다시 시작해요."; } };
+  }
+
+  // ---------- 쌍둥이 배달 ----------
+  function twinParse(rows) {
+    var H = rows.length, W = 0, x, y;
+    rows.forEach(function (r) { W = Math.max(W, r.length); });
+    var wall = [], a = 0, b = 0, A = 0, B = 0;
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) {
+      var ch = rows[y].charAt(x) || " ", i = y * W + x;
+      wall[i] = ch === "#"; if (ch === "a") a = i; if (ch === "b") b = i; if (ch === "A") A = i; if (ch === "B") B = i;
+    }
+    return { W: W, H: H, wall: wall, a: a, b: b, A: A, B: B };
+  }
+  function twinStep(S, p, dx, dy) {
+    var x = p % S.W + dx, y = ((p / S.W) | 0) + dy;
+    if (x < 0 || y < 0 || x >= S.W || y >= S.H || S.wall[y * S.W + x]) return p;
+    return y * S.W + x;
+  }
+  function twinGame(body, c) {
+    var pool = TWIN_POOL[c.level - 1] && TWIN_POOL[c.level - 1].length ? TWIN_POOL[c.level - 1] : TWIN_POOL[1];
+    var plan = pool[rand(pool.length)], S = twinParse(plan.rows), W = S.W, mirror = !!plan.mirror;
+    var a = S.a, b = S.b, hist = [], moves = 0;
+    if (c.testHooks) body.setAttribute("data-plan", JSON.stringify({ rows: plan.rows, mirror: mirror }));
+    var floor = gridCells(S, function (i) { return S.wall[i] ? "is-wall" : i === S.A ? "is-tgt tw-ga" : i === S.B ? "is-tgt tw-gb" : ""; });
+    body.innerHTML = '<div class="sk-wrap"><div class="sk-board" style="--cols:' + W + ';--rows:' + S.H + '"><div class="sk-floor">' + floor + "</div>"
+      + '<span class="sk-man tw-a">' + SK_MAN_SVG + '<b>A</b></span><span class="sk-man tw-b">' + SK_MAN_SVG + "<b>B</b></span></div></div>"
+      + '<p class="sk-status"><span>움직임 <b class="tw-moves">0</b></span>' + (mirror ? "<span>B는 좌우가 반대로 움직여요</span>" : "") + "</p>"
+      + '<p class="mg-freeze-note"></p><div class="pk-pad sk-pad">' + arrowPad("data-tw", actBtn("data-tw", "undo", "되돌리기", "Z · ⌫") + actBtn("data-tw", "restart", "처음부터", "R")) + "</div>";
+    // 목표 칸에 글자 표시
+    var cellEls = body.querySelectorAll(".sk-cell");
+    cellEls[S.A].textContent = "A"; cellEls[S.B].textContent = "B";
+    var ea = body.querySelector(".tw-a"), eb = body.querySelector(".tw-b"), movesEl = body.querySelector(".tw-moves"), note = body.querySelector(".mg-freeze-note");
+    function paint() {
+      placeAt(ea, a, W); placeAt(eb, b, W); movesEl.textContent = moves;
+      ea.classList.toggle("is-home", a === S.A); eb.classList.toggle("is-home", b === S.B);
+      if (c.testHooks) body.setAttribute("data-tw", [a % W, (a / W) | 0, b % W, (b / W) | 0, moves].join(","));
+    }
+    function act(x) {
+      if (c.isFinished()) return;
+      if (x === "undo") { if (!hist.length) return; var h = hist.pop(); a = h.a; b = h.b; moves--; note.textContent = ""; paint(); return; }
+      if (x === "restart") { a = S.a; b = S.b; hist = []; moves = 0; note.textContent = ""; paint(); return; }
+      var d = SOKO_DIRS[x]; if (!d) return;
+      var na = twinStep(S, a, d[0], d[1]), nb = twinStep(S, b, mirror ? -d[0] : d[0], d[1]);
+      if (na === a && nb === b) { restartAnim(ea, "is-bump"); restartAnim(eb, "is-bump"); return; }
+      hist.push({ a: a, b: b }); a = na; b = nb; moves++; paint();
+      if (a === S.A && b === S.B) { note.textContent = "둘 다 도착!"; c.later(c.finish, 420); }
+      else note.textContent = "";
+    }
+    bindPad(body, c, "data-tw", act);
+    paint();
+    return { hint: function () { return "방향키 하나로 A와 B가 동시에 움직여요. 한쪽이 벽에 막혀도 다른 쪽은 움직여요! A는 A 칸에, B는 B 칸에 동시에 들어가면 끝나요." + (mirror ? " 이번 판은 B가 좌우만 반대로 움직여요." : "") + " Z로 되돌리고 R로 다시 시작해요."; } };
+  }
+
+  // ---------- 배달 경로 (한붓그리기) ----------
+  var ROUTE_CFG = [
+    { W: 4, H: 4, cut: 2 },
+    { W: 5, H: 5, cut: 3 },
+    { W: 6, H: 5, cut: 3 },
+  ];
+  // 직사각형 칸 전체를 한 번에 지나는 랜덤 한붓그리기 길(backbite 알고리즘)을 만든 뒤, 길의 앞뒤 몇 칸을 막아 구멍을 낸다.
+  // 남은 칸을 전부 지나는 길이 항상 존재하고(= 항상 풀림), 길만 따라 걷는 외길이 아니라 갈림길이 많다.
+  function makeRoutePlan(cfg) {
+    var W = cfg.W, H = cfg.H, N = W * H, path = [], x, y, i;
+    for (y = 0; y < H; y++) for (x = 0; x < W; x++) path.push(y * W + (y % 2 ? W - 1 - x : x)); // 뱀 모양에서 시작
+    function nbrs(c) { var cx = c % W, cy = (c / W) | 0, o = []; if (cx > 0) o.push(c - 1); if (cx < W - 1) o.push(c + 1); if (cy > 0) o.push(c - W); if (cy < H - 1) o.push(c + W); return o; }
+    for (i = 0; i < N * 30; i++) {
+      var os = nbrs(path[0]).filter(function (n) { return n !== path[1]; });
+      var n = os[rand(os.length)], j = path.indexOf(n);
+      path = path.slice(0, j).reverse().concat(path.slice(j)); // path[0]과 n(=path[j])이 이웃이므로 앞부분을 뒤집어도 이어진다
+      if (i % 2) path.reverse();
+    }
+    var front = rand(cfg.cut + 1), back = cfg.cut - front;
+    var kept = path.slice(front, N - back), cells = [];
+    for (i = 0; i < N; i++) cells.push("#");
+    kept.forEach(function (q) { cells[q] = " "; });
+    cells[kept[0]] = "S";
+    var rows = []; for (y = 0; y < H; y++) rows.push(cells.slice(y * W, (y + 1) * W).join(""));
+    var dirs = ""; for (i = 1; i < kept.length; i++) { var df = kept[i] - kept[i - 1]; dirs += df === 1 ? "R" : df === -1 ? "L" : df === W ? "D" : "U"; }
+    return { rows: rows, solution: dirs };
+  }
+  function routeGame(body, c) {
+    var plan = makeRoutePlan(ROUTE_CFG[c.level - 1]), W = plan.rows[0].length, H = plan.rows.length;
+    var open = [], start = 0, i;
+    for (i = 0; i < W * H; i++) { var ch = plan.rows[(i / W) | 0].charAt(i % W); if (ch !== "#") open.push(i); if (ch === "S") start = i; }
+    var isOpen = {}; open.forEach(function (q) { isOpen[q] = 1; });
+    var trail = [start], visited = {}; visited[start] = 1; var doomed = false;
+    if (c.testHooks) body.setAttribute("data-plan", JSON.stringify({ rows: plan.rows, path: plan.solution }));
+    var floor = ""; for (i = 0; i < W * H; i++) floor += '<i class="sk-cell ' + (isOpen[i] ? "is-road" : "is-wall") + '"></i>';
+    body.innerHTML = '<div class="sk-wrap"><div class="sk-board rt-board" style="--cols:' + W + ';--rows:' + H + '"><div class="sk-floor">' + floor + '</div><svg class="rt-line" viewBox="0 0 ' + W + " " + H + '" preserveAspectRatio="none"><polyline points="" fill="none"/></svg><span class="sk-man rt-man">' + SK_MAN_SVG + "</span></div></div>"
+      + '<p class="sk-status"><span>지나온 길 <b class="rt-n">1</b> / ' + open.length + '</span></p><p class="mg-freeze-note"></p>'
+      + '<div class="pk-pad sk-pad">' + arrowPad("data-rt", actBtn("data-rt", "undo", "한 칸 되돌리기", "Z · ⌫") + actBtn("data-rt", "restart", "처음부터", "R")) + "</div>";
+    var cellEls = body.querySelectorAll(".sk-cell"), man = body.querySelector(".rt-man"), line = body.querySelector(".rt-line polyline");
+    var nEl = body.querySelector(".rt-n"), note = body.querySelector(".mg-freeze-note"), boardEl = body.querySelector(".sk-board");
+    cellEls[start].classList.add("is-start");
+    function reachableAll() { // 남은 칸을 전부 지나는 길이 아직 가능한가 (필요 조건 검사: 연결 + 막다른 칸은 최대 1개)
+      var head = trail[trail.length - 1], seen = {}, q = [head], cnt = 0; seen[head] = 1;
+      var around = function (cur) { var cx = cur % W, cy = (cur / W) | 0, o = [], dd = [[0, -1], [0, 1], [-1, 0], [1, 0]]; dd.forEach(function (d) { var nx = cx + d[0], ny = cy + d[1]; if (nx >= 0 && ny >= 0 && nx < W && ny < H) o.push(ny * W + nx); }); return o; };
+      while (q.length) {
+        var cur = q.pop();
+        around(cur).forEach(function (ni) { if (!isOpen[ni] || visited[ni] || seen[ni]) return; seen[ni] = 1; cnt++; q.push(ni); });
+      }
+      var remain = open.length - trail.length;
+      if (cnt !== remain) return false;
+      var ends = 0;
+      for (var u = 0; u < W * H; u++) {
+        if (!isOpen[u] || visited[u]) continue;
+        var deg = around(u).filter(function (ni) { return isOpen[ni] && (!visited[ni] || ni === head); }).length;
+        if (deg === 0) return false;
+        if (deg === 1) { ends++; if (ends > 1 && remain > 1) return false; }
+      }
+      return true;
+    }
+    function paint() {
+      placeAt(man, trail[trail.length - 1], W);
+      var inTrail = {}; trail.forEach(function (q) { inTrail[q] = 1; });
+      for (var k = 0; k < W * H; k++) cellEls[k].classList.toggle("is-trail", !!inTrail[k]);
+      line.setAttribute("points", trail.map(function (q) { return (q % W + 0.5) + "," + (((q / W) | 0) + 0.5); }).join(" "));
+      nEl.textContent = trail.length;
+      boardEl.classList.toggle("is-doomed", doomed);
+      if (c.testHooks) body.setAttribute("data-rt", [trail[trail.length - 1] % W, (trail[trail.length - 1] / W) | 0, trail.length].join(","));
+    }
+    function act(a) {
+      if (c.isFinished()) return;
+      if (a === "undo") {
+        if (trail.length < 2) return;
+        var gone = trail.pop(); delete visited[gone];
+        doomed = !reachableAll(); note.textContent = doomed ? "아직 막다른 길이에요 — 더 되돌려 보세요 (Z)" : ""; paint(); return;
+      }
+      if (a === "restart") { trail = [start]; visited = {}; visited[start] = 1; doomed = false; note.textContent = ""; paint(); return; }
+      var d = SOKO_DIRS[a]; if (!d) return;
+      var head = trail[trail.length - 1], nx = head % W + d[0], ny = ((head / W) | 0) + d[1];
+      if (nx < 0 || ny < 0 || nx >= W || ny >= H) return;
+      var ni = ny * W + nx;
+      if (!isOpen[ni] || visited[ni]) { restartAnim(man, "is-bump"); return; }
+      trail.push(ni); visited[ni] = 1;
+      if (trail.length === open.length) { paint(); note.textContent = "모든 길을 지났어요!"; c.later(c.finish, 420); return; }
+      var ok = reachableAll();
+      if (!ok && !doomed) { c.addMistake(); note.textContent = "남은 길로 갈 수 없게 됐어요 — Z로 되돌려 보세요"; restartAnim(boardEl, "is-shake"); }
+      else if (ok) note.textContent = "";
+      doomed = !ok; paint();
+    }
+    bindPad(body, c, "data-rt", act);
+    paint();
+    return { hint: function () { return "창고(주황 칸)에서 출발해 방향키로 길을 따라가며 모든 길 칸을 한 번씩만 지나가세요. 한 번 지난 칸은 다시 못 가요. 막히면 Z로 한 칸씩 되돌리세요. 남은 길로 갈 수 없게 되면 알려줘요."; } };
+  }
+
+  // ---------- 컨베이어 잇기 (파이프) ----------
+  var PIPE_CFG = [{ W: 4, H: 3 }, { W: 5, H: 4 }, { W: 6, H: 5 }];
+  var PU = 1, PR = 2, PD = 4, PL = 8;
+  function rotMask(m, n) { n = ((n % 4) + 4) % 4; while (n--) m = ((m << 1) | (m >> 3)) & 15; return m; }
+  function makePipePlan(cfg) {
+    var W = cfg.W, H = cfg.H;
+    for (;;) {
+      var r0 = rand(H), r1 = rand(H), path = [r0 * W], used = {}; used[r0 * W] = 1;
+      var guard = 0, target = r1 * W + W - 1;
+      // 입구(왼쪽 r0행) -> 출구(오른쪽 r1행): 자기 교차 없는 랜덤 길 (최대 시도 횟수 안에서)
+      while (path[path.length - 1] !== target && guard++ < 400) {
+        var cur = path[path.length - 1], cx = cur % W, cy = (cur / W) | 0, opts = [];
+        [[0, -1], [0, 1], [-1, 0], [1, 0]].forEach(function (d) { var nx = cx + d[0], ny = cy + d[1]; if (nx >= 0 && ny >= 0 && nx < W && ny < H && !used[ny * W + nx]) opts.push(ny * W + nx); });
+        if (!opts.length) { used[path.pop()] = 2; if (!path.length) break; continue; }
+        // 목표 쪽으로 약간 치우치게 고르되, 돌아가는 길도 섞는다
+        var nxt = opts[rand(opts.length)]; used[nxt] = 1; path.push(nxt);
+      }
+      if (path[path.length - 1] !== target || path.length < W + 1) continue;
+      var tiles = [], i;
+      for (i = 0; i < W * H; i++) { var kinds = [5, 3, 3, 7]; tiles.push({ mask: kinds[rand(4)], goal: -1 }); }
+      path.forEach(function (q, k) {
+        var inD = k === 0 ? PL : (q - path[k - 1] === 1 ? PL : q - path[k - 1] === -1 ? PR : q - path[k - 1] === W ? PU : PD);
+        var outD = k === path.length - 1 ? PR : (path[k + 1] - q === 1 ? PR : path[k + 1] - q === -1 ? PL : path[k + 1] - q === W ? PD : PU);
+        var need = inD | outD, base = (need === 5 || need === 10) ? 5 : 3, n;
+        tiles[q].mask = base; tiles[q].goal = -1;
+        for (n = 0; n < 4; n++) if (rotMask(base, n) === need) tiles[q].goal = n;
+      });
+      // 시작 회전은 전부 무작위 (정답 회전이 우연히 이어져 있으면 다시 섞는다)
+      for (var tries = 0; tries < 30; tries++) {
+        tiles.forEach(function (t) { t.rot = rand(4); });
+        if (!pipeFlow(W, H, r0, r1, tiles).ok) return { W: W, H: H, r0: r0, r1: r1, tiles: tiles, path: path };
+      }
+    }
+  }
+  function pipeFlow(W, H, r0, r1, tiles) { // 입구에서 막힘 없이 이어지는 칸 집합 + 출구 도달 여부
+    var seen = {}, q = [], ok = false;
+    var m0 = rotMask(tiles[r0 * W].mask, tiles[r0 * W].rot);
+    if (m0 & PL) { seen[r0 * W] = 1; q.push(r0 * W); }
+    while (q.length) {
+      var cur = q.pop(), cx = cur % W, cy = (cur / W) | 0, m = rotMask(tiles[cur].mask, tiles[cur].rot);
+      if (cur === r1 * W + W - 1 && (m & PR)) ok = true;
+      [[PU, 0, -1, PD], [PR, 1, 0, PL], [PD, 0, 1, PU], [PL, -1, 0, PR]].forEach(function (d) {
+        if (!(m & d[0])) return;
+        var nx = cx + d[1], ny = cy + d[2]; if (nx < 0 || ny < 0 || nx >= W || ny >= H) return;
+        var ni = ny * W + nx; if (seen[ni]) return;
+        if (rotMask(tiles[ni].mask, tiles[ni].rot) & d[3]) { seen[ni] = 1; q.push(ni); }
+      });
+    }
+    return { ok: ok, flow: seen };
+  }
+  function pipeSvg(mask) { // 칸 안에 열린 쪽으로 관을 그린다
+    var s = '<svg viewBox="0 0 40 40" aria-hidden="true"><circle cx="20" cy="20" r="6" class="pp-hub"/>';
+    if (mask & PU) s += '<rect x="14" y="0" width="12" height="22" class="pp-arm"/>';
+    if (mask & PR) s += '<rect x="18" y="14" width="22" height="12" class="pp-arm"/>';
+    if (mask & PD) s += '<rect x="14" y="18" width="12" height="22" class="pp-arm"/>';
+    if (mask & PL) s += '<rect x="0" y="14" width="22" height="12" class="pp-arm"/>';
+    return s + "</svg>";
+  }
+  function pipeGame(body, c) {
+    var plan = makePipePlan(PIPE_CFG[c.level - 1]), W = plan.W, H = plan.H, tiles = plan.tiles, cx = 0, cy = plan.r0, hist = [];
+    if (c.testHooks) body.setAttribute("data-plan", JSON.stringify({ W: W, H: H, src: plan.r0, snk: plan.r1, presses: tiles.map(function (t) { return t.goal < 0 ? 0 : ((t.goal - t.rot) % 4 + 4) % 4; }) }));
+    var cellsHtml = tiles.map(function () { return '<button type="button" class="pp-tile" tabindex="-1"></button>'; }).join("");
+    body.innerHTML = '<div class="pp-wrap"><div class="pp-in" style="--r:' + plan.r0 + ';--rows:' + H + '">입구 ▶</div><div class="pp-board" style="--cols:' + W + ';--rows:' + H + '">' + cellsHtml + '</div><div class="pp-out" style="--r:' + plan.r1 + ';--rows:' + H + '">▶ 출구</div></div>'
+      + '<p class="mg-freeze-note"></p><div class="pk-pad sk-pad">' + arrowPad("data-pp", actBtn("data-pp", "space", "돌리기", "SPACE") + actBtn("data-pp", "undo", "되돌리기", "Z · ⌫")) + "</div>";
+    var tileEls = Array.prototype.slice.call(body.querySelectorAll(".pp-tile")), note = body.querySelector(".mg-freeze-note");
+    function paint() {
+      var f = pipeFlow(W, H, plan.r0, plan.r1, tiles);
+      tileEls.forEach(function (e, i) {
+        e.innerHTML = pipeSvg(rotMask(tiles[i].mask, tiles[i].rot));
+        e.classList.toggle("is-flow", !!f.flow[i]); e.classList.toggle("is-cursor", i === cy * W + cx);
+      });
+      if (c.testHooks) body.setAttribute("data-pp", [cx, cy, Object.keys(f.flow).length, hist.length].join(","));
+      return f;
+    }
+    function act(a) {
+      if (c.isFinished()) return;
+      if (a === "left") cx = clamp(cx - 1, 0, W - 1); else if (a === "right") cx = clamp(cx + 1, 0, W - 1);
+      else if (a === "up") cy = clamp(cy - 1, 0, H - 1); else if (a === "down") cy = clamp(cy + 1, 0, H - 1);
+      else if (a === "space" || a === "enter") {
+        var i = cy * W + cx; tiles[i].rot = (tiles[i].rot + 1) % 4; hist.push(i);
+        var f = paint(); if (f.ok) { note.textContent = "컨베이어가 이어졌어요!"; c.later(c.finish, 450); }
+        return;
+      } else if (a === "undo") { if (!hist.length) return; var j = hist.pop(); tiles[j].rot = (tiles[j].rot + 3) % 4; cx = j % W; cy = (j / W) | 0; }
+      else return;
+      paint();
+    }
+    bindPad(body, c, "data-pp", act);
+    Array.prototype.forEach.call(tileEls, function (e, i) { e.addEventListener("pointerdown", function (ev) { ev.preventDefault(); cx = i % W; cy = (i / W) | 0; act("space"); }); });
+    paint();
+    return { hint: function () { return "방향키로 타일을 고르고 스페이스로 돌려서, 왼쪽 입구에서 오른쪽 출구까지 컨베이어를 이으세요. 이어진 칸은 파랗게 켜져요. Z로 되돌려요. (타일을 눌러도 돌아가요)"; } };
+  }
+
+  // ---------- 택배 쌓기 (하노이) ----------
+  var HANOI_N = [3, 4, 5];
+  function hanoiGame(body, c) {
+    var n = HANOI_N[c.level - 1], pegs = [[], [], []], cur = 0, held = null, from = -1, hist = [], moves = 0, i;
+    for (i = n; i >= 1; i--) pegs[0].push(i);
+    function optimal() { var out = []; (function mv(k, a, b, via) { if (!k) return; mv(k - 1, a, via, b); out.push([a, b]); mv(k - 1, via, b, a); })(n, 0, 2, 1); return out; }
+    if (c.testHooks) body.setAttribute("data-plan", JSON.stringify({ n: n, solution: optimal() }));
+    body.innerHTML = '<div class="hn-board">' + [0, 1, 2].map(function (p) { return '<div class="hn-peg" data-peg="' + p + '"><div class="hn-pole"></div><div class="hn-stack"></div></div>'; }).join("") + '</div>'
+      + '<div class="hn-hand"></div><p class="sk-status"><span>움직임 <b class="hn-moves">0</b></span></p><p class="mg-freeze-note"></p>'
+      + '<div class="pk-pad sk-pad">' + '<button type="button" class="mg-key" data-hn="left" aria-label="왼쪽">←</button><button type="button" class="mg-key" data-hn="right" aria-label="오른쪽">→</button>'
+      + actBtn("data-hn", "space", "집기 / 놓기", "SPACE") + actBtn("data-hn", "undo", "되돌리기", "Z · ⌫") + "</div>";
+    var pegEls = Array.prototype.slice.call(body.querySelectorAll(".hn-peg")), handEl = body.querySelector(".hn-hand"), movesEl = body.querySelector(".hn-moves"), note = body.querySelector(".mg-freeze-note");
+    function boxHtml(sz) { return '<div class="hn-box" style="--w:' + (28 + sz * 14) + '%;--k:' + sz + '"><i></i></div>'; }
+    function paint() {
+      pegEls.forEach(function (e, p) {
+        e.classList.toggle("is-cursor", p === cur);
+        e.querySelector(".hn-stack").innerHTML = pegs[p].map(boxHtml).join("");
+      });
+      handEl.innerHTML = held ? '<div class="hn-held" style="--p:' + cur + '">' + boxHtml(held) + "</div>" : "";
+      movesEl.textContent = moves;
+      if (c.testHooks) body.setAttribute("data-hn", [cur, held || 0, moves].join(","));
+    }
+    function act(a) {
+      if (c.isFinished()) return;
+      if (a === "left") cur = clamp(cur - 1, 0, 2);
+      else if (a === "right") cur = clamp(cur + 1, 0, 2);
+      else if (a === "1" || a === "2" || a === "3") cur = parseInt(a, 10) - 1;
+      else if (a === "up") { /* 집기 */ if (!held && pegs[cur].length) { held = pegs[cur].pop(); from = cur; } }
+      else if (a === "down") { if (held) a = "space"; }
+      if (a === "space" || a === "enter") {
+        if (!held) { if (pegs[cur].length) { held = pegs[cur].pop(); from = cur; } }
+        else {
+          var top = pegs[cur].length ? pegs[cur][pegs[cur].length - 1] : 99;
+          if (held > top) { c.addMistake(); note.textContent = "큰 상자를 작은 상자 위에 놓을 수 없어요"; restartAnim(pegEls[cur], "is-shake"); c.later(function () { note.textContent = ""; }, 1100); return paint(); }
+          pegs[cur].push(held); held = null; note.textContent = "";
+          if (cur !== from) { hist.push([from, cur]); moves++; }
+          from = -1;
+          if (pegs[2].length === n) { paint(); note.textContent = "탑을 다 옮겼어요!"; c.later(c.finish, 420); return; }
+        }
+      } else if (a === "undo") {
+        if (held) { pegs[from].push(held); held = null; from = -1; }
+        else if (hist.length) { var m = hist.pop(); pegs[m[0]].push(pegs[m[1]].pop()); moves--; }
+        note.textContent = "";
+      } else if (a === "restart") {
+        pegs = [[], [], []]; for (var k = n; k >= 1; k--) pegs[0].push(k); held = null; from = -1; hist = []; moves = 0; cur = 0; note.textContent = "";
+      }
+      paint();
+    }
+    bindPad(body, c, "data-hn", act, { "1": "1", "2": "2", "3": "3" });
+    paint();
+    return { hint: function () { return "맨 왼쪽 탑을 맨 오른쪽 칸으로 옮기세요. ←→로 칸을 고르고 스페이스로 맨 위 상자를 집고, 다른 칸에서 스페이스로 놓아요. 큰 상자를 작은 상자 위에 놓으면 실수! (1·2·3 키로 칸 바로 선택, Z 되돌리기, R 처음부터)"; } };
+  }
+
+  var GAMES = { pack: packGame, inspect: inspectGame, sticker: stickerGame, map: mapGame, soko: sokoGame, ice: iceGame, route: routeGame, twin: twinGame, pipe: pipeGame, hanoi: hanoiGame };
 
   // ======================================================================
   // 공통 진행: 헤더(제목/시간/실수/포기), 타이머, 완료 배너, 정리
@@ -2143,7 +2788,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
 (function () {
   "use strict";
 
-  var TYPES = [{"key": "normal", "name": "일반택배", "count": 4, "pieces": 2, "reward": 2500, "penalty": 1000, "color": "#C9A576", "ink": "#16233F", "mini": "pack", "miniLevel": [2, 3]}, {"key": "fragile", "name": "깨지기 쉬운 택배", "count": 4, "pieces": 3, "reward": 5000, "penalty": 2500, "color": "#C7E29A", "ink": "#16233F", "mini": "inspect", "miniLevel": [2, 3]}, {"key": "valuable", "name": "귀중품", "count": 3, "pieces": 4, "reward": 10000, "penalty": 5000, "color": "#F0B84A", "ink": "#16233F", "mini": "soko", "miniLevel": [2, 3]}, {"key": "fixed-floor", "name": "확정 층수 택배", "count": 6, "pieces": 3, "fixedFloor": true, "reward": 3000, "penalty": 2500, "color": "#6DBBFD", "ink": "#16233F", "mini": "map", "miniLevel": [2, 3]}];
+  var TYPES = [{"key": "normal", "name": "일반택배", "count": 4, "pieces": 2, "reward": 2500, "penalty": 1000, "color": "#C9A576", "ink": "#16233F", "mini": "ice", "miniLevel": 2}, {"key": "fragile", "name": "깨지기 쉬운 택배", "count": 4, "pieces": 3, "reward": 5000, "penalty": 2500, "color": "#C7E29A", "ink": "#16233F", "mini": "map", "miniLevel": 3}, {"key": "valuable", "name": "귀중품", "count": 3, "pieces": 4, "reward": 10000, "penalty": 5000, "color": "#F0B84A", "ink": "#16233F", "mini": "soko", "miniLevel": 3}, {"key": "fixed-floor", "name": "확정 층수 택배", "count": 6, "pieces": 3, "fixedFloor": true, "reward": 3000, "penalty": 2500, "color": "#6DBBFD", "ink": "#16233F", "mini": "route", "miniLevel": 3}];
   // 2026-08-28: 전반/후반이 서로 다른 21장 퍼즐 이미지 세트를 쓴다 (build_client.py의 REF_DIR_1/
   // REF_DIR_2 참고). 보드 구조(id/catIdx/num)는 동일하고 src(이미지)만 다르므로 배열을 통째로
   // 두 벌 두고, cellMeta(id, half)가 half에 맞는 쪽에서 찾는다.
@@ -2537,7 +3182,7 @@ body.main-view #app { height: 100vh; min-height: 0; }
   // TYPES[catIdx].mini(game-data.js)가 있는 종류의 칸은 우봉고 대신 minigames.js의 게임을 띄운다
   // (null이면 기존 우봉고 이미지 + "완료" 버튼). 게임은 #app이 아니라 #mg-layer에 mount한다 -- 이유는 CSS 주석 참고.
   // 서버는 이 게임을 모른다: 클라이언트가 끝까지 풀었다고 판정하면 예전과 똑같은 secure-cell 하나만 보낸다.
-  var MINI_NAME = { pack: "박스 포장", inspect: "이상 확인", sticker: "송장 붙이기", map: "지도 배달", soko: "창고 정리" };
+  var MINI_NAME = { pack: "박스 포장", inspect: "이상 확인", sticker: "송장 붙이기", map: "지도 배달", soko: "창고 정리", ice: "빙판 배송", route: "배달 경로", twin: "쌍둥이 배달", pipe: "컨베이어 잇기", hanoi: "택배 쌓기" };
   // ?mgtest=1 이면 불량 검수의 정답 칸에 data-defect를 노출한다 (자동 테스트 전용 -- 일반 플레이엔 안 붙음).
   var TEST_HOOKS = /[?&]mgtest=1(&|$)/.test(location.search);
   var mg = null; // { cellId, ctl }

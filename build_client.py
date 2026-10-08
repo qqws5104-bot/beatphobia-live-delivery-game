@@ -982,7 +982,7 @@ APP_JS_TEMPLATE = r"""
   // TYPES[catIdx].mini(game-data.js)가 있는 종류의 칸은 우봉고 대신 minigames.js의 게임을 띄운다
   // (null이면 기존 우봉고 이미지 + "완료" 버튼). 게임은 #app이 아니라 #mg-layer에 mount한다 -- 이유는 CSS 주석 참고.
   // 서버는 이 게임을 모른다: 클라이언트가 끝까지 풀었다고 판정하면 예전과 똑같은 secure-cell 하나만 보낸다.
-  var MINI_NAME = { pack: "박스 포장", inspect: "이상 확인", sticker: "송장 붙이기", map: "지도 배달", soko: "창고 정리" };
+  var MINI_NAME = { pack: "박스 포장", inspect: "이상 확인", sticker: "송장 붙이기", map: "지도 배달", soko: "창고 정리", ice: "빙판 배송", route: "배달 경로", twin: "쌍둥이 배달", pipe: "컨베이어 잇기", hanoi: "택배 쌓기" };
   // ?mgtest=1 이면 불량 검수의 정답 칸에 data-defect를 노출한다 (자동 테스트 전용 -- 일반 플레이엔 안 붙음).
   var TEST_HOOKS = /[?&]mgtest=1(&|$)/.test(location.search);
   var mg = null; // { cellId, ctl }
