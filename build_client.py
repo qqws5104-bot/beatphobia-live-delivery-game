@@ -2285,10 +2285,11 @@ APP_JS_TEMPLATE = r"""
   //   엘리베이터 (사용자 결정, 맨 처음 엘리베이터 라운드처럼): 각자 자리(자기 플레이어 화면 기기)에서 자기 ↑ / ↓ 키. 메인 화면에선 엘리베이터를 못 움직임.
   //   호실 키는 메인 화면에선 두 팀 다, 플레이어 화면에선 자기 팀 키만. 현장 버튼 인코더는 이 키로 연결 (벽버튼_배선표.csv).
   var WAR_KEYS = {
-    "1": { up: ["ArrowUp"], down: ["ArrowDown"], slot: ["KeyQ", "KeyE", "KeyT", "KeyU"] },
-    "2": { up: ["ArrowUp"], down: ["ArrowDown"], slot: ["KeyW", "KeyR", "KeyY", "KeyI"] },
+    // 2026-10-23 오후: 7층 x 8호 -- 5~8호는 아랫줄에서 같은 식으로 번갈아 (A S D F G H J K)
+    "1": { up: ["ArrowUp"], down: ["ArrowDown"], slot: ["KeyQ", "KeyE", "KeyT", "KeyU", "KeyA", "KeyD", "KeyG", "KeyJ"] },
+    "2": { up: ["ArrowUp"], down: ["ArrowDown"], slot: ["KeyW", "KeyR", "KeyY", "KeyI", "KeyS", "KeyF", "KeyH", "KeyK"] },
   };
-  var WAR_KEY_LABEL = { "1": { up: "↑", down: "↓", slot: ["Q", "E", "T", "U"] }, "2": { up: "↑", down: "↓", slot: ["W", "R", "Y", "I"] } };
+  var WAR_KEY_LABEL = { "1": { up: "↑", down: "↓", slot: ["Q", "E", "T", "U", "A", "D", "G", "J"] }, "2": { up: "↑", down: "↓", slot: ["W", "R", "Y", "I", "S", "F", "H", "K"] } };
   function dWar() { return !!(state && state.delivery && state.delivery.elev && state.delivery.elev.war); }
   function warKey(code, shift) {
     for (var s = 1; s <= 2; s++) {

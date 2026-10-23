@@ -192,8 +192,9 @@ const WALL_MODE = 1;
 //   택배 없는 층이면 배송 없이 바로 다음 이동. (1차의 "5연타 선점" 게이지는 이 방식으로 바뀌어 안 씀 -- ELEV_WAR_TAPS 등은 남겨 둠)
 const APT_WAR = process.env.APT_WAR === "0" ? 0 : 1;
 // 2026-10-23 (사용자 결정, 1인당 택배 약 6개 기준 시뮬레이션): 8층 + 배송 60초 -- 필요한 정차(약 6.7번)가 가능한 정차(6번)보다 조금 많게.
-const APT_FLOORS = 8;
-const APT_UNITS_PER_FLOOR = 4; // 2026-10-23 (사용자 결정): 층마다 N01~N04 (호실 키 빨강 Q E T U / 파랑 W R Y I)
+// 2026-10-23 오후 (사용자 결정): 7층 x 8호(N01~N08) = 56집. 호실 키 빨강 Q E T U A D G J / 파랑 W R Y I S F H K.
+const APT_FLOORS = 7;
+const APT_UNITS_PER_FLOOR = 8; // 2026-10-23 (사용자 결정): 층마다 N01~N04 (호실 키 빨강 Q E T U / 파랑 W R Y I)
 const ELEV_MOVE_MS = 5000;
 const ELEV_WAR_TAPS = Math.max(1, parseInt(process.env.ELEV_TAPS || "5", 10) || 5);
 const ELEV_SETTLE_MS = 800;

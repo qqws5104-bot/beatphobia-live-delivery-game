@@ -19,7 +19,7 @@ const inv = (id, unit, reward) => ({ id, catIdx: 0, unit, reward: reward || 1000
 const up = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, "up"); };
 const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, "down"); };
 (async () => {
-  assert.strictEqual(D.UNITS.length, 32, "아파트 8층 x 4호"); assert.strictEqual(D.DELIVERY_MS, 60000, "배송 60초");
+  assert.strictEqual(D.UNITS.length, 56, "아파트 7층 x 8호"); assert.strictEqual(D.DELIVERY_MS, 60000, "배송 60초");
   assert(D.UNITS.every((u) => u.b === "apt"));
   assert.strictEqual(D.ELEV_MOVE_MS, 5000); assert.strictEqual(D.ELEV_OPEN_MS, 5000);
   // 1) 이동 단계: 누를 때마다 바로 한 층 (줄다리기), 1~7층 안. 누가 몇 번 눌렀는지 셈.
@@ -29,7 +29,7 @@ const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, 
     assert(e().war); assert.strictEqual(e().stage, "move"); assert.strictEqual(e().floor, 1);
     up(room, "1", 3); assert.strictEqual(e().floor, 4);
     down(room, "2", 1); assert.strictEqual(e().floor, 3, "상대가 반대로 누르면 바로 내려감");
-    up(room, "1", 10); assert.strictEqual(e().floor, 8, "8층까지만");
+    up(room, "1", 10); assert.strictEqual(e().floor, 7, "7층까지만");
     assert.deepStrictEqual(e().moves, { "1": { up: 13, down: 0 }, "2": { up: 0, down: 1 } });
     room.wallElevator(null, "up"); assert.strictEqual(e().moves["1"].up, 13, "누군지 모르는 입력은 무시");
     room.destroy();
@@ -87,7 +87,7 @@ const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, 
     box.st.players["1"].invoices = [inv("a", "a104", 3000)];
     await sleep(500);
     room.wallSlot("1", 4);
-    room.wallSlot("1", 5); // 5호는 없음 -> 무시
+    room.wallSlot("1", 9); // 9호는 없음 -> 무시
     await sleep(4000);
     assert.strictEqual(box.st.halfHistory[0].scores["1"], 3000);
     room.destroy();
