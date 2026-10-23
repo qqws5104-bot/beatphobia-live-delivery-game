@@ -25,7 +25,7 @@ const OUT = "/tmp/war_e2e_";
       await p.waitForFunction(() => !!document.querySelector("#mx-layer.on .mx-card:not(.won)") || !!document.querySelector('.race-blank [data-action="race-done"]'), null, { timeout: 8000 });
       if (await p.locator('.race-blank [data-action="race-done"]').count() && !(await p.locator("#mx-layer.on .mx-card:not(.won)").count())) return;
       const name = await p.locator("#mx-layer .mx-name").textContent();
-      if (!shotKinds[name]) { shotKinds[name] = 1; await p.screenshot({ path: OUT + "mx_" + Object.keys(shotKinds).length + ".png" }); }
+      if (!shotKinds[name]) { shotKinds[name] = 1; await p.screenshot({ path: OUT + "mx_" + Object.keys(shotKinds).length + ".png" }); await p.screenshot({ path: OUT + "mxn_" + name.replace(/ /g, "") + ".png" }); }
       await p.evaluate(() => window.__mxFinish()); await p.waitForTimeout(1300);
     }
   };
@@ -81,6 +81,8 @@ const OUT = "/tmp/war_e2e_";
       const cur = await floor(); if (cur === F) break;
       if (k % 2) await p1.click(cur < F ? ".wp-arrow.up" : ".wp-arrow.down"); else await p1.keyboard.press(cur < F ? "ArrowUp" : "ArrowDown"); await p1.waitForTimeout(80);
     }
+    const clean = async (pg) => pg.evaluate(() => document.querySelectorAll(".wov, #dpop").forEach((e) => e.classList.remove("show")));
+    if (tries === 0) { await clean(p1); await p1.screenshot({ path: OUT + "p1_move_clean.png" }); }
     if (tries === 0) { await p1.screenshot({ path: OUT + "p1_move.png" }); await s.screenshot({ path: OUT + "main_move.png" }); }
     if (tries === 0) { // 마지막 3초 카운트다운 -> 멈춤
       await s.waitForSelector("#wcd.show.cd", { timeout: 6000 }); await s.screenshot({ path: OUT + "main_cd.png" });
@@ -91,7 +93,7 @@ const OUT = "/tmp/war_e2e_";
     const here = await p1.evaluate(() => +document.querySelector(".wst.big b").textContent.replace(/\D/g, "") >= 0 && document.querySelectorAll(".wp-door").length);
     const doorF = +(await p1.locator(".wp-door b").first().textContent())[0];
     if (doorF !== F) { await p1.waitForSelector(".wp-move", { timeout: 8000 }); continue; }
-    await p1.screenshot({ path: OUT + "p1_open.png" }); await s.screenshot({ path: OUT + "main_open.png" });
+    await p1.screenshot({ path: OUT + "p1_open.png" }); await p1.waitForTimeout(700); await clean(p1); await p1.screenshot({ path: OUT + "p1_open_clean.png" }); await s.screenshot({ path: OUT + "main_open.png" });
     // 틀린 문 먼저 -> 1초 잠김, 그다음 맞는 문 한 번
     const W = [1, 2, 3, 4, 5, 6, 7, 8].find((x) => !slips.includes(F + "0" + x)); // 내 택배 없는 문
     await p1.click('.wp-door[data-slot="' + W + '"]'); await p1.waitForTimeout(250);
@@ -110,6 +112,7 @@ const OUT = "/tmp/war_e2e_";
   }
   assert(delivered, "플레이어 화면에서 이동 -> 배송");
   await s.screenshot({ path: OUT + "main_done.png" });
+  if (process.env.FEVERSHOT) { await s.waitForSelector("body.d-fever", { timeout: 70000 }); await s.waitForTimeout(500); await s.screenshot({ path: OUT + "main_fever.png" }); await p1.screenshot({ path: OUT + "p1_fever.png" }); }
   for (const [w, h] of [[1920, 1080], [1366, 768], [1280, 720], [1920, 1200], [1024, 768], [2560, 1440]]) {
     await s.setViewportSize({ width: w, height: h }); await s.waitForTimeout(300); await s.screenshot({ path: OUT + "main_" + w + "x" + h + ".png" });
     const ov = await s.evaluate(() => document.documentElement.scrollHeight > window.innerHeight + 2 || [...document.querySelectorAll(".wbld, .wpanel")].some(d => d.scrollHeight > d.clientHeight + 4));

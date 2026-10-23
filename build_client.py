@@ -898,6 +898,7 @@ APP_JS_TEMPLATE = r"""
       var msg;
       try { msg = JSON.parse(ev.data); } catch (e) { return; }
       if (!msg) return;
+      if (msg.type === "prog") { mxOnProg(msg); return; } // 2026-10-23 상대 미니게임 진행 (상태 전체가 아닌 가벼운 메시지)
       if (msg.type === "state") {
         // the elevator's floorIdx is now real, server-authoritative position -- every click (from
         // either player) already moves it for real before this broadcast goes out, so a plain
@@ -2890,7 +2891,102 @@ APP_JS_TEMPLATE = r"""
     return el;
   }
   function mxClose() { if (mx && mx.clock) clearInterval(mx.clock); if (mx && mx.timer) { clearTimeout(mx.timer); clearInterval(mx.timer); } mx = null; var el = document.getElementById("mx-layer"); if (el) { el.innerHTML = ""; el.classList.remove("on"); } }
+
+  // ---------- 2026-10-23 한 화면 겨루기 (r.duelMode): 큰 공용 화면(메인)에서 한 물건을 두고 / 각자 자리 기기는 버튼만 ----
+  var DUEL_NAME = { tug: "테이프 줄다리기", quiz: "주소 퀴즈" };
+  var DUEL_KEYS = ["ArrowLeft", "ArrowUp", "ArrowDown", "ArrowRight"], DUEL_ARROW = ["←", "↑", "↓", "→"];
+  function duelOn(st) { var r = st && st.phase === "secure" ? st.race : null; return !!(r && r.duelMode); }
+  function duelTimeBar(d, big) {
+    var ms = d.endsAt - d.startedAt;
+    return '<i class="duel-time' + (big ? ' big' : '') + '" data-dend="' + d.endsAt + '" data-dms="' + ms + '"><i style="width:' + Math.max(0, Math.min(100, (d.endsAt - nowMs()) / ms * 100)) + '%"></i></i>';
+  }
+  function duelResult(d, st) {
+    if (!d.result) return '';
+    if (d.result === "none") return '<div class="duel-res none"><b>무승부</b><span>다음 문제!</span></div>';
+    return '<div class="duel-res t' + d.winner + '"><b>' + esc(TEAM[d.winner] || seatName(d.winner, st)) + ' 승!</b><span>조각 +1' + (d.result === "time" ? ' · 시간 끝' : '') + '</span></div>';
+  }
+  // 메인 화면 (공용): 줄다리기 테이프 / 퀴즈 문제
+  function duelArena(st) {
+    var r = st.race, d = r.duel;
+    var who = function (sn) { var got = r.got ? r.got[sn] : 0, stg = r.stage[sn];
+      return '<div class="duel-who t' + sn + (d && d.players.indexOf(sn) < 0 ? ' out' : '') + '"><b>' + esc(TEAM[sn]) + '</b><span>조각 ' + got + '/' + r.need + '</span>'
+        + (stg !== "pieces" ? '<em>' + (stg === "done" ? '완성!' : '퍼즐 맞추는 중') + '</em>' : '') + '</div>'; };
+    if (!d) return '<div class="duel-arena"><div class="duel-top">' + who("1") + '<div class="duel-title">조각을 다 모았어요! 퍼즐을 맞추세요</div>' + who("2") + '</div></div>';
+    var body = '';
+    if (d.kind === "tug") {
+      var x = 50 + Math.max(-1, Math.min(1, d.pos / d.goal)) * 46, tg = d.tangle || {}, n = nowMs();
+      body = '<div class="duel-tug"><div class="tug-end t1">◀ 빨강</div><div class="tug-track"><i class="tug-line t1" style="left:4%;width:' + (x - 4) + '%"></i><i class="tug-line t2" style="left:' + x + '%;width:' + (96 - x) + '%"></i>'
+        + '<i class="tug-mid"></i><b class="tug-knot" style="left:' + x + '%">' + mxBoxSvg() + '</b></div><div class="tug-end t2">파랑 ▶</div></div>'
+        + '<div class="duel-sub">← → 번갈아 눌러 테이프를 내 쪽으로! <span class="tug-cnt t1">' + (d.presses["1"] || 0) + '</span> : <span class="tug-cnt t2">' + (d.presses["2"] || 0) + '</span>'
+        + ['1', '2'].map(function (sn) { return tg[sn] && n - tg[sn] < 500 ? ' <em class="tug-tangle t' + sn + '">' + esc(TEAM[sn]) + ' 꼬임!</em>' : ''; }).join('') + '</div>';
+    } else {
+      var memo = d.memo.join('의 ');
+      body = '<div class="duel-quiz"><div class="dq-bill"><small>받는 분 주소</small><b>' + esc(d.base) + '</b><span>배송 메모 · <em>' + esc(memo) + '</em>에 맡겨 주세요</span></div>'
+        + '<div class="dq-opts">' + d.opts.map(function (o, i) {
+          var mark = d.result && d.result !== "none" && i === d.answer ? ' ok' : (d.lastWrong && d.lastWrong.i === i && nowMs() - d.lastWrong.at < 900 ? ' bad t' + d.lastWrong.seat : '');
+          return '<div class="dq-opt' + mark + '"><b>' + esc(o) + '</b><small>' + DUEL_ARROW[i] + '</small></div>'; }).join('') + '</div>'
+        + '<div class="duel-sub">먼저 맞힌 사람이 조각! 틀리면 잠깐 못 눌러요' + ['1', '2'].map(function (sn) { return d.lock && d.lock[sn] > nowMs() ? ' <em class="tug-tangle t' + sn + '">' + esc(TEAM[sn]) + ' 잠김</em>' : ''; }).join('') + '</div></div>';
+    }
+    return '<div class="duel-arena k-' + d.kind + '"><div class="duel-top">' + who("1") + '<div class="duel-title"><small>문제 ' + d.n + '</small>' + esc(DUEL_NAME[d.kind] || '') + '</div>' + who("2") + '</div>'
+      + duelTimeBar(d, true) + body + duelResult(d, st) + '</div>';
+  }
+  // 플레이어 자리 기기: 버튼만 크게 (문제는 큰 화면에)
+  function duelPlayerHtml(st, seat) {
+    var r = st.race, d = r.duel;
+    var top = '<div class="dp-top"><span class="dp-team t' + seat + '">' + esc(TEAM[seat]) + '</span><span>조각 <b>' + (r.got ? r.got[seat] : 0) + '/' + r.need + '</b></span></div>';
+    if (!d || d.players.indexOf(seat) < 0) return '<div class="duel-pl">' + top + '<div class="dp-look">조각을 다 모았어요!<small>퍼즐 판을 완성하고 Space로 투입</small></div></div>';
+    var ctl;
+    if (d.kind === "tug") ctl = '<div class="dp-tug">' + ["ArrowLeft", "ArrowRight"].map(function (k) { return '<button class="dp-btn' + (d.last && d.last[seat] && d.last[seat] !== k ? ' now' : '') + '" data-duel="' + k + '">' + (k === "ArrowLeft" ? "←" : "→") + '</button>'; }).join('') + '</div>';
+    else {
+      var locked = d.lock && d.lock[seat] > nowMs();
+      ctl = '<div class="dp-quiz' + (locked ? ' locked' : '') + '" data-dlock="' + ((d.lock && d.lock[seat]) || 0) + '">' + d.opts.map(function (o, i) { return '<button class="dp-opt" data-duel="' + i + '"><b>' + esc(o) + '</b><small>' + DUEL_ARROW[i] + '</small></button>'; }).join('') + '<span class="dp-lockmsg">틀렸어요! 잠깐 멈춤</span></div>';
+    }
+    return '<div class="duel-pl">' + top + '<div class="dp-look">▲ 큰 화면을 보세요!<small>' + esc(DUEL_NAME[d.kind] || '') + ' · 문제 ' + d.n + '</small></div>' + duelTimeBar(d) + ctl + duelResult(d, st) + '</div>';
+  }
+  var duelLast = { key: "", win: "" };
+  function duelSync() {
+    var st = state, r = st && st.race, seat = mySeat();
+    var el = mxLayer();
+    if (!duelOn(st)) { if (el.classList.contains("duel")) { el.classList.remove("on", "duel"); el.innerHTML = ""; } return false; }
+    var d = r.duel;
+    // 소리: 새 문제 / 승부 (메인에서는 음성도)
+    var k = d ? r.round + ":" + d.n : "", w = d && d.winner ? k + ":" + d.winner : "";
+    if (k && k !== duelLast.key) { duelLast.key = k; try { dTone(660, 0, 0.1, "square", 0.1); dTone(880, 0.1, 0.14, "square", 0.1); } catch (e) {} }
+    if (w && w !== duelLast.win) { duelLast.win = w; try { if (!seat || seat === d.winner) { DSND.done(); } else DSND.err(); if (MAIN) dSay(TEAM[d.winner] + " 승!"); } catch (e) {} }
+    if (MAIN || RAIL || !seat) return true;
+    if (r.stage[seat] !== "pieces" && !(d && d.players.indexOf(seat) >= 0 && d.result)) { if (el.classList.contains("duel")) { el.classList.remove("on", "duel"); el.innerHTML = ""; } return true; }
+    if (mx) mxClose();
+    el.classList.add("on", "duel");
+    el.innerHTML = duelPlayerHtml(st, seat);
+    return true;
+  }
+  function duelSend(key) { send({ type: "duel-key", seat: mySeat(), key: key }); }
+  document.addEventListener("keydown", function (e) {
+    if (!duelOn(state) || MAIN || RAIL || !mySeat() || !state.race.duel || state.race.stage[mySeat()] !== "pieces") return;
+    var i = DUEL_KEYS.indexOf(e.code);
+    if (i < 0) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (e.repeat) return;
+    var d = state.race.duel;
+    duelSend(d.kind === "quiz" ? i : e.code);
+    var b = document.querySelector('.duel-pl [data-duel="' + (d.kind === "quiz" ? i : e.code) + '"]'); if (b) { b.classList.remove("hit"); void b.offsetWidth; b.classList.add("hit"); }
+  }, true);
+  document.addEventListener("pointerdown", function (e) {
+    var b = e.target.closest && e.target.closest("[data-duel]");
+    if (!b || !duelOn(state) || MAIN || RAIL) return;
+    e.preventDefault();
+    var v = b.getAttribute("data-duel");
+    duelSend(/^\d$/.test(v) ? parseInt(v, 10) : v);
+    b.classList.remove("hit"); void b.offsetWidth; b.classList.add("hit");
+  });
+  setInterval(function () {
+    if (!duelOn(state)) return;
+    var n = nowMs();
+    Array.prototype.forEach.call(document.querySelectorAll("[data-dend]"), function (el) { var i = el.firstChild; if (i) i.style.width = Math.max(0, Math.min(100, (parseInt(el.getAttribute("data-dend"), 10) - n) / parseInt(el.getAttribute("data-dms"), 10) * 100)) + "%"; });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-dlock]"), function (el) { el.classList.toggle("locked", parseInt(el.getAttribute("data-dlock"), 10) > n); });
+  }, 100);
   function microSync() {
+    if (duelSync()) return; // 2026-10-23 한 화면 겨루기 중엔 각자 미니게임 대신
     var r = state && state.phase === "secure" ? state.race : null, seat = mySeat();
     // 2026-10-21 상대 진행 줄은 카드를 다시 그리지 않고 그 자리만 바꾼다 (깜빡임 없이)
     var vsEl = document.getElementById("mx-vs");
@@ -2916,10 +3012,10 @@ APP_JS_TEMPLATE = r"""
     if (mx) { if (mx.timer) { clearTimeout(mx.timer); clearInterval(mx.timer); } if (mx.clock) clearInterval(mx.clock); }
     var kind = r.pieceGames[idx] || "react";
     var H = mxHard() ? 1 : 0;
-    var same = mx && mx.round === r.round && mx.idx === idx;
+    var same = mx && mx.round === r.round && mx.idx === idx, oldQn = same ? (mx.qn || 0) : 0;
     // 2026-10-21 기록용: 이 조각 게임을 처음 시작한 시각 / 실수 / 시간 초과 (시간 초과로 다시 시작해도 이어서 센다)
     mx = { round: r.round, idx: idx, need: r.need, kind: kind, won: false, lockUntil: 0, tries: (same ? (mx.tries || 0) + 1 : 0),
-      t0Piece: same ? mx.t0Piece : Date.now(), fails: same ? (mx.fails || 0) : 0, timeouts: same ? (mx.timeouts || 0) + 1 : 0 };
+      t0Piece: same ? mx.t0Piece : Date.now(), fails: same ? (mx.fails || 0) : 0, timeouts: same ? (mx.timeouts || 0) + 1 : 0, qn: oldQn };
     if (kind === "react") { mx.hits = 0; mx.scanCount = 0; mx.scanSeg = -1; mx.scanNeed = [6, 7][H]; mx.needHits = [1, 2][H]; mx.sched = mxReactSched((r.seed || 1) + idx * 7919, H); mx.t0 = r.startedAt || nowMs(); mx.lastHitSeg = -1; mx.seenSeg = -1; mxArmReact(); }
     else if (kind === "pick") { mx.streak = 0; mx.needStreak = [2, 3][H]; mxNewPick(); }
     else if (kind === "mash") { mx.count = 0; mx.goal = [14, 16][H]; mx.last = null; mxMashDecay(); } // 2026-10-22: ← → 번갈아 (테이프를 좌우로 당겨 붙이기)
@@ -2945,8 +3041,9 @@ APP_JS_TEMPLATE = r"""
   // 방향 따라 누르기: 1.3초(후반 1초) 보여 주고 가린다 -- 외워서 누르기. 틀리면 새 순서로 다시 보여 줌.
   var MX_MEMO_MS = 5000;
   function mxNewArrows() {
+    var rnd = mxQRnd(2);
     var a = ["ArrowLeft", "ArrowUp", "ArrowRight", "ArrowDown"], H = mxHard() ? 1 : 0;
-    mx.seq = []; for (var k = 0; k < [3, 4][H]; k++) mx.seq.push(a[Math.floor(Math.random() * 4)]); // 2026-10-16 (사용자): 전반 3개 / 후반 4개
+    mx.seq = []; for (var k = 0; k < [3, 4][H]; k++) mx.seq.push(a[Math.floor(rnd() * 4)]); // 2026-10-16 (사용자): 전반 3개 / 후반 4개
     // 2026-10-21 (사용자): 길은 팝업으로 5초 보여 주고 사라짐. 제한 시간은 팝업이 닫힌 뒤부터.
     mx.pos = 0; mx.showUntil = Date.now() + MX_MEMO_MS;
     var my = mx, seqNo = (mx.seqNo = (mx.seqNo || 0) + 1);
@@ -2957,6 +3054,13 @@ APP_JS_TEMPLATE = r"""
   // 초록불에만 누르기: 기다리다 빨강(누르면 실패) 또는 초록이 뜬다. 초록은 짧게만 켜진다(놓치면 다시). 성공 needHits번.
   // 2026-10-16 (사용자 요청): 두 좌석이 같은 시각에 같은 불 -- 서버가 준 씨앗(race.seed)과 시작 시각(race.startedAt, 서버 시계)으로
   //   같은 시간표(대기 / 반품 빨간불 / 정상 초록불)를 만들고, 서버 시계(nowMs) 기준으로 지금 어느 칸인지 본다.
+  // 2026-10-23 (사용자 결정 "같은 문제로 동시에 겨루기"): 두 사람의 k번째 문제가 같게 -- 이번 라운드 씨앗 + 조각 번호 + 문제 번호(qn).
+  //   시간 초과로 다시 시작해도 문제 번호는 이어진다(같은 문제를 되풀이해 외우지 않게).
+  function mxQRnd(kindNo) {
+    var r = state && state.race, seed = ((r && r.seed) || 1) + mx.idx * 7919 + (mx.qn || 0) * 104729 + kindNo * 15485863;
+    mx.qn = (mx.qn || 0) + 1;
+    return mxRng(seed);
+  }
   function mxRng(seed) { var a = seed >>> 0; return function () { a = (a + 0x6D2B79F5) >>> 0; var t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296; }; }
   function mxReactSched(seed, H) {
     var rng = mxRng(seed), segs = [], t = 0;
@@ -3013,23 +3117,24 @@ APP_JS_TEMPLATE = r"""
   var MX_GUARD_RATE = 0.15;
   var MX_GUARD_FAKES = ["경감실", "겅비실", "경비살", "경리실", "경미실", "갱비실", "경빈실"];
   function mxNewPick() {
+    var rnd = mxQRnd(1);
     var H = mxHard() ? 1 : 0;
-    var r = function (a, b) { return a + Math.floor(Math.random() * (b - a + 1)); };
+    var r = function (a, b) { return a + Math.floor(rnd() * (b - a + 1)); };
     var lab = function (a, b) { return a + "0" + b + "호"; };
     var f = r(3, 7), u = r(3, 7); // 두 번 옮겨도 1~9 안
     // 2026-10-22 (사용자): 가끔 "경비실에 맡겨 주세요" -- 팻말은 비슷한 글자들(경감실, 겅비실 ...) 중에서 경비실 찾기
-    if (Math.random() < MX_GUARD_RATE) {
-      var fakes = MX_GUARD_FAKES.slice().sort(function () { return Math.random() - 0.5; }).slice(0, 3);
+    if (rnd() < MX_GUARD_RATE) {
+      var fakes = MX_GUARD_FAKES.slice().sort(function () { return rnd() - 0.5; }).slice(0, 3);
       mx.target = "경비실"; mx.base = lab(f, u); mx.memo = ["경비실"]; mx.guard = true;
-      mx.opts = ["경비실"].concat(fakes).sort(function () { return Math.random() - 0.5; });
+      mx.opts = ["경비실"].concat(fakes).sort(function () { return rnd() - 0.5; });
       return;
     }
     mx.guard = false;
     var steps = [];
-    var roll = Math.random();
+    var roll = rnd();
     if (roll < (H ? 0.12 : 0.2)) steps = [];                       // 메모 없음 -- 적힌 그대로
     else if (!H || roll < 0.45) steps = [MX_REL[r(0, 3)]];         // 한 번
-    else { var a = MX_REL[r(0, 1)], b = MX_REL[r(2, 3)]; steps = Math.random() < 0.5 ? [a, b] : [b, a]; } // 두 번 (위아래 + 옆)
+    else { var a = MX_REL[r(0, 1)], b = MX_REL[r(2, 3)]; steps = rnd() < 0.5 ? [a, b] : [b, a]; } // 두 번 (위아래 + 옆)
     var tf = f, tu = u;
     steps.forEach(function (st) { tf += st.df; tu += st.du; });
     var target = lab(tf, tu), base = lab(f, u);
@@ -3040,10 +3145,10 @@ APP_JS_TEMPLATE = r"""
     if (steps.length === 1) { var s0 = steps[0]; pool.push(lab(f + s0.du, u + s0.df)); } // 축을 헷갈림 (윗집인데 옆집으로)
     pool.push(lab(tu, tf), lab(tf + 1, tu), lab(tf, tu - 1), lab(tf - 1, tu), lab(tf, tu + 1), lab(tf + 1, tu + 1)); // 모자라지 않게 여유분
     pool = pool.filter(function (x, i) { return x !== target && pool.indexOf(x) === i; });
-    var lead = pool.slice(0, steps.length === 0 ? 1 : 2), rest = pool.slice(lead.length).sort(function () { return Math.random() - 0.5; });
+    var lead = pool.slice(0, steps.length === 0 ? 1 : 2), rest = pool.slice(lead.length).sort(function () { return rnd() - 0.5; });
     var picks = lead.concat(rest).slice(0, 3);
     mx.target = target; mx.base = base; mx.memo = steps.map(function (st) { return st.t; });
-    mx.opts = [target].concat(picks).sort(function () { return Math.random() - 0.5; });
+    mx.opts = [target].concat(picks).sort(function () { return rnd() - 0.5; });
   }
   function mxFail(msg) {
     mx.fails = (mx.fails || 0) + 1;
@@ -3056,6 +3161,8 @@ APP_JS_TEMPLATE = r"""
   }
   function mxWin() {
     if (!mx || mx.won) return;
+    var o0 = mySeat() === "1" ? "2" : "1", op0 = progLive[o0];
+    mx.meFirst = !mx.oppFirst && !(op0 && op0.round === mx.round && op0.idx > mx.idx);
     mx.won = true; mx.holdUntil = Date.now() + 1100;
     if (mx.timer) { clearTimeout(mx.timer); clearInterval(mx.timer); }
     if (mx.clock) clearInterval(mx.clock);
@@ -3105,9 +3212,52 @@ APP_JS_TEMPLATE = r"""
     }
   }
   function mxDots(n, of) { var h = ''; for (var i = 0; i < of; i++) h += '<i class="' + (i < n ? 'on' : '') + '"></i>'; return h; }
+  // ---- 2026-10-23 같은 문제 실시간 겨루기: 진행 보고 / 상대 막대 ----
+  var progLive = {}; // 좌석 -> {round, idx, p, at} (서버가 그대로 전달해 준 상대 진행)
+  function mxProgOf() {
+    if (!mx) return 0;
+    if (mx.won) return 1;
+    if (mx.kind === "react") return Math.min(1, ((mx.hits || 0) * (mx.scanNeed || 1) + (mx.scanCount || 0)) / ((mx.needHits || 1) * (mx.scanNeed || 1)));
+    if (mx.kind === "pick") return (mx.streak || 0) / (mx.needStreak || 1);
+    if (mx.kind === "mash") return Math.min(1, (mx.count || 0) / (mx.goal || 1));
+    if (mx.kind === "arrows") return mx.seq && mx.seq.length ? (mx.pos || 0) / mx.seq.length : 0;
+    return 0;
+  }
+  var mxRep = { key: "", at: 0, t: null };
+  function mxReport() {
+    if (!mx || !mySeat()) return;
+    var p = Math.round(mxProgOf() * 100) / 100, key = mx.round + ":" + mx.idx + ":" + p;
+    if (key === mxRep.key) return;
+    var wait = 90 - (Date.now() - mxRep.at);
+    clearTimeout(mxRep.t);
+    if (wait > 0 && p < 1) { mxRep.t = setTimeout(mxReport, wait); return; }
+    mxRep.key = key; mxRep.at = Date.now();
+    send({ type: "race-prog", seat: mySeat(), round: mx.round, idx: mx.idx, p: p });
+  }
+  function mxDuelHtml() {
+    var me = mySeat(), o = me === "1" ? "2" : "1", op = progLive[o], my = mxProgOf();
+    var oP = 0, oNote = '';
+    if (op && mx && op.round === mx.round) {
+      if (op.idx === mx.idx) oP = op.p;
+      else if (op.idx > mx.idx) { oP = 1; oNote = '벌써 다음 조각'; }
+      else { oP = op.p * 0.3; oNote = '이전 조각 중'; }
+    }
+    var bar = function (cls, who, v, note) { return '<div class="mxd-row ' + cls + '"><b>' + who + '</b><i class="mxd-bar"><i style="width:' + Math.round(v * 100) + '%"></i></i><small>' + (note || Math.round(v * 100) + '%') + '</small></div>'; };
+    var first = mx && mx.oppFirst && !mx.won ? '<div class="mxd-alert">상대가 먼저 끝냈어요!</div>' : (mx && mx.won && mx.meFirst ? '<div class="mxd-alert me">내가 먼저!</div>' : '');
+    return bar('me t' + me, '나', my) + bar('opp t' + o, '상대', oP, oNote) + first;
+  }
+  function mxDuelPaint() { var el = document.getElementById("mx-duel"); if (el) el.innerHTML = mxDuelHtml(); }
+  function mxOnProg(m) {
+    if (m.seat !== "1" && m.seat !== "2") return;
+    progLive[m.seat] = { round: m.round, idx: m.idx, p: m.p, at: Date.now() };
+    if (!mx || m.seat === mySeat()) return;
+    if (m.p >= 1 && m.round === mx.round && m.idx === mx.idx && !mx.won && !mx.oppFirst) { mx.oppFirst = true; try { DSND.soft(); } catch (e) {} }
+    mxDuelPaint();
+  }
   function mxRender() {
     var el = mxLayer();
     if (!mx) { el.innerHTML = ""; return; }
+    setTimeout(mxReport, 0);
     var head = '<div class="mx-head"><span class="mx-piece">조각 ' + (mx.idx + 1) + ' / ' + mx.need + '</span><span class="mx-name">' + esc(MX_NAME[mx.kind] || "") + '</span></div>';
     var body = '';
     if (mx.won) {
@@ -3146,7 +3296,8 @@ APP_JS_TEMPLATE = r"""
     }
     var tbar = (mx.won || !mx.limit) ? '' : '<div class="mx-timebar"><i id="mx-time" style="width:' + Math.max(0, Math.min(1, (mx.deadline - Date.now()) / mx.limit) * 100) + '%"></i></div>';
     var vs = '<div id="mx-vs">' + (state && state.race ? raceVsHtml(state, state.race, mySeat()) : '') + '</div>';
-    el.innerHTML = vs + '<div class="mx-card' + (mx.flash ? ' fail' : '') + (mx.won ? ' won' : '') + '">' + head + tbar + body + (mx.flash ? '<div class="mx-flash">' + esc(mx.flash) + '</div>' : '') + '</div>';
+    var duel = mySeat() ? '<div class="mx-duel" id="mx-duel">' + mxDuelHtml() + '</div>' : '';
+    el.innerHTML = vs + '<div class="mx-card' + (mx.flash ? ' fail' : '') + (mx.won ? ' won' : '') + '">' + head + tbar + duel + body + (mx.flash ? '<div class="mx-flash">' + esc(mx.flash) + '</div>' : '') + '</div>';
   }
   document.addEventListener("keydown", function (e) {
     if (!mx || MAIN || RAIL) return;
@@ -3466,7 +3617,8 @@ APP_JS_TEMPLATE = r"""
           + '<div class="mv-pips">' + pips + '</div></div>';
       }).join('');
       if (st.race) {
-        html = head("택배 확보 · " + halfName) + '<div class="mv-body">' + raceStage(st, null) + '</div>';
+        // 2026-10-23 한 화면 겨루기: 메인이 공용 겨루기 판 -- 판을 크게, 레일·퍼즐 진행은 아래 작게
+        html = head("택배 확보 · " + halfName) + (duelOn(st) ? '<div class="mv-body duel-body">' + duelArena(st) + '<div class="duel-race">' + raceStage(st, null) + '</div></div>' : '<div class="mv-body">' + raceStage(st, null) + '</div>');
         return '<div class="mv">' + html + '</div>';
       }
       html = head("택배 확보 · " + halfName) + '<div class="mv-body">'

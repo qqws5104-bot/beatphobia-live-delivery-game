@@ -13,7 +13,7 @@ const {
   PRIORITY_MULTIPLIER, SET_BONUS, SET_BONUS_KINDS, TUTORIAL_PAGES, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, THIEF_PER_HALF, PRIORITY_PICK_MS,
   FLOOR_REWARD_MULT, START_FLOOR_CHOICES, ELEVATOR_JOLT, RESULT_AUTO_ADVANCE_MS, MERGE_PRIORITY_THIEF, SAME_FLOOR_AUTO_PICK,
   RACE_MODE, RACE_PICK_MS, RACE_SECOND_MS, RACE_REVEAL_MS, RACE_PUZZLE_ORDER, RACE_PARCELS, RACE_LEFTOVER_RETURN, RACE_AUTO_PICK, RACE_GAME_POOL, RACE_AUTO_PICK_MODE, RACE_PIECES_BY_ROUND, RACE_CONSOLATION_MS, RACE_EXCLUDE_KINDS, FLOOR_LIMITS,
-  COMBO_MULTS, APT_WAR, APT_FLOORS, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
+  COMBO_MULTS, DUEL_MODE, DUEL_KINDS, DUEL_TUG_GOAL, DUEL_TUG_MS, DUEL_QUIZ_MS, DUEL_QUIZ_LOCK_MS, DUEL_RESULT_MS, APT_WAR, APT_FLOORS, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
   WALL_MODE, UNITS, DELIVERY_MS, DELIVERY_PROGRESS_MS, DELIVERY_HOLD_MS, DELIVERY_ELEVATOR, DELIVERY_ELEV_START, DELIVERY_ELEV_MOVE_MS, DELIVERY_RETURN_TAPS, DELIVERY_MAX_ACTIVE, DELIVERY_WRONG_PENALTY, COMBO_BUILDING_BONUS, DELIVERY_MODES, DELIVERY_CLIMB_STEPS, DELIVERY_BELL_WAIT_MS, DELIVERY_BELL_WINDOW_MS, CONTEST_RATE, BLOCK_REWARD, FEVER_MS, FEVER_MULT, RACE_GRANT_PLAN, RACE_GRANT_BY_PIECES, RACE_UNLIMITED, RACE_PIECE_GAMES, RACE_PIECE_GAME_KINDS,
 } = require("./game-data");
 
@@ -76,6 +76,8 @@ const DEFAULT_RULES = {
   aptWar: !!APT_WAR,
   elevWarTaps: ELEV_WAR_TAPS,
   elevMoveMs: ELEV_MOVE_MS,
+  // 2026-10-23 한 화면 겨루기 (game-data.js DUEL_MODE 참고) -- 조각 게임 모드(racePieceGames)일 때만
+  duelMode: !!DUEL_MODE, duelKinds: DUEL_KINDS, duelTugGoal: DUEL_TUG_GOAL, duelTugMs: DUEL_TUG_MS, duelQuizMs: DUEL_QUIZ_MS, duelQuizLockMs: DUEL_QUIZ_LOCK_MS, duelResultMs: DUEL_RESULT_MS,
   comboMults: APT_WAR ? COMBO_MULTS : null, // 2026-10-23 연속 배송 콤보 (엘리베이터 전쟁 모드)
   elevWrongLockMs: ELEV_WRONG_LOCK_MS,
   elevSettleMs: ELEV_SETTLE_MS,
@@ -341,6 +343,7 @@ class GameRoom {
   }
 
   destroy() {
+    this._duelStop();
     if (this.timer) clearTimeout(this.timer);
     if (this.raceTimer) clearTimeout(this.raceTimer);
     if (this.deliveryTimer) clearInterval(this.deliveryTimer);
@@ -562,6 +565,7 @@ class GameRoom {
       for (let k = 0; k < need; k++) { let opts = kinds.filter((x) => x !== last); if (!opts.length) opts = kinds; last = opts[Math.floor(Math.random() * opts.length)]; r.pieceGames.push(last); }
       this.lastPieceGame = last;
       r.stage = { "1": "pieces", "2": "pieces" };
+      if (this.rules.duelMode) { r.duelMode = true; r.pieceGames = r.pieceGames.map(() => "duel"); this._duelNext(); }
       this._log({ t: "round", round: r.round, puzzle: r.puzzleId, need: r.need, parcels: r.pair.length, games: r.pieceGames.slice() });
     } else if (this.state.race.game) this.state.race.stage = { "1": "sticker", "2": "sticker" }; // 택배 쌓기 전에 첫 미니게임
     this._raceAt(null);
@@ -670,6 +674,7 @@ class GameRoom {
     } else if (step === "piece-done") {
       // 2026-10-16 조각 하나 획득 (반응형 미니게임 하나 끝냄). 다 모으면 택배 쌓기(완성 -> 투입)로
       if (st !== "pieces") return;
+      if (r.duelMode && !(meta && meta.__duel)) return; // 한 화면 겨루기: 조각은 서버가 정한 승자만
       r.got[seat] += 1;
       const m = meta && typeof meta === "object" ? meta : {};
       const num = (x) => (typeof x === "number" && isFinite(x) && x >= 0 && x < 600000 ? Math.round(x) : null);
@@ -702,6 +707,88 @@ class GameRoom {
       r.stage[seat] = "out";
     } else return;
     this._raceAdvance();
+  }
+
+  // ---- 2026-10-23 한 화면 겨루기 (rules.duelMode) ----
+  // r.duel = { n, kind, startedAt, endsAt, players:[좌석], winner, result, resolvedAt, nextAt,
+  //   tug: pos(-goal..goal, 빨강 쪽 -, 파랑 쪽 +), last{좌석: 마지막 키}, presses{좌석: 수}
+  //   quiz: base, memo[], opts[], answer(정답 인덱스), lock{좌석: 시각}, wrong{좌석: 수} }
+  _duelPlayers() { const r = this.state.race; return r ? ["1", "2"].filter((s) => r.stage[s] === "pieces") : []; }
+  _duelNext() {
+    const r = this.state.race;
+    if (!r || !r.duelMode || this.state.phase !== "secure") { this._duelStop(); return; }
+    const players = this._duelPlayers();
+    if (!players.length) { r.duel = null; this._duelStop(); return; }
+    const kinds = this.rules.duelKinds && this.rules.duelKinds.length ? this.rules.duelKinds : ["tug", "quiz"];
+    const n = (r.duel ? r.duel.n : (r.round * 7) % kinds.length) + 1;
+    const kind = kinds[n % kinds.length], now = Date.now();
+    const d = { n, kind, startedAt: now, players, winner: null, result: null, resolvedAt: null, nextAt: null };
+    if (kind === "tug") { d.goal = this.rules.duelTugGoal || 10; d.pos = 0; d.last = {}; d.presses = { "1": 0, "2": 0 }; d.endsAt = now + (this.rules.duelTugMs || 8000); }
+    else { Object.assign(d, this._duelQuizMake()); d.lock = { "1": 0, "2": 0 }; d.wrong = { "1": 0, "2": 0 }; d.endsAt = now + (this.rules.duelQuizMs || 10000); }
+    r.duel = d;
+    if (!this.duelTimer) this.duelTimer = setInterval(() => this._duelTick(), 100);
+  }
+  _duelStop() { if (this.duelTimer) { clearInterval(this.duelTimer); this.duelTimer = null; } }
+  // 송장 주소 퀴즈: 기준 호수(층 + 0 + 번째) + 배송 메모(윗집/아랫집/왼쪽 옆집/오른쪽 옆집 1~2개) -> 맞는 집 1 + 비슷한 함정 3
+  _duelQuizMake() {
+    const R = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
+    const lab = (f, u) => f + "0" + u + "호";
+    const REL = [{ t: "윗집", df: 1, du: 0 }, { t: "아랫집", df: -1, du: 0 }, { t: "왼쪽 옆집", df: 0, du: -1 }, { t: "오른쪽 옆집", df: 0, du: 1 }];
+    const hard = this.state.half === 2;
+    const f = R(2, 6), u = R(2, 7);
+    let steps;
+    if (hard || Math.random() < 0.4) { const a = REL[R(0, 1)], b = REL[R(2, 3)]; steps = Math.random() < 0.5 ? [a, b] : [b, a]; } else steps = [REL[R(0, 3)]];
+    let tf = f, tu = u; steps.forEach((x) => { tf += x.df; tu += x.du; });
+    const target = lab(tf, tu), base = lab(f, u);
+    // 함정: 적힌 집 그대로 / 반대로 옮김 / 축을 헷갈림(윗집인데 옆집) / 정답 주변 -- 건물 안(1~7층, 1~8호)에 있는 것만
+    const cand = [[f, u], [f - steps[0].df, u - steps[0].du], [f + steps[0].du, u + steps[0].df], [tf + 1, tu], [tf, tu - 1], [tf - 1, tu], [tf, tu + 1], [tf + 1, tu + 1], [tf - 1, tu - 1]];
+    if (steps.length === 2) cand.splice(1, 0, [f + steps[0].df, u + steps[0].du], [f + steps[1].df, u + steps[1].du]);
+    const pool = cand.filter(([a, b]) => a >= 1 && a <= 7 && b >= 1 && b <= 8).map(([a, b]) => lab(a, b)).filter((x, i, arr) => x !== target && arr.indexOf(x) === i);
+    const lead = pool.slice(0, 2), fakes = lead.concat(shuffled(pool.slice(2))).slice(0, 3); // 그대로 적힌 집·반대로 옮긴 집은 꼭 넣는다
+    const opts = shuffled([target].concat(fakes));
+    return { base, memo: steps.map((x) => x.t), opts, answer: opts.indexOf(target) };
+  }
+  // 입력: key = "ArrowLeft" / "ArrowRight" (줄다리기), 보기 0~3 또는 ArrowLeft/Up/Down/Right (퀴즈)
+  duelKey(seat, key) {
+    const r = this.state.race;
+    if (this.state.phase !== "secure" || !r || !r.duelMode || !r.duel || (seat !== "1" && seat !== "2")) return;
+    const d = r.duel, now = Date.now();
+    if (d.winner || d.result || r.stage[seat] !== "pieces" || !d.players.includes(seat)) return;
+    this.touch();
+    if (d.kind === "tug") {
+      if (key !== "ArrowLeft" && key !== "ArrowRight") return;
+      if (d.last[seat] === key) { d.tangle = d.tangle || {}; d.tangle[seat] = now; this.emit(); return; } // 같은 쪽 두 번 = 테이프 꼬임, 안 당겨짐
+      d.last[seat] = key; d.presses[seat] += 1;
+      d.pos += seat === "1" ? -1 : 1;
+      if (d.pos <= -d.goal) this._duelWin("1", "pull"); else if (d.pos >= d.goal) this._duelWin("2", "pull");
+      this.emit(); return;
+    }
+    const map = { ArrowLeft: 0, ArrowUp: 1, ArrowDown: 2, ArrowRight: 3 };
+    const i = typeof key === "number" ? key : map[key];
+    if (!(i >= 0 && i <= 3)) return;
+    if (d.lock[seat] > now) return;
+    if (i === d.answer) this._duelWin(seat, "answer");
+    else { d.lock[seat] = now + (this.rules.duelQuizLockMs || 1200); d.wrong[seat] += 1; d.lastWrong = { seat, i, at: now }; }
+    this.emit();
+  }
+  _duelWin(seat, how) {
+    const r = this.state.race, d = r.duel, now = Date.now();
+    d.winner = seat; d.result = how; d.resolvedAt = now; d.nextAt = now + (this.rules.duelResultMs || 1300);
+    this._log({ t: "duel", round: r.round, n: d.n, kind: d.kind, winner: seat, how, ms: now - d.startedAt, players: d.players.length });
+    this.raceStep(seat, "piece-done", r.round, { __duel: true, ms: now - d.startedAt });
+  }
+  _duelTick() {
+    const r = this.state.race;
+    if (this.state.phase !== "secure" || !r || !r.duelMode || !r.duel) { this._duelStop(); return; }
+    const d = r.duel, now = Date.now();
+    if (!d.winner && !d.result && now >= d.endsAt) {
+      // 시간 끝: 줄다리기는 테이프가 있는 쪽 승, 퀴즈는 무효
+      const side = d.kind === "tug" ? (d.pos < 0 ? "1" : d.pos > 0 ? "2" : null) : null;
+      if (side && d.players.includes(side) && r.stage[side] === "pieces") this._duelWin(side, "time");
+      else { d.result = "none"; d.resolvedAt = now; d.nextAt = now + 900; }
+      this.emit(); return;
+    }
+    if (d.nextAt && now >= d.nextAt) { this._duelNext(); this.emit(); }
   }
 
   // 먼저 끝낸 사람이 공개된 택배 중 하나를 고른다 (pair 인덱스)

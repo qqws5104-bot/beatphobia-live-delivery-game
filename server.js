@@ -377,6 +377,18 @@ wss.on("connection", (ws, req) => {
         if (!conn.seat || !Number.isInteger(msg.slot)) return;
         entry.room.wallSlot(conn.seat, msg.slot);
         break;
+      // 2026-10-23 같은 문제 실시간 겨루기: 미니게임 진행(0~1)을 같은 방 화면들에 그대로 전달 (게임 상태는 안 바뀜, 가벼운 메시지)
+      // 2026-10-23 한 화면 겨루기 입력 (각자 자리 기기 키 / 화면 버튼)
+      case "duel-key":
+        if (!conn.seat || !(typeof msg.key === "string" || Number.isInteger(msg.key))) return;
+        entry.room.duelKey(conn.seat, msg.key);
+        break;
+      case "race-prog": {
+        if (!conn.seat || !Number.isInteger(msg.round) || !Number.isInteger(msg.idx) || typeof msg.p !== "number") return;
+        const pm = JSON.stringify({ type: "prog", seat: conn.seat, round: msg.round, idx: msg.idx, p: Math.max(0, Math.min(1, msg.p)) });
+        for (const c2 of entry.sockets) if (c2 !== conn && c2.ws.readyState === c2.ws.OPEN) c2.ws.send(pm);
+        break;
+      }
       case "vote":
         if (!conn.seat || (msg.dir !== "up" && msg.dir !== "down")) return;
         entry.room.vote(conn.seat, msg.dir);

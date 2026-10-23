@@ -205,6 +205,18 @@ const ELEV_WRONG_LOCK_MS = 1000;
 // 2026-10-23 (사용자 결정) 연속 배송 콤보: 틀리지 않고 연속 배송한 수에 따라 그 택배 금액 x배. 틀린 문을 누르면 끊김.
 //   [1건, 2건, 3건 이상] = x1 / x1.2 / x1.5. 피버(x2)와 겹치면 곱하지 않고 큰 쪽 하나만.
 const COMBO_MULTS = [1, 1.2, 1.5];
+// ---- 2026-10-23 (사용자 결정) 한 화면 앞 나란히 겨루기 (시험판): 조각 게임을 각자 화면이 아니라 큰 공용 화면(메인 모니터)에서 한 물건을 두고 겨룬다 ----
+//   문제 하나 = 조각 하나. 이긴 사람만 조각을 가져가고 바로 다음 문제. 늦은 사람은 상대가 다 모은 뒤 혼자 남은 조각을 푼다.
+//   우선 두 가지만 번갈아: 테이프 줄다리기(tug) / 주소 퀴즈 버저(quiz). DUEL=0 이면 예전(각자 화면 미니게임).
+//   tug: ← → 번갈아 누를 때마다 테이프를 내 쪽으로 한 칸. DUEL_TUG_GOAL칸 끌어오면 승. DUEL_TUG_MS가 지나면 테이프가 있는 쪽이 승(가운데면 무승부, 다음 문제).
+//   quiz: 송장 주소 + 배송 메모 -> 보기 4개 중 맞는 집. 먼저 맞힌 사람 승. 틀리면 DUEL_QUIZ_LOCK_MS 동안 못 누름. DUEL_QUIZ_MS 안에 아무도 못 맞히면 다음 문제.
+const DUEL_MODE = process.env.DUEL === "0" ? 0 : 1;
+const DUEL_KINDS = ["tug", "quiz"];
+const DUEL_TUG_GOAL = 10;
+const DUEL_TUG_MS = 8000;
+const DUEL_QUIZ_MS = 10000;
+const DUEL_QUIZ_LOCK_MS = 1200;
+const DUEL_RESULT_MS = 1300;   // 승자 표시 후 다음 문제까지
 const ELEV_FLIP_FORCE = 3;
 const ELEV_WAR_MOVE_MS = 250;   // 한 층 움직이는 연출 시간
 const UNITS = [];
@@ -274,7 +286,7 @@ const RACE_GRANT_BY_PIECES = { 2: { parcels: 4, first: 2, late: 2, lateFail: 1 }
 const RACE_UNLIMITED = 1;
 
 module.exports = {
-  COMBO_MULTS, APT_WAR, APT_FLOORS, APT_UNITS_PER_FLOOR, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
+  COMBO_MULTS, DUEL_MODE, DUEL_KINDS, DUEL_TUG_GOAL, DUEL_TUG_MS, DUEL_QUIZ_MS, DUEL_QUIZ_LOCK_MS, DUEL_RESULT_MS, APT_WAR, APT_FLOORS, APT_UNITS_PER_FLOOR, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
   WALL_MODE, UNITS, BUILDINGS, DELIVERY_MS, DELIVERY_PROGRESS_MS, DELIVERY_HOLD_MS, DELIVERY_ELEVATOR, DELIVERY_ELEV_START, DELIVERY_ELEV_MOVE_MS, DELIVERY_RETURN_TAPS, DELIVERY_MAX_ACTIVE, DELIVERY_WRONG_PENALTY, COMBO_BUILDING_BONUS, DELIVERY_MODES, DELIVERY_CLIMB_STEPS, DELIVERY_BELL_WAIT_MS, DELIVERY_BELL_WINDOW_MS, CONTEST_RATE, BLOCK_REWARD, FEVER_MS, FEVER_MULT, RACE_GRANT_PLAN, RACE_GRANT_BY_PIECES, RACE_UNLIMITED, RACE_PIECE_GAMES, RACE_PIECE_GAME_KINDS,
   TYPES, COURIERS, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
   PRIORITY_MULTIPLIER, SET_BONUS, SET_BONUS_KINDS, TUTORIAL_PAGES, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, THIEF_PER_HALF, PRIORITY_PICK_MS,
