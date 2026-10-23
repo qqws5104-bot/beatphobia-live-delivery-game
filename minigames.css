@@ -209,6 +209,9 @@
   position: absolute; left: 3%; right: 3%; top: 3%; height: 66%;
   display: flex; flex-wrap: wrap; justify-content: center; align-content: center; gap: var(--ggap, 2.6cqw 3.4cqw);
 }
+/* 박스 4개(쉬움): 한 줄 2개씩 2x2 -- 상자 두 개 폭 + 간격만큼으로 줄을 좁혀서 줄바꿈을 2개 단위로 */
+/* 2026-10-14: 폭 계산으로 줄바꿈시키던 방식은 브라우저 확대/반올림에 따라 3+1로 깨질 수 있어서 격자로 고정 */
+.mg-stage.is-2x2 .mg-bxs { display: grid; grid-template-columns: repeat(2, var(--bw)); justify-content: center; align-content: center; }
 /* --- 골판지 박스: 뚜껑(위) + 앞면 + 세로 테이프 + 송장 자리 --- */
 .mg-bx {
   position: relative; width: calc(26 * var(--u)); height: calc(18.4 * var(--u)); transition: transform 0.14s ease;
@@ -421,105 +424,52 @@
 .pk-pad .pk-act small { font-size: 0.6rem; opacity: 0.65; letter-spacing: 0.08em; }
 @container (max-width: 520px) { .pk-box { --cell: min(15cqw, 56px); } .pk-tray { max-width: none; } }
 
-/* ================= 창고 정리 (소코반) ================= */
-.sk-wrap { container-type: inline-size; display: flex; justify-content: center; }
-.sk-board {
-  --cell: min(calc(94cqw / var(--cols)), 56px);
-  position: relative; width: calc(var(--cell) * var(--cols)); height: calc(var(--cell) * var(--rows));
-  border-radius: 8px; overflow: hidden; background: #cdb88f; box-shadow: 0 0 0 3px #7a5a30;
-}
-.sk-board.is-shake { animation: mg-shake 0.32s ease; }
-.sk-floor { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--cols), 1fr); grid-template-rows: repeat(var(--rows), 1fr); }
-.sk-cell { display: block; background: #e8d9b6; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.12); }
-.sk-cell.is-wall {
-  background: repeating-linear-gradient(0deg, #8a6a42 0 7px, #75583a 7px 8px), #8a6a42;
-  box-shadow: inset 0 0 0 1px rgba(43, 29, 18, 0.35);
-}
-.sk-cell.is-tgt {
-  background: repeating-linear-gradient(45deg, #f6dc7a 0 6px, #f0c94a 6px 12px);
-  box-shadow: inset 0 0 0 2px #c99a00;
-}
-.sk-box, .sk-man {
-  position: absolute; left: 0; top: 0; width: var(--cell); height: var(--cell);
-  transform: translate(calc(var(--x) * var(--cell)), calc(var(--y) * var(--cell)));
-  transition: transform 90ms ease-out; pointer-events: none;
-}
-.sk-box svg, .sk-man svg { width: 100%; height: 100%; display: block; }
-.sk-bx-body { fill: #c9a576; stroke: #6b4e26; stroke-width: 1.8; }
-.sk-bx-top { fill: #ddc08f; stroke: #6b4e26; stroke-width: 1.8; }
-.sk-bx-tape { fill: #ead8b0; opacity: 0.95; }
-.sk-bx-ok { fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; opacity: 0; }
-.sk-box.is-in .sk-bx-body { fill: #6fbf86; }
-.sk-box.is-in .sk-bx-top { fill: #93d3a6; }
-.sk-box.is-in .sk-bx-ok { opacity: 1; }
-.sk-box.is-dead .sk-bx-body { fill: #d98a7d; }
-.sk-box.is-dead .sk-bx-top { fill: #e6a99f; }
-.sk-man { z-index: 2; }
-.sk-m-face { fill: #f2c9a0; stroke: #6b4e26; stroke-width: 1.4; }
-.sk-m-cap { fill: #E8681C; stroke: #8f3d0c; stroke-width: 1.4; }
-.sk-m-brim { fill: #c4561a; }
-.sk-m-body { fill: #2f4a7d; stroke: #1c2e52; stroke-width: 1.4; }
-.sk-m-eye { fill: #2b1d12; }
-@keyframes sk-bump {
-  0%, 100% { transform: translate(calc(var(--x) * var(--cell)), calc(var(--y) * var(--cell))); }
-  30% { transform: translate(calc(var(--x) * var(--cell) - 4px), calc(var(--y) * var(--cell))); }
-  65% { transform: translate(calc(var(--x) * var(--cell) + 3px), calc(var(--y) * var(--cell))); }
-}
-.sk-man.is-bump { animation: sk-bump 0.18s ease; }
-.sk-status { display: flex; justify-content: center; gap: 1.6rem; margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--mg-muted); }
-.sk-status b { color: var(--mg-ink); font-family: var(--mg-font-display); font-size: 1rem; }
-.sk-pad { grid-template-columns: repeat(4, 1fr); }
-.sk-pad .pk-act { grid-column: span 2; }
+/* ===== 2026-10-14 레이스 라운드용 짧은 게임 3종 ===== */
+/* 공용: ← ↑ → 키 표시 */
+.mg-mt-k { position: absolute; top: 6px; left: 8px; font-family: var(--mg-font-display); font-weight: 700; font-size: 1rem; color: var(--mg-muted); }
 
-/* ================= 소코반류 시험용 게임 5종 (빙판 배송 / 배달 경로 / 쌍둥이 배달 / 컨베이어 잇기 / 택배 쌓기) ================= */
-/* 빙판 배송 */
-.sk-cell.is-ice { background: linear-gradient(135deg, #e4f3fb, #cbe6f5); box-shadow: inset 0 0 0 1px rgba(80, 140, 180, 0.18); }
-.sk-cell.is-rock { background: radial-gradient(circle at 35% 30%, #a9b2ba, #6c7680 70%); box-shadow: inset 0 0 0 2px rgba(43, 54, 66, 0.35); border-radius: 30%; }
-.ic-item.is-gone { opacity: 0; transform: translate(calc(var(--x) * var(--cell)), calc(var(--y) * var(--cell))) scale(0.4); }
-.ic-item { transition: opacity 0.15s, transform 0.15s; }
-.ic-man { transition-property: transform; transition-timing-function: cubic-bezier(.25, .8, .35, 1); }
+/* 택배 짝 찾기 (뒤집힌 카드 8장 = 4쌍) */
+.mg-mm { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; padding: 4px 0; }
+.mg-mm-card { font: inherit; padding: 0; border: 0; background: none; cursor: pointer; aspect-ratio: 1; perspective: 600px; border-radius: 12px; }
+.mg-mm-in { position: relative; display: block; width: 100%; height: 100%; transition: transform 0.28s; transform-style: preserve-3d; }
+.mg-mm-card.is-open .mg-mm-in { transform: rotateY(180deg); }
+.mg-mm-back, .mg-mm-face { position: absolute; inset: 0; border-radius: 12px; backface-visibility: hidden; display: flex; align-items: center; justify-content: center; }
+.mg-mm-back { background: repeating-linear-gradient(45deg, #E8681C 0 10px, #d75b12 10px 20px); color: #fff8ef; font-family: var(--mg-font-display); font-weight: 700; font-size: 2rem; border: 3px solid #fff8ef; box-shadow: 0 3px 8px rgba(43, 29, 18, 0.25); }
+.mg-mm-face { background: #fffefa; border: 2px solid #c9b48c; transform: rotateY(180deg); }
+.mg-mm-face svg { width: 92%; height: 92%; }
+.mg-mm-card.is-cur { outline: 4px solid #2f6fd6; outline-offset: 3px; }
+.mg-mm-card.is-done .mg-mm-face { background: #e6f5ea; border-color: var(--mg-ok); }
+.mg-mm-card.is-ok { animation: mg-binok 0.25s ease; }
+.mg-mt-opts, .mg-wg-opts { width: 100%; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.mg-wg-pkg { position: relative; font: inherit; cursor: pointer; color: var(--mg-ink); border-radius: 10px; padding: 26px 4px 16px;
+  background: linear-gradient(180deg, var(--mg-card-light), var(--mg-card)); border: 2px solid var(--mg-card-edge); border-bottom-width: 6px; }
+.mg-wg-pkg.is-ok { animation: mg-binok 0.2s ease; }
 
-/* 쌍둥이 배달 */
-.sk-cell.is-tgt.tw-ga { background: repeating-linear-gradient(45deg, #ffd9b5 0 6px, #ffc58a 6px 12px); box-shadow: inset 0 0 0 2px #e2691a; }
-.sk-cell.is-tgt.tw-gb { background: repeating-linear-gradient(45deg, #cfe3fb 0 6px, #aecdf3 6px 12px); box-shadow: inset 0 0 0 2px #2f6fb8; }
-.sk-cell.tw-ga, .sk-cell.tw-gb { display: flex; align-items: center; justify-content: center; font-family: var(--mg-font-display); font-weight: 700; font-size: calc(var(--cell) * 0.5); color: rgba(43, 29, 18, 0.55); }
-.sk-man b { position: absolute; right: 2px; bottom: 0; font-family: var(--mg-font-display); font-size: calc(var(--cell) * 0.34); line-height: 1; color: #fff; text-shadow: 0 0 3px #2b1d12, 0 0 3px #2b1d12; }
-.tw-b .sk-m-cap { fill: #2f6fb8; stroke: #1c4a82; }
-.tw-b .sk-m-brim { fill: #245b99; }
-.tw-b .sk-m-body { fill: #8a5a2a; stroke: #5a3a18; }
-.sk-man.is-home { filter: drop-shadow(0 0 4px #2f8f52); }
+/* 무게 맞추기 */
+.mg-wg { display: flex; flex-direction: column; align-items: center; gap: 14px; padding: 4px 0; }
+.mg-wg-scale { --tilt: 0; width: 80%; display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 12px; padding: 12px 14px; border-radius: 14px; background: #eef1f6; border: 2px solid #b8c0cf; }
+.mg-wg-scale.is-hit { background: #dff3e6; border-color: var(--mg-ok); }
+.mg-wg-goal, .mg-wg-sum { font-weight: 800; font-size: 0.95rem; white-space: nowrap; }
+.mg-wg-goal b, .mg-wg-sum b { font-family: var(--mg-font-display); font-size: 2rem; margin: 0 2px; }
+.mg-wg-goal b { color: var(--mg-accent); }
+.mg-wg-plate { height: 54px; border-bottom: 6px solid #6b7486; border-radius: 0 0 6px 6px; transform: rotate(calc(var(--tilt) * 6deg)); transition: transform 0.2s; display: flex; align-items: flex-end; justify-content: center; gap: 6px; }
+.mg-wg-on { display: flex; gap: 6px; align-items: flex-end; }
+.mg-wg-chip { min-width: 42px; height: 40px; border-radius: 6px; background: linear-gradient(180deg, var(--mg-card-light), var(--mg-card)); border: 2px solid var(--mg-card-edge);
+  display: flex; align-items: center; justify-content: center; font-family: var(--mg-font-display); font-weight: 700; font-size: 1.2rem; }
+.mg-wg-pkg b { font-family: var(--mg-font-display); font-size: 2.2rem; }
+.mg-wg-pkg small { font-weight: 800; margin-left: 2px; }
+.mg-wg-pkg.is-on { opacity: 0.45; transform: translateY(4px); border-bottom-width: 2px; }
 
-/* 배달 경로 */
-.sk-cell.is-road { background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.18); }
-.sk-cell.is-road.is-trail { background: #f7dca0; }
-.sk-cell.is-road.is-start { box-shadow: inset 0 0 0 3px #e2691a; }
-.rt-board .sk-cell.is-wall { background: repeating-linear-gradient(45deg, #b9b2a2 0 5px, #a9a190 5px 10px); box-shadow: inset 0 0 0 1px rgba(60, 50, 30, 0.25); }
-.rt-line { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-.rt-line polyline { stroke: #e2691a; stroke-width: 0.22; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; }
-.rt-man { z-index: 2; }
-.sk-board.is-doomed { box-shadow: 0 0 0 3px var(--mg-danger); }
-
-/* 컨베이어 잇기 */
-.pp-wrap { position: relative; width: min(100%, 440px); margin: 0 auto; padding: 0 3.2rem; }
-.pp-board { --cell: min(calc((100cqw - 6.4rem) / var(--cols)), 64px); display: grid; grid-template-columns: repeat(var(--cols), 1fr); gap: 4px; padding: 4px; background: #7a5a30; border-radius: 10px; }
-.pp-in, .pp-out { position: absolute; top: calc(4px + (100% - 8px) * (var(--r) + 0.5) / var(--rows)); transform: translateY(-50%); font-size: 0.68rem; font-weight: 800; color: var(--mg-muted); white-space: nowrap; }
-.pp-in { left: 0; } .pp-out { right: 0; }
-.pp-tile { aspect-ratio: 1; padding: 0; border: 0; border-radius: 6px; background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.2); cursor: pointer; display: block; }
-.pp-tile svg { width: 100%; height: 100%; display: block; transition: transform 0.12s; }
-.pp-arm, .pp-hub { fill: #a9a08a; }
-.pp-tile.is-flow { background: #dff1fb; }
-.pp-tile.is-flow .pp-arm, .pp-tile.is-flow .pp-hub { fill: #3c8fd6; }
-.pp-tile.is-cursor { outline: 3px solid var(--mg-accent); outline-offset: -3px; }
-
-/* 택배 쌓기 (하노이) */
-.hn-board { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(100%, 460px); margin: 0 auto; }
-.hn-peg { position: relative; height: 190px; border-radius: 10px; background: #efe4c8; box-shadow: inset 0 0 0 1px rgba(122, 90, 48, 0.2); display: flex; align-items: flex-end; justify-content: center; }
-.hn-peg.is-cursor { box-shadow: inset 0 0 0 3px var(--mg-accent); background: #f8ebc6; }
-.hn-peg.is-shake { animation: mg-shake 0.32s ease; }
-.hn-pole { position: absolute; bottom: 0; width: 8px; height: 88%; background: #8a6a42; border-radius: 4px 4px 0 0; }
-.hn-stack { position: relative; width: 100%; display: flex; flex-direction: column-reverse; align-items: center; gap: 3px; padding-bottom: 6px; }
-.hn-box { width: var(--w); height: 26px; border-radius: 4px; position: relative; background: hsl(calc(28 + var(--k) * 24) 62% 62%); border: 2px solid rgba(80, 50, 20, 0.6); }
-.hn-box i { position: absolute; left: 50%; top: 0; bottom: 0; width: 12%; transform: translateX(-50%); background: rgba(255, 244, 214, 0.75); }
-.hn-hand { position: relative; height: 38px; width: min(100%, 460px); margin: 6px auto 0; }
-.hn-held { position: absolute; top: 0; left: calc((var(--p) * 33.33%) + 0.5%); width: 32%; display: flex; justify-content: center; transition: left 0.1s; }
-.hn-held .hn-box { margin: 0 auto; }
+/* 테이프 봉하기 */
+.mg-tp { display: flex; flex-direction: column; gap: 12px; padding: 8px 0 0; }
+.mg-tp-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.mg-tp-box { --p: 0; position: relative; aspect-ratio: 1.15; border-radius: 6px; background: linear-gradient(180deg, var(--mg-card-light), var(--mg-card)); border: 2px solid var(--mg-card-edge); overflow: hidden; opacity: 0.55; }
+.mg-tp-box.is-now, .mg-tp-box.is-done { opacity: 1; }
+.mg-tp-box.is-now { box-shadow: 0 0 0 3px var(--mg-accent); }
+.mg-tp-flap { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: var(--mg-card-edge); }
+.mg-tp-tape { position: absolute; left: calc(50% - 14%); width: 28%; top: 0; height: calc(var(--p) * 100%); background: var(--mg-tape); border-bottom: 2px dashed #b89b63; transition: height 0.08s; box-shadow: 0 1px 2px rgba(0,0,0,.2); }
+.mg-tp-box.is-done::after { content: "✓"; position: absolute; right: 6px; top: 2px; font-weight: 900; font-size: 1.4rem; color: var(--mg-ok); }
+.mg-tp-btn { padding: 0.9rem 0.3rem; }
+.mg-tp-btn .mg-bin-k { font-size: 1.1rem; }
+.mg-tp-btn .mg-bin-n { font-size: 1.1rem; }
+.mg-tp-btn.is-ok { animation: mg-binok 0.12s ease; }
