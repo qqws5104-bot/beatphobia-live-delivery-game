@@ -13,7 +13,7 @@ const {
   PRIORITY_MULTIPLIER, SET_BONUS, SET_BONUS_KINDS, TUTORIAL_PAGES, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, THIEF_PER_HALF, PRIORITY_PICK_MS,
   FLOOR_REWARD_MULT, START_FLOOR_CHOICES, ELEVATOR_JOLT, RESULT_AUTO_ADVANCE_MS, MERGE_PRIORITY_THIEF, SAME_FLOOR_AUTO_PICK,
   RACE_MODE, RACE_PICK_MS, RACE_SECOND_MS, RACE_REVEAL_MS, RACE_PUZZLE_ORDER, RACE_PARCELS, RACE_LEFTOVER_RETURN, RACE_AUTO_PICK, RACE_GAME_POOL, RACE_AUTO_PICK_MODE, RACE_PIECES_BY_ROUND, RACE_CONSOLATION_MS, RACE_EXCLUDE_KINDS, FLOOR_LIMITS,
-  APT_WAR, APT_FLOORS, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
+  COMBO_MULTS, APT_WAR, APT_FLOORS, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
   WALL_MODE, UNITS, DELIVERY_MS, DELIVERY_PROGRESS_MS, DELIVERY_HOLD_MS, DELIVERY_ELEVATOR, DELIVERY_ELEV_START, DELIVERY_ELEV_MOVE_MS, DELIVERY_RETURN_TAPS, DELIVERY_MAX_ACTIVE, DELIVERY_WRONG_PENALTY, COMBO_BUILDING_BONUS, DELIVERY_MODES, DELIVERY_CLIMB_STEPS, DELIVERY_BELL_WAIT_MS, DELIVERY_BELL_WINDOW_MS, CONTEST_RATE, BLOCK_REWARD, FEVER_MS, FEVER_MULT, RACE_GRANT_PLAN, RACE_GRANT_BY_PIECES, RACE_UNLIMITED, RACE_PIECE_GAMES, RACE_PIECE_GAME_KINDS,
 } = require("./game-data");
 
@@ -76,6 +76,7 @@ const DEFAULT_RULES = {
   aptWar: !!APT_WAR,
   elevWarTaps: ELEV_WAR_TAPS,
   elevMoveMs: ELEV_MOVE_MS,
+  comboMults: APT_WAR ? COMBO_MULTS : null, // 2026-10-23 연속 배송 콤보 (엘리베이터 전쟁 모드)
   elevWrongLockMs: ELEV_WRONG_LOCK_MS,
   elevSettleMs: ELEV_SETTLE_MS,
   elevOpenMs: ELEV_OPEN_MS,
@@ -275,7 +276,7 @@ function initialState(rules) {
     setRule: { amount: (rules && rules.setBonus) || 0, kinds: (rules && rules.setBonusKinds) || SET_BONUS_KINDS }, // 2026-10-15 종류 모으기 보너스 (클라이언트도 이걸로 계산)
     tutorial: null, // 2026-10-15 시작 전 튜토리얼 (phase "tutorial"일 때만)
     // 2026-10-16 벽 배송: 규칙 묶음(클라이언트 표시·점수 계산용)과 진행 상태(phase "delivery"일 때만)
-    wallRule: (rules && rules.wallMode) ? { wrongPenalty: rules.deliveryWrongPenalty || 0, progressMs: rules.deliveryProgressMs, holdMs: rules.deliveryHoldMs || 0, elevator: !!rules.deliveryElevator, returnTaps: rules.deliveryReturnTaps, maxActive: rules.deliveryMaxActive, bldBonus: rules.comboBuildingBonus || 0, modes: rules.deliveryModes || null, climb: rules.deliveryClimbSteps || null, bellWindowMs: rules.deliveryBellWindowMs || 0, blockReward: rules.aptWar ? 0 : (rules.blockReward || 0), contest: (rules.contestRate || 0) > 0, pair: !!rules.deliveryPairButtons, feverMs: rules.feverMs || 0, feverMult: rules.feverMult || 1, war: rules.aptWar ? { moveMs: rules.elevMoveMs, openMs: rules.elevOpenMs, deliverTaps: rules.elevDeliverTaps, lockMs: rules.elevWrongLockMs } : null } : null,
+    wallRule: (rules && rules.wallMode) ? { wrongPenalty: rules.deliveryWrongPenalty || 0, progressMs: rules.deliveryProgressMs, holdMs: rules.deliveryHoldMs || 0, elevator: !!rules.deliveryElevator, returnTaps: rules.deliveryReturnTaps, maxActive: rules.deliveryMaxActive, bldBonus: rules.comboBuildingBonus || 0, modes: rules.deliveryModes || null, climb: rules.deliveryClimbSteps || null, bellWindowMs: rules.deliveryBellWindowMs || 0, blockReward: rules.aptWar ? 0 : (rules.blockReward || 0), contest: (rules.contestRate || 0) > 0, pair: !!rules.deliveryPairButtons, feverMs: rules.feverMs || 0, feverMult: rules.feverMult || 1, comboMults: rules.comboMults || null, war: rules.aptWar ? { moveMs: rules.elevMoveMs, openMs: rules.elevOpenMs, deliverTaps: rules.elevDeliverTaps, lockMs: rules.elevWrongLockMs } : null } : null,
     delivery: null,
     phase: "lobby", // lobby -> (tutorial) -> secure -> elevator -> halftime -> secure -> elevator -> end -> (재시작 시) secure ...
     ready: { "1": false, "2": false },
@@ -928,6 +929,7 @@ class GameRoom {
   //   k: start(켜짐) / done(배송 완료) / tap(끄기 1회) / returned(반송) / wrong(오배송) / busy(이미 다른 집 배송 중) / own(내가 켠 걸 또 누름)
   _startDelivery() {
     this.state.phase = "delivery";
+    ["1", "2"].forEach((k) => { if (this.state.players[k]) this.state.players[k].streak = 0; }); // 콤보는 하프마다 처음부터
     this.state.delivery = { endsAt: Date.now() + this.rules.deliveryMs, doors: {}, ev: [], evN: 0,
       elev: this.rules.deliveryElevator ? { floor: this.rules.deliveryElevStart || 1, top: 7, movingUntil: 0, presses: { "1": { up: 0, down: 0 }, "2": { up: 0, down: 0 } } } : null };
     if (this.rules.aptWar) {
@@ -1170,9 +1172,14 @@ class GameRoom {
     const kindsBefore = deliveredKinds(invs0), bldBefore = deliveredBuildings(invs0);
     // 피버: 마지막 feverMs 동안은 이 택배 금액 x feverMult (송장 금액 자체를 올려 점수 계산은 그대로)
     const fever = !!(this.rules.feverMs > 0 && d.endsAt && Date.now() >= d.endsAt - this.rules.feverMs);
-    if (inv && fever) { inv.reward = Math.round((typeof inv.reward === "number" ? inv.reward : TYPES[inv.catIdx].reward) * (this.rules.feverMult || 1)); inv.fever = true; }
-    if (inv) inv.deliveredRound = 1;
     const pl = this.state.players[door.seat]; pl.streak = (pl.streak || 0) + 1;
+    // 2026-10-23 연속 배송 콤보: 이번이 몇 번째 연속인지에 따라 x배. 피버와는 곱하지 않고 큰 배수 하나만.
+    const cm = this.rules.comboMults;
+    const comboMult = cm && cm.length ? cm[Math.min(pl.streak, cm.length) - 1] : 1;
+    const feverMult = fever ? (this.rules.feverMult || 1) : 1;
+    const mult = Math.max(comboMult, feverMult);
+    if (inv && mult !== 1) { inv.reward = Math.round((typeof inv.reward === "number" ? inv.reward : TYPES[inv.catIdx].reward) * mult / 100) * 100; if (fever && feverMult >= comboMult) inv.fever = true; if (comboMult > 1) inv.combo = pl.streak; }
+    if (inv) inv.deliveredRound = 1;
     delete d.doors[unitId];
     // 같은 집 쟁탈: 상대가 같은 집 택배를 들고 있으면 그건 선점당함
     const other = door.seat === "1" ? "2" : "1";
@@ -1183,7 +1190,7 @@ class GameRoom {
     if (sr && sr.amount > 0 && kindsBefore < sr.kinds && deliveredKinds(invs0) >= sr.kinds) combos.push({ k: "kinds", amount: sr.amount });
     if (wr && wr.bldBonus > 0 && bldBefore < 3 && deliveredBuildings(invs0) >= 3) combos.push({ k: "bld", amount: wr.bldBonus });
     this._log({ t: "deliver", seat: door.seat, unit: unitId, b: (this._unitOf(unitId) || {}).b, mode: door.mode || "wait", ms: Date.now() - door.start, fever, src: inv ? inv.src || null : null, snatched: !!lostInv });
-    this._dEv("done", unitId, door.seat, { combos, reward: inv ? (typeof inv.reward === "number" ? inv.reward : TYPES[inv.catIdx].reward) : 0, count: invs0.filter((v) => v.deliveredRound !== null && !v.stolen && !v.returned).length, snatched: lostInv ? (typeof lostInv.reward === "number" ? lostInv.reward : TYPES[lostInv.catIdx].reward) : 0, fever, streak: pl.streak });
+    this._dEv("done", unitId, door.seat, { combos, reward: inv ? (typeof inv.reward === "number" ? inv.reward : TYPES[inv.catIdx].reward) : 0, count: invs0.filter((v) => v.deliveredRound !== null && !v.stolen && !v.returned).length, snatched: lostInv ? (typeof lostInv.reward === "number" ? lostInv.reward : TYPES[lostInv.catIdx].reward) : 0, fever, streak: pl.streak, mult, comboMult, cat: inv ? inv.catIdx : null });
   }
   _deliveryTick() {
     if (this.state.phase !== "delivery" || !this.state.delivery) { clearInterval(this.deliveryTimer); this.deliveryTimer = null; return; }

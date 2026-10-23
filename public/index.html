@@ -3128,6 +3128,40 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
 .wcar { height: calc(100% / var(--floors, 7)); }
 .wbld .wu { flex-direction: row; gap: .6vw; } /* 칸이 넓고 낮아서(8층 x 4호) 호수와 상자를 옆으로 */
 
+/* ===== 43. 엘리베이터 전쟁 연출 (2026-10-23): 3·2·1 멈춤 / 상자 날아가기 / 콤보 ===== */
+.wov { position: fixed; left: 50%; top: 46%; transform: translate(-50%, -50%) scale(.6); opacity: 0; z-index: 70; pointer-events: none; text-align: center; transition: opacity .12s; }
+.wov.show { opacity: 1; animation: wovPop .45s cubic-bezier(.2, 1.6, .4, 1) forwards; }
+@keyframes wovPop { from { transform: translate(-50%, -50%) scale(1.8); } to { transform: translate(-50%, -50%) scale(1); } }
+.wov b { display: block; font-family: 'Jua', 'Black Han Sans', sans-serif; line-height: 1; color: #fff; -webkit-text-stroke: 3px #1e2235; paint-order: stroke fill; text-shadow: 0 6px 0 rgba(0,0,0,.35); }
+.wov span { display: inline-block; margin-top: 8px; font-size: 1.3rem; font-weight: 800; color: #1e2235; background: #fffdf6; border-radius: 999px; padding: 4px 16px; }
+.wov.cd b { font-size: min(30vh, 220px); color: #ffd23f; }
+.wov.stop b { font-size: min(13vh, 110px); color: #4fd1ae; }
+.wov.empty b { font-size: min(10vh, 80px); color: #c9cfe0; }
+.wov.combo { top: 30%; }
+.wov.combo b { font-size: min(12vh, 100px); }
+.wov.combo.t1 b { color: #ff6b5e; } .wov.combo.t2 b { color: #5d97ff; }
+.wov.combo span { background: #ffd23f; font-size: 1.8rem; }
+.wfly { position: fixed; z-index: 65; pointer-events: none; transform: translate(-50%, -50%); animation: wFly .52s cubic-bezier(.4, -.3, .6, 1) forwards; font-size: clamp(.8rem, 1.6vh, 1.1rem); }
+@keyframes wFly { 0% { transform: translate(-50%, -50%) scale(.6); } 60% { transform: translate(calc(-50% + var(--dx) * .6), calc(-50% + var(--dy) * .6 - 40px)) scale(1.3); } 100% { transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(.5); opacity: .2; } }
+.wu.wu-hit { animation: wuHit .5s ease-out; }
+@keyframes wuHit { 0% { background: #fff6b0; transform: scale(1.15); } 100% { transform: scale(1); } }
+.wv-combo { font-size: .85rem; font-weight: 800; color: #6b6f80; background: #f1eadc; border-radius: 999px; padding: 2px 8px; }
+.wv-combo.on { color: #1e2235; background: #ffd23f; animation: wvPulse .8s ease-in-out infinite alternate; }
+@keyframes wvPulse { to { transform: scale(1.08); } }
+.wg-combo { font-size: .8em; font-weight: 800; color: #1e2235; background: #ffd23f; border-radius: 999px; padding: 1px 8px; margin-left: 6px; }
+/* 두 팀 다 가진 집(⚔): 상자 두 개를 세로로 작게 -- 7층 x 8호 칸이 좁아서 호수가 잘리지 않게 */
+.wbld .wu.vs .wu-dots { flex-direction: column; gap: 1px; }
+.wbld .wu.vs .pbox.m0 { --ms: 1.05em; } .wbld .wu.vs .pbox.m1 { --ms: 1.2em; } .wbld .wu.vs .pbox.m2 { --ms: 1.35em; }
+.wbld .wu { padding: 0 2px; }
+.wbld .wu b { flex: 0 0 auto; }
+/* ⚔ 칸 다시: 세로로 쌓으면 낮은 칸에서 잘림 -> 가로로 두되 상자·호수를 조금 작게 */
+.wbld .wu.vs .wu-dots { flex-direction: row; gap: 2px; }
+.wbld .wu.vs .pbox.m0 { --ms: .95em; } .wbld .wu.vs .pbox.m1 { --ms: 1.05em; } .wbld .wu.vs .pbox.m2 { --ms: 1.15em; }
+.wbld .wu.vs b { font-size: clamp(.75rem, 2vh, 1.25rem); }
+.wbld .wu { gap: .3vw; }
+/* 금 상자 반짝임이 호수를 가리지 않게 (메인 건물 칸에서만 작게) */
+.wbld .pbox.m2::after { inset: -1px; box-shadow: 0 0 6px 1px rgba(255, 205, 40, .65); }
+
 </style>
 </head><body>
 <div id="app"></div>
@@ -4413,7 +4447,7 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
   var RAIL_PICK_LABEL = { "1": ["A", "S", "D", "F", "G"], "2": ["H", "J", "K", "L", ";"] };
   var VOTING_MS = 5000, THIEF_PER_HALF = 2; // 튜토리얼 문구용 (game-data.js)
   var ELEVATOR_JOLT = 1; // 2026-10-14 덜컹 (game-data.js)
-  var BUILD_TAG = "v1023-1105"; // 배포 확인용 빌드 표시 (build_client.py가 빌드 시각을 넣는다 -- 화면 왼쪽 위 작은 글씨)
+  var BUILD_TAG = "v1023-1136"; // 배포 확인용 빌드 표시 (build_client.py가 빌드 시각을 넣는다 -- 화면 왼쪽 위 작은 글씨)
   // 송장 하나의 배송 성공 금액 (서버가 확보 순간 층 배율을 적용해 inv.reward에 박아 둔다 -- 예전 형식이면 종류 금액)
   function invReward(inv) { return typeof inv.reward === "number" ? inv.reward : TYPES[inv.catIdx].reward; }
   function floorMult(i) { return FLOOR_REWARD_MULT[i] == null ? 1 : FLOOR_REWARD_MULT[i]; }
@@ -6110,7 +6144,9 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
     var e = st.delivery.elev, o = seat === "1" ? "2" : "1", m = (e.moves && e.moves[seat]) || { up: 0, down: 0 }, mo = (e.moves && e.moves[o]) || { up: 0, down: 0 };
     var so = dStats(st, o), sm = dStats(st, seat);
     var cnt = function (x, t) { return '<span class="wv-c t' + t + '"><i>▲</i>' + x.up + ' <i>▼</i>' + x.down + '</span>'; };
-    return '<div class="wv"><div class="wv-side t' + seat + '"><b>나</b>' + (e.stage === "move" ? cnt(m, seat) : '') + '<small>' + sm.done + '건</small></div>'
+    var stk = (st.players[seat].streak || 0), cmx = (st.wallRule && st.wallRule.comboMults) || [], nextM = cmx.length ? cmx[Math.min(stk + 1, cmx.length) - 1] : 1;
+    var combo = stk >= 1 && cmx.length ? '<span class="wv-combo' + (stk >= 2 ? ' on' : '') + '">' + stk + '연속 · 다음 x' + nextM + '</span>' : '';
+    return '<div class="wv"><div class="wv-side t' + seat + '"><b>나</b>' + (e.stage === "move" ? cnt(m, seat) : '') + combo + '<small>' + sm.done + '건</small></div>'
       + '<div class="wv-side t' + o + '"><b>상대</b>' + (e.stage === "move" ? cnt(mo, o) : '') + '<small>' + so.done + '건</small></div></div>';
   }
   function renderWarPlayer(st, seat) {
@@ -6240,7 +6276,8 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
     var e = st.delivery.elev, fl = {}, fk, mv = e.moves && e.moves[s];
     dStats(st, s).pending.forEach(function (v) { var u = unitById[v.unit]; if (u) (fl[u.floor] = fl[u.floor] || []).push(v.catIdx); });
     fk = Object.keys(fl).sort(function (a, b) { return b - a; });
-    return '<div class="wg t' + s + '"><div class="wg-h">' + TEAM[s] + (mv && e.stage === "move" ? ' <small class="wg-mv">▲' + mv.up + ' ▼' + mv.down + '</small>' : '') + '</div>'
+    var stk = st.players[s].streak || 0;
+    return '<div class="wg t' + s + '"><div class="wg-h">' + TEAM[s] + (mv && e.stage === "move" ? ' <small class="wg-mv">▲' + mv.up + ' ▼' + mv.down + '</small>' : '') + (stk >= 2 ? ' <span class="wg-combo">' + stk + ' COMBO</span>' : '') + '</div>'
       + '<div class="wg-fl">' + (fk.length ? fk.map(function (f) { return '<span' + (+f === e.floor ? ' class="here"' : '') + '><em>' + f + '</em>' + fl[f].sort(function (a, b) { return b - a; }).map(function (c) { return medal(c, 'sm'); }).join('') + '</span>'; }).join('') : '<span class="done">다 배송!</span>') + '</div></div>';
   }
   function warPanel(st) {
@@ -6299,6 +6336,33 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
     open: function () { dTone(784, 0, 0.12, "sine", 0.25); dTone(988, 0.08, 0.2, "sine", 0.25); },
   };
 
+  // ---- 2026-10-23 엘리베이터 전쟁 연출 (규칙 추가 없음): 3·2·1 멈춤 / 상자 날아가기 / 콤보 ----
+  function wOverlay(id, cls, html, ms) {
+    var el = document.getElementById(id);
+    if (!el) { el = document.createElement("div"); el.id = id; document.body.appendChild(el); }
+    el.className = "wov " + cls; el.innerHTML = html;
+    void el.offsetWidth; el.classList.add("show");
+    clearTimeout(el._t); el._t = setTimeout(function () { el.classList.remove("show"); }, ms || 700);
+  }
+  function wFly(e) {
+    if (!MAIN || e.cat == null) return;
+    var from = document.querySelector(".wcar"), to = document.querySelector('.wbld [data-unit="' + e.unit + '"]');
+    if (!from || !to) return;
+    var a = from.getBoundingClientRect(), b = to.getBoundingClientRect(), f = document.createElement("div");
+    f.className = "wfly"; f.innerHTML = medal(e.cat, 'xl');
+    f.style.left = (a.left + a.width / 2) + "px"; f.style.top = (a.top + a.height / 2) + "px";
+    f.style.setProperty("--dx", (b.left + b.width / 2 - a.left - a.width / 2) + "px");
+    f.style.setProperty("--dy", (b.top + b.height / 2 - a.top - a.height / 2) + "px");
+    document.body.appendChild(f);
+    setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); to.classList.add("wu-hit"); setTimeout(function () { to.classList.remove("wu-hit"); }, 500); }, 520);
+  }
+  function wCombo(e, me) {
+    if (!(e.comboMult > 1) || !e.streak) return;
+    if (me && e.seat !== me) return;
+    for (var i = 0; i < Math.min(e.streak, 5); i++) dTone(660 + i * 120, i * 0.05, 0.1, "square", 0.1);
+    wOverlay("wcombo", "combo t" + e.seat, '<b>' + e.streak + ' COMBO</b><span>x' + e.comboMult + '</span>', 1100);
+    if (MAIN && e.streak >= 3) dSay(e.streak + "콤보!");
+  }
   // ---- 이벤트 → 소리·팝업 (진행 중 표시와 겹치지 않게 결과만 팝업) ----
   var dLocal = { lastEv: -1, keyHold: {}, ptrHold: null, beeped: {}, shown: {} };
   function dPop(kind, title, sub, team) {
@@ -6319,9 +6383,9 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
       dLocal.lastEv = e.n;
       var mine = !me || e.seat === me, u = unitById[e.unit], addr = u ? unitAddr(u) : "", who = e.seat ? TEAM[e.seat] : "";
       if (e.k === "move") { if (MAIN) { dTone(220 + (e.floor || 1) * 40, 0, 0.12, "sawtooth", 0.06); dTone(660 + (e.floor || 1) * 40, 0.08, 0.18, "sine", 0.22); } return; } // 엘리베이터 이동음 (층마다 음 높이)
-      if (e.k === "open") { DSND.open(); if (e.forced && MAIN) { dSay("버티기 끝!"); dPop("warn", "버티다가 " + e.floor + "층에서 문이 열렸어요", "", null); } return; }
+      if (e.k === "open") { DSND.open(); if (dWar()) { wOverlay("wcd", "stop", '<b>' + e.floor + '층 멈춤!</b><span>문 열림</span>', 900); dShake(); } return; }
       if (e.k === "close" || e.k === "elevend") return;
-      if (e.k === "empty") { DSND.soft(); return; }
+      if (e.k === "empty") { DSND.soft(); wOverlay("wcd", "empty", '<b>' + e.floor + '층</b><span>빈 층 -- 다시 이동</span>', 800); return; }
       if (dWar() && e.k === "wrong") { if (me && mine) { DSND.err(); dPop("bad", "틀렸어요! 1초 멈춤", addr + "엔 내 택배가 없어요", e.seat); } else if (mine) DSND.err(); return; }
       if (e.k === "locked") { if (me && mine) DSND.soft(); return; }
       if (dWar() && e.k === "done" && me && e.seat !== me && !e.snatched) { DSND.soft(); dPop("warn", "상대 배송! +" + dWon(e.reward || 0), "", e.seat); return; }
@@ -6332,7 +6396,8 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
       if (e.k === "done") {
         DSND.done(); DSND.coin();
         dJuice(e);
-        var stk = e.streak >= 2 ? " · " + e.streak + "연속!" : "", fv = e.fever ? "FEVER " : "";
+        if (dWar()) { wFly(e); wCombo(e, me); }
+        var stk = e.comboMult > 1 ? " · " + e.streak + " COMBO x" + e.comboMult : (e.streak >= 2 ? " · " + e.streak + "연속!" : ""), fv = e.fever ? "FEVER " : "";
         if (e.streak >= 3) dSay(e.streak + "연속!");
         if (e.snatched) dSay("선점!");
         if (mine) {
@@ -6416,6 +6481,12 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
       var p = Math.max(0, Math.min(1, (parseInt(el.getAttribute("data-wend"), 10) - n) / parseInt(el.getAttribute("data-wms"), 10)));
       el.style.setProperty("--p", p.toFixed(3));
     });
+    // 이동 마지막 3초: 큰 3·2·1 + 삑 (같은 숫자는 한 번)
+    var ew0 = state.delivery.elev;
+    if (ew0 && ew0.war && ew0.stage === "move" && ew0.stageEndsAt) {
+      var cs = Math.ceil((ew0.stageEndsAt - n) / 1000), key0 = ew0.round + ":" + cs;
+      if (cs >= 1 && cs <= 3 && dLocal.cdKey !== key0) { dLocal.cdKey = key0; dTone(cs === 1 ? 988 : 784, 0, 0.12, "square", 0.12); wOverlay("wcd", "cd", '<b>' + cs + '</b>', 650); }
+    }
     Array.prototype.forEach.call(document.querySelectorAll("[data-lock]"), function (el) { el.classList.toggle("locked", parseInt(el.getAttribute("data-lock"), 10) > n); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-wsec]"), function (el) { el.textContent = Math.max(0, Math.ceil((parseInt(el.getAttribute("data-wsec"), 10) - n) / 1000)); });
     Array.prototype.forEach.call(document.querySelectorAll(".d-elev[data-moving]"), function (el) { el.classList.toggle("moving", parseInt(el.getAttribute("data-moving"), 10) > n); });

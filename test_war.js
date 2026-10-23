@@ -92,6 +92,32 @@ const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, 
     assert.strictEqual(box.st.halfHistory[0].scores["1"], 3000);
     room.destroy();
   }
+  // 6) 연속 배송 콤보: 1건 x1, 2건 x1.2, 3건 이상 x1.5. 틀리면 끊김. 피버와는 큰 배수 하나만.
+  {
+    const { room, box } = mk({ elevOpenMs: 3000 });
+    assert.deepStrictEqual(box.st.wallRule.comboMults, [1, 1.2, 1.5]);
+    box.st.players["1"].invoices = [inv("a", "a101", 1000), inv("b", "a102", 1000), inv("c", "a103", 1000), inv("d", "a104", 1000), inv("e", "a105", 1000)];
+    box.st.players["2"].invoices = [inv("z", "a108", 1000)];
+    await sleep(500); assert.strictEqual(box.st.delivery.elev.stage, "deliver");
+    room.wallSlot("1", 1); room.wallSlot("1", 2); room.wallSlot("1", 3);
+    const r = box.st.players["1"].invoices.map((v) => v.reward);
+    assert.deepStrictEqual(r.slice(0, 3), [1000, 1200, 1500], "콤보 배수");
+    let ev = box.st.delivery.ev.filter((x) => x.k === "done").pop();
+    assert.strictEqual(ev.streak, 3); assert.strictEqual(ev.comboMult, 1.5);
+    room.wallSlot("1", 6); // 틀림 -> 콤보 끊김
+    assert.strictEqual(box.st.players["1"].streak, 0);
+    await sleep(1050);
+    room.wallSlot("1", 4); assert.strictEqual(box.st.players["1"].invoices[3].reward, 1000, "끊긴 뒤 다시 x1");
+    room.destroy();
+  }
+  {
+    const { room, box } = mk({ elevOpenMs: 3000, feverMs: 60000, feverMult: 2 });
+    box.st.players["1"].invoices = [inv("a", "a101", 1000), inv("b", "a102", 1000), inv("c", "a103", 1000)];
+    await sleep(500);
+    room.wallSlot("1", 1); room.wallSlot("1", 2); room.wallSlot("1", 3);
+    assert.deepStrictEqual(box.st.players["1"].invoices.map((v) => v.reward), [2000, 2000, 2000], "피버 x2가 콤보보다 크면 피버만 (곱하지 않음)");
+    room.destroy();
+  }
   console.log("test_war OK");
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

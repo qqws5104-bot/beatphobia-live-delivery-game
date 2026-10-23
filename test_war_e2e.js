@@ -82,6 +82,9 @@ const OUT = "/tmp/war_e2e_";
       if (k % 2) await p1.click(cur < F ? ".wp-arrow.up" : ".wp-arrow.down"); else await p1.keyboard.press(cur < F ? "ArrowUp" : "ArrowDown"); await p1.waitForTimeout(80);
     }
     if (tries === 0) { await p1.screenshot({ path: OUT + "p1_move.png" }); await s.screenshot({ path: OUT + "main_move.png" }); }
+    if (tries === 0) { // 마지막 3초 카운트다운 -> 멈춤
+      await s.waitForSelector("#wcd.show.cd", { timeout: 6000 }); await s.screenshot({ path: OUT + "main_cd.png" });
+    }
     await p1.waitForSelector(".wp-doors, .wp-move", { timeout: 8000 });
     await p1.waitForSelector(".wp-doors", { timeout: 7000 }).catch(() => null);
     if (!(await p1.locator(".wp-doors").count())) continue;
@@ -101,6 +104,7 @@ const OUT = "/tmp/war_e2e_";
     await p1.keyboard.press(["KeyQ", "KeyE", "KeyT", "KeyU", "KeyA", "KeyD", "KeyG", "KeyJ"][N - 1]); // 빨강 Q E T U A D G J = 1~8호
     await p1.waitForTimeout(250);
     const pt = await p1.locator("#dpop").textContent(); console.log("pop", pt);
+    await s.waitForTimeout(150); await s.screenshot({ path: OUT + "main_fly.png" });
     assert(pt.includes("배송 완료") || pt.includes("선점") || pt.includes("콤보"), "배송 완료: " + pt);
     delivered = true;
   }
