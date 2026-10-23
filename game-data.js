@@ -185,23 +185,27 @@ const RACE_PUZZLE_ORDER = ["normal-1", "normal-2", "fixed-floor-1", "fragile-1",
 // 그 택배는 "반송"(배송 실패, 미배송과 같은 감점, 다시 배송 불가). 내 택배가 없는 호실을 Ctrl/Shift로 누르면 오배송 감점.
 const WALL_MODE = 1;
 // ---- 2026-10-22 (사용자 결정, 플레이 테스트 "주소가 낯설고 키가 너무 많다") 아파트 한 채 + 엘리베이터 이동 전쟁 ----
-//   건물은 아파트 한 채(1~7층), 층마다 N01~N08호 (왼쪽 01~04 / 가운데 엘리베이터 / 오른쪽 05~08). 맨션·주택 없음.
+//   건물은 아파트 한 채(1~7층), 층마다 N01~N04호 (왼쪽 01·02 / 가운데 엘리베이터 / 오른쪽 03·04). 맨션·주택 없음. (10-22엔 8호였음)
 //   (2차, 사용자 결정) 입력은 각자 플레이어 화면(▲▼ + 그 층 호실). 엘리베이터 하나를 같이 쓰며 두 단계를 번갈아:
 //   이동 ELEV_MOVE_MS(5초): ▲ 한 번 = 한 층 위, ▼ 한 번 = 한 층 아래 (바로 움직이는 줄다리기, 예전 엘리베이터 라운드처럼). 5초 뒤 멈춘 층이 도착.
 //   배송 ELEV_OPEN_MS(5초): 그 층에 택배가 있으면 문이 열리고, 그 층 내 집을 ELEV_DELIVER_TAPS번씩 눌러 최대한 많이 배송. ⚔ 같은 집은 먼저 채운 사람만.
 //   택배 없는 층이면 배송 없이 바로 다음 이동. (1차의 "5연타 선점" 게이지는 이 방식으로 바뀌어 안 씀 -- ELEV_WAR_TAPS 등은 남겨 둠)
 const APT_WAR = process.env.APT_WAR === "0" ? 0 : 1;
-const APT_UNITS_PER_FLOOR = 8;
+// 2026-10-23 (사용자 결정, 1인당 택배 약 6개 기준 시뮬레이션): 8층 + 배송 60초 -- 필요한 정차(약 6.7번)가 가능한 정차(6번)보다 조금 많게.
+const APT_FLOORS = 8;
+const APT_UNITS_PER_FLOOR = 4; // 2026-10-23 (사용자 결정): 층마다 N01~N04 (호실 키 빨강 Q E T U / 파랑 W R Y I)
 const ELEV_MOVE_MS = 5000;
 const ELEV_WAR_TAPS = Math.max(1, parseInt(process.env.ELEV_TAPS || "5", 10) || 5);
 const ELEV_SETTLE_MS = 800;
 const ELEV_OPEN_MS = 5000;
-const ELEV_DELIVER_TAPS = Math.max(1, parseInt(process.env.DELIVER_TAPS || "3", 10) || 3);
+// 2026-10-23 (사용자 결정): 배송은 연타가 아니라 "정확히 한 번" -- 맞는 문 한 번 = 배송. 틀린 문을 누르면 ELEV_WRONG_LOCK_MS 동안 못 누름(점수 감점 없음).
+const ELEV_DELIVER_TAPS = Math.max(1, parseInt(process.env.DELIVER_TAPS || "1", 10) || 1);
+const ELEV_WRONG_LOCK_MS = 1000;
 const ELEV_FLIP_FORCE = 3;
 const ELEV_WAR_MOVE_MS = 250;   // 한 층 움직이는 연출 시간
 const UNITS = [];
 if (APT_WAR) {
-  for (let f = 7; f >= 1; f--) for (let u = 1; u <= APT_UNITS_PER_FLOOR; u++) UNITS.push({ id: "a" + f + "0" + u, b: "apt", label: f + "0" + u + "호", floor: f, n: u });
+  for (let f = APT_FLOORS; f >= 1; f--) for (let u = 1; u <= APT_UNITS_PER_FLOOR; u++) UNITS.push({ id: "a" + f + "0" + u, b: "apt", label: f + "0" + u + "호", floor: f, n: u });
 } else {
   for (let f = 7; f >= 1; f--) for (let u = 1; u <= 2; u++) UNITS.push({ id: "a" + f + "0" + u, b: "apt", label: f + "0" + u + "호", floor: f });
   for (let f = 2; f >= 1; f--) for (let u = 1; u <= 6; u++) UNITS.push({ id: "m" + f + "0" + u, b: "mansion", label: f + "0" + u + "호", floor: f });
@@ -212,7 +216,7 @@ const BUILDINGS = [
   { key: "mansion", name: "체키맨션", short: "맨션" },
   { key: "house", name: "단독주택", short: "주택" },
 ];
-const DELIVERY_MS = 90 * 1000;          // 배송 단계 길이 (하프마다)
+const DELIVERY_MS = (APT_WAR ? 60 : 90) * 1000; // 배송 단계 길이 (하프마다). 2026-10-23: 엘리베이터 전쟁은 60초 (이동 5초 + 배송 5초 x 6번)
 const DELIVERY_PROGRESS_MS = 5000;      // (유지 방식이 꺼졌을 때만) 버튼을 켠 뒤 배송 완료까지
 // 2026-10-16 (사용자 제안, 첫 테스트): 팀 보조키 + 호실 버튼을 이 시간 동안 "누르고 있어야" 배송 완료. 중간에 떼면 처음부터.
 //   0이면 위 DELIVERY_PROGRESS_MS 방식(한 번 누르면 켜지고 시간이 지나면 완료, 상대가 Ctrl/Shift 없이 5번 누르면 반송).
@@ -266,7 +270,7 @@ const RACE_GRANT_BY_PIECES = { 2: { parcels: 4, first: 2, late: 2, lateFail: 1 }
 const RACE_UNLIMITED = 1;
 
 module.exports = {
-  APT_WAR, APT_UNITS_PER_FLOOR, ELEV_MOVE_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
+  APT_WAR, APT_FLOORS, APT_UNITS_PER_FLOOR, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
   WALL_MODE, UNITS, BUILDINGS, DELIVERY_MS, DELIVERY_PROGRESS_MS, DELIVERY_HOLD_MS, DELIVERY_ELEVATOR, DELIVERY_ELEV_START, DELIVERY_ELEV_MOVE_MS, DELIVERY_RETURN_TAPS, DELIVERY_MAX_ACTIVE, DELIVERY_WRONG_PENALTY, COMBO_BUILDING_BONUS, DELIVERY_MODES, DELIVERY_CLIMB_STEPS, DELIVERY_BELL_WAIT_MS, DELIVERY_BELL_WINDOW_MS, CONTEST_RATE, BLOCK_REWARD, FEVER_MS, FEVER_MULT, RACE_GRANT_PLAN, RACE_GRANT_BY_PIECES, RACE_UNLIMITED, RACE_PIECE_GAMES, RACE_PIECE_GAME_KINDS,
   TYPES, COURIERS, FLOORS, ROOMS, CELLS, START_FLOOR_IDX, ELEVATOR_ROUNDS, SECURE_PHASE_MS, VOTE_MS,
   PRIORITY_MULTIPLIER, SET_BONUS, SET_BONUS_KINDS, TUTORIAL_PAGES, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, THIEF_PER_HALF, PRIORITY_PICK_MS,

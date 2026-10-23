@@ -19,7 +19,7 @@ const inv = (id, unit, reward) => ({ id, catIdx: 0, unit, reward: reward || 1000
 const up = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, "up"); };
 const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, "down"); };
 (async () => {
-  assert.strictEqual(D.UNITS.length, 56, "아파트 7층 x 8호");
+  assert.strictEqual(D.UNITS.length, 32, "아파트 8층 x 4호"); assert.strictEqual(D.DELIVERY_MS, 60000, "배송 60초");
   assert(D.UNITS.every((u) => u.b === "apt"));
   assert.strictEqual(D.ELEV_MOVE_MS, 5000); assert.strictEqual(D.ELEV_OPEN_MS, 5000);
   // 1) 이동 단계: 누를 때마다 바로 한 층 (줄다리기), 1~7층 안. 누가 몇 번 눌렀는지 셈.
@@ -29,15 +29,15 @@ const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, 
     assert(e().war); assert.strictEqual(e().stage, "move"); assert.strictEqual(e().floor, 1);
     up(room, "1", 3); assert.strictEqual(e().floor, 4);
     down(room, "2", 1); assert.strictEqual(e().floor, 3, "상대가 반대로 누르면 바로 내려감");
-    up(room, "1", 10); assert.strictEqual(e().floor, 7, "7층까지만");
+    up(room, "1", 10); assert.strictEqual(e().floor, 8, "8층까지만");
     assert.deepStrictEqual(e().moves, { "1": { up: 13, down: 0 }, "2": { up: 0, down: 1 } });
     room.wallElevator(null, "up"); assert.strictEqual(e().moves["1"].up, 13, "누군지 모르는 입력은 무시");
     room.destroy();
   }
-  // 2) 5초(여기선 0.4초) 뒤 멈춘 층에 택배 있으면 배송 단계: 엘리베이터 잠김, 그 층 내 집 3번 = 배송
+  // 2) 5초(여기선 0.4초) 뒤 멈춘 층에 택배 있으면 배송 단계: 엘리베이터 잠김, 맞는 문 한 번 = 배송, 틀린 문 = 1초 잠김(감점 없음)
   {
-    const { room, box } = mk();
-    box.st.players["1"].invoices = [inv("a", "a203"), inv("b", "a207"), inv("x", "a705")];
+    const { room, box } = mk({ elevOpenMs: 2500 });
+    box.st.players["1"].invoices = [inv("a", "a203"), inv("b", "a204"), inv("x", "a705")];
     box.st.players["2"].invoices = [inv("c", "a201")];
     up(room, "1", 1); assert.strictEqual(box.st.delivery.elev.floor, 2);
     room.wallSlot("1", 3); assert.strictEqual(box.st.delivery.ev.pop().k, "closed", "이동 중엔 배송 못 함");
@@ -45,14 +45,16 @@ const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, 
     const e = box.st.delivery.elev;
     assert.strictEqual(e.stage, "deliver"); assert.strictEqual(e.open, true);
     up(room, "2", 3); assert.strictEqual(e.floor, 2, "배송 동안 잠김");
-    for (let i = 0; i < 3; i++) room.wallSlot("1", 3);
-    for (let i = 0; i < 3; i++) room.wallSlot("1", 7);
-    assert.strictEqual(box.st.players["1"].invoices.filter((v) => v.deliveredRound === 1).length, 2, "5초 안에 여러 집");
-    room.wallSlot("2", 1); // 파랑은 한 번만 -> 못 채움
-    room.wallSlot("1", 4); room.wallSlot("1", 4); assert.strictEqual(box.st.players["1"].wrong, 1, "오배송은 같은 문 열림에 한 번만");
-    await sleep(600);
-    assert.strictEqual(box.st.delivery.elev.stage, "move", "배송 끝 -> 다시 이동");
-    assert(box.st.delivery.ev.some((x) => x.k === "shut" && x.seat === "2"), "못 채운 파랑은 끊김");
+    room.wallSlot("1", 3); assert.strictEqual(box.st.players["1"].invoices[0].deliveredRound, 1, "한 번 = 배송");
+    room.wallSlot("1", 2); assert.strictEqual(box.st.delivery.ev[box.st.delivery.ev.length - 1].k, "wrong");
+    assert.strictEqual(box.st.players["1"].wrong || 0, 0, "감점 없음");
+    room.wallSlot("1", 4); assert.strictEqual(box.st.delivery.ev[box.st.delivery.ev.length - 1].k, "locked", "틀리면 잠깐 못 누름");
+    assert.strictEqual(box.st.players["1"].invoices[1].deliveredRound, null);
+    room.wallSlot("2", 1); assert.strictEqual(box.st.players["2"].invoices[0].deliveredRound, 1, "상대는 잠김과 상관없음");
+    await sleep(1050);
+    room.wallSlot("1", 4); assert.strictEqual(box.st.players["1"].invoices[1].deliveredRound, 1, "1초 뒤 다시 가능");
+    await sleep(900);
+    assert.strictEqual(box.st.delivery.elev.stage, "move", "그 층 다 보냄 -> 일찍 끝, 다시 이동");
     room.destroy();
   }
   // 3) 택배 없는 층이면 배송 없이 바로 다음 이동
@@ -65,13 +67,13 @@ const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, 
     assert(box.st.delivery.ev.some((x) => x.k === "empty"));
     room.destroy();
   }
-  // 4) 같은 집(⚔): 먼저 3번 채운 사람만, 그 층 택배가 다 나가면 조금 일찍 닫힘
+  // 4) 같은 집(⚔): 먼저 누른 사람만, 그 층 택배가 다 나가면 조금 일찍 닫힘
   {
     const { room, box } = mk({ elevOpenMs: 3000 });
     box.st.players["1"].invoices = [inv("a", "a102")];
     box.st.players["2"].invoices = [inv("b", "a102")];
     await sleep(500); assert.strictEqual(box.st.delivery.elev.stage, "deliver");
-    room.wallSlot("1", 2); room.wallSlot("2", 2); room.wallSlot("2", 2); room.wallSlot("1", 2); room.wallSlot("2", 2);
+    room.wallSlot("2", 2); room.wallSlot("1", 2);
     assert.strictEqual(box.st.players["2"].invoices[0].deliveredRound, 1);
     assert.strictEqual(box.st.players["1"].invoices[0].lost, true);
     await sleep(800); assert.strictEqual(box.st.delivery.elev.stage, "move", "다 나감 -> 3초 안 기다리고 닫힘");
@@ -81,10 +83,11 @@ const down = (room, s, n) => { for (let i = 0; i < n; i++) room.wallElevator(s, 
   {
     const { room, box } = mk({ deliveryMs: 1200 });
     assert.strictEqual(box.st.wallRule.bldBonus, 0); assert.strictEqual(box.st.wallRule.blockReward, 0);
-    assert.deepStrictEqual(box.st.wallRule.war, { moveMs: 400, openMs: 500, deliverTaps: 3 });
-    box.st.players["1"].invoices = [inv("a", "a108", 3000)];
+    assert.deepStrictEqual(box.st.wallRule.war, { moveMs: 400, openMs: 500, deliverTaps: 1, lockMs: 1000 });
+    box.st.players["1"].invoices = [inv("a", "a104", 3000)];
     await sleep(500);
-    for (let i = 0; i < 3; i++) room.wallSlot("1", 8);
+    room.wallSlot("1", 4);
+    room.wallSlot("1", 5); // 5호는 없음 -> 무시
     await sleep(4000);
     assert.strictEqual(box.st.halfHistory[0].scores["1"], 3000);
     room.destroy();

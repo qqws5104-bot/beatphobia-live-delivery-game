@@ -1276,3 +1276,32 @@ body:has(.d-war) .dpop { top: 1.2vh; bottom: auto; padding-top: 8px; padding-bot
 /* 층 목록 칩 규칙(.wg-fl span)이 상자(span.pbox)에 먹지 않게 */
 .wg-fl > span { font-size: clamp(.95rem, 2.3vh, 1.35rem); padding: 3px 10px; gap: 4px; }
 .wg-fl .pbox { background: none !important; padding: 0 !important; border-radius: 0 !important; box-shadow: none !important; font-size: inherit !important; display: inline-block !important; }
+
+/* 40. 배송 = 정확히 한 번 (2026-10-23): 문 8개 다 눌림, 틀리면 잠깐 잠김 / 상대 정보 줄 */
+.wp-doors { position: relative; }
+.wp-door { cursor: pointer; background: #fffdf6; border-color: #cfc4ad; box-shadow: 0 5px 0 rgba(0,0,0,.18); }
+.wp-door b { color: #1e2235; font-size: 1.3rem; }
+.wp-doors.locked .wp-door { opacity: .35; pointer-events: none; }
+.wp-lockmsg { display: none; position: absolute; inset: 0; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 800; color: #d93a32; pointer-events: none; }
+.wp-doors.locked .wp-lockmsg { display: flex; animation: wpShake .3s; }
+@keyframes wpShake { 25% { transform: translateX(-6px); } 75% { transform: translateX(6px); } }
+.wv { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 0 10px; }
+.wv-side { display: flex; align-items: center; gap: 8px; background: #fffdf6; border-radius: 12px; padding: 6px 12px; border-left: 6px solid var(--tc); }
+.wv-side.t1 { --tc: #e2493d; } .wv-side.t2 { --tc: #2f6fdb; }
+.wv-side b { color: var(--tc); }
+.wv-side small { margin-left: auto; color: #4a4f63; font-size: .95rem; }
+.wv-c { font-variant-numeric: tabular-nums; font-weight: 700; color: #1e2235; font-size: 1.05rem; }
+.wv-c i { font-style: normal; color: var(--tc); font-size: .8em; }
+.wp-doors.locked .wp-lockmsg { inset: auto; left: 50%; top: 50%; transform: translate(-50%, -50%); background: #d93a32; color: #fff; padding: 8px 18px; border-radius: 999px; white-space: nowrap; box-shadow: 0 4px 0 rgba(0,0,0,.25); animation: none; }
+/* 41. 층마다 호실 4개 + 문/화살표에 그 플레이어 키 표시 (2026-10-23) */
+.wp-doors { grid-template-columns: repeat(var(--half, 2), 1fr) 18px repeat(var(--half, 2), 1fr); gap: 10px; }
+.wp-door { min-height: 120px; }
+.wp-door b { font-size: 1.6rem; }
+.wp-door kbd, .wp-arrow kbd { display: inline-block; font: 700 .95rem/1 inherit; font-family: inherit; padding: 4px 8px; border-radius: 6px; background: #1e2235; color: #fff; }
+.wp-arrow { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.wp-arrow kbd { background: rgba(0,0,0,.25); font-size: 1rem; }
+/* 42. 층 수를 변수로 (2026-10-23: 8층) */
+.wbld { grid-template-rows: repeat(var(--floors, 7), minmax(0, 1fr)); }
+.wshaft { background: repeating-linear-gradient(180deg, #2a3150 0 2px, #39416a 2px calc(100% / var(--floors, 7))); }
+.wcar { height: calc(100% / var(--floors, 7)); }
+.wbld .wu { flex-direction: row; gap: .6vw; } /* 칸이 넓고 낮아서(8층 x 4호) 호수와 상자를 옆으로 */

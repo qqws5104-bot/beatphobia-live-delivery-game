@@ -13,7 +13,7 @@ const {
   PRIORITY_MULTIPLIER, SET_BONUS, SET_BONUS_KINDS, TUTORIAL_PAGES, SAME_FLOOR_CHOICE_MS, HALVES, THIEF_PLACE_MS, THIEF_PER_HALF, PRIORITY_PICK_MS,
   FLOOR_REWARD_MULT, START_FLOOR_CHOICES, ELEVATOR_JOLT, RESULT_AUTO_ADVANCE_MS, MERGE_PRIORITY_THIEF, SAME_FLOOR_AUTO_PICK,
   RACE_MODE, RACE_PICK_MS, RACE_SECOND_MS, RACE_REVEAL_MS, RACE_PUZZLE_ORDER, RACE_PARCELS, RACE_LEFTOVER_RETURN, RACE_AUTO_PICK, RACE_GAME_POOL, RACE_AUTO_PICK_MODE, RACE_PIECES_BY_ROUND, RACE_CONSOLATION_MS, RACE_EXCLUDE_KINDS, FLOOR_LIMITS,
-  APT_WAR, ELEV_MOVE_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
+  APT_WAR, APT_FLOORS, ELEV_MOVE_MS, ELEV_WRONG_LOCK_MS, ELEV_WAR_TAPS, ELEV_SETTLE_MS, ELEV_OPEN_MS, ELEV_DELIVER_TAPS, ELEV_FLIP_FORCE, ELEV_WAR_MOVE_MS,
   WALL_MODE, UNITS, DELIVERY_MS, DELIVERY_PROGRESS_MS, DELIVERY_HOLD_MS, DELIVERY_ELEVATOR, DELIVERY_ELEV_START, DELIVERY_ELEV_MOVE_MS, DELIVERY_RETURN_TAPS, DELIVERY_MAX_ACTIVE, DELIVERY_WRONG_PENALTY, COMBO_BUILDING_BONUS, DELIVERY_MODES, DELIVERY_CLIMB_STEPS, DELIVERY_BELL_WAIT_MS, DELIVERY_BELL_WINDOW_MS, CONTEST_RATE, BLOCK_REWARD, FEVER_MS, FEVER_MULT, RACE_GRANT_PLAN, RACE_GRANT_BY_PIECES, RACE_UNLIMITED, RACE_PIECE_GAMES, RACE_PIECE_GAME_KINDS,
 } = require("./game-data");
 
@@ -76,6 +76,7 @@ const DEFAULT_RULES = {
   aptWar: !!APT_WAR,
   elevWarTaps: ELEV_WAR_TAPS,
   elevMoveMs: ELEV_MOVE_MS,
+  elevWrongLockMs: ELEV_WRONG_LOCK_MS,
   elevSettleMs: ELEV_SETTLE_MS,
   elevOpenMs: ELEV_OPEN_MS,
   elevDeliverTaps: ELEV_DELIVER_TAPS,
@@ -274,7 +275,7 @@ function initialState(rules) {
     setRule: { amount: (rules && rules.setBonus) || 0, kinds: (rules && rules.setBonusKinds) || SET_BONUS_KINDS }, // 2026-10-15 종류 모으기 보너스 (클라이언트도 이걸로 계산)
     tutorial: null, // 2026-10-15 시작 전 튜토리얼 (phase "tutorial"일 때만)
     // 2026-10-16 벽 배송: 규칙 묶음(클라이언트 표시·점수 계산용)과 진행 상태(phase "delivery"일 때만)
-    wallRule: (rules && rules.wallMode) ? { wrongPenalty: rules.deliveryWrongPenalty || 0, progressMs: rules.deliveryProgressMs, holdMs: rules.deliveryHoldMs || 0, elevator: !!rules.deliveryElevator, returnTaps: rules.deliveryReturnTaps, maxActive: rules.deliveryMaxActive, bldBonus: rules.comboBuildingBonus || 0, modes: rules.deliveryModes || null, climb: rules.deliveryClimbSteps || null, bellWindowMs: rules.deliveryBellWindowMs || 0, blockReward: rules.aptWar ? 0 : (rules.blockReward || 0), contest: (rules.contestRate || 0) > 0, pair: !!rules.deliveryPairButtons, feverMs: rules.feverMs || 0, feverMult: rules.feverMult || 1, war: rules.aptWar ? { moveMs: rules.elevMoveMs, openMs: rules.elevOpenMs, deliverTaps: rules.elevDeliverTaps } : null } : null,
+    wallRule: (rules && rules.wallMode) ? { wrongPenalty: rules.deliveryWrongPenalty || 0, progressMs: rules.deliveryProgressMs, holdMs: rules.deliveryHoldMs || 0, elevator: !!rules.deliveryElevator, returnTaps: rules.deliveryReturnTaps, maxActive: rules.deliveryMaxActive, bldBonus: rules.comboBuildingBonus || 0, modes: rules.deliveryModes || null, climb: rules.deliveryClimbSteps || null, bellWindowMs: rules.deliveryBellWindowMs || 0, blockReward: rules.aptWar ? 0 : (rules.blockReward || 0), contest: (rules.contestRate || 0) > 0, pair: !!rules.deliveryPairButtons, feverMs: rules.feverMs || 0, feverMult: rules.feverMult || 1, war: rules.aptWar ? { moveMs: rules.elevMoveMs, openMs: rules.elevOpenMs, deliverTaps: rules.elevDeliverTaps, lockMs: rules.elevWrongLockMs } : null } : null,
     delivery: null,
     phase: "lobby", // lobby -> (tutorial) -> secure -> elevator -> halftime -> secure -> elevator -> end -> (재시작 시) secure ...
     ready: { "1": false, "2": false },
@@ -932,7 +933,7 @@ class GameRoom {
     if (this.rules.aptWar) {
       // 엘리베이터 이동 전쟁: cnt = 이번 층에서 각자 ↑/↓ 누른 수 (먼저 taps 채우면 그 방향으로 한 층, 둘 다 0으로)
       const now0 = Date.now();
-      this.state.delivery.elev = { war: true, floor: this.rules.deliveryElevStart || 1, top: 7, movingUntil: 0, stage: "move", stageEndsAt: 0, open: false, openedAt: 0, openUntil: 0, openN: 0, round: 0, moves: null };
+      this.state.delivery.elev = { war: true, floor: this.rules.deliveryElevStart || 1, top: APT_FLOORS, movingUntil: 0, stage: "move", stageEndsAt: 0, open: false, openedAt: 0, openUntil: 0, openN: 0, round: 0, moves: null };
       this.state.delivery.mash = { "1": {}, "2": {} }; // 문 열린 동안 호실별 연타 수
       this.state.delivery.wrongSeen = {};
       this._warStartMove(now0);
@@ -1089,7 +1090,7 @@ class GameRoom {
   _warStartMove(now) {
     const d = this.state.delivery, e = d.elev;
     e.stage = "move"; e.open = false; e.stageEndsAt = now + (this.rules.elevMoveMs || 5000);
-    e.moves = { "1": { up: 0, down: 0 }, "2": { up: 0, down: 0 } }; e.round = (e.round || 0) + 1;
+    e.moves = { "1": { up: 0, down: 0 }, "2": { up: 0, down: 0 } }; e.round = (e.round || 0) + 1; e.lock = { "1": 0, "2": 0 };
     d.mash = { "1": {}, "2": {} };
   }
   _warElev(seat, dir) {
@@ -1121,11 +1122,14 @@ class GameRoom {
     if (seat !== "1" && seat !== "2") return;
     const d = this.state.delivery, e = d.elev, u = this._unitOf(unitId);
     if (!e.open || u.floor !== e.floor) { this._dEv(e.open ? "noelev" : "closed", unitId, seat, { floor: e.floor }); this.emit(); return; }
-    const pl = this.state.players[seat];
+    const pl = this.state.players[seat], now = Date.now();
+    if (e.lock && e.lock[seat] > now) { this._dEv("locked", unitId, seat); this.emit(); return; } // 틀린 문 누른 벌로 잠깐 못 누름
     const inv = pl.invoices.find((v) => v.unit === unitId && v.deliveredRound === null && !v.returned && !v.lost);
     if (!inv) {
-      const k = seat + ":" + unitId + ":" + e.openN; // 같은 문 열림에 같은 집 오배송은 한 번만 감점 (연타하다 실수해도 한 번)
-      if (!d.wrongSeen[k]) { d.wrongSeen[k] = 1; pl.wrong = (pl.wrong || 0) + 1; this._dEv("wrong", unitId, seat); }
+      // 2026-10-23 (사용자 결정 "정확히 한 번"): 틀린 문 = 감점 없이 elevWrongLockMs 동안 못 누름 (정확하게 눌러야 하는 압박)
+      if (!e.lock) e.lock = { "1": 0, "2": 0 };
+      e.lock[seat] = now + (this.rules.elevWrongLockMs || 1000);
+      this._dEv("wrong", unitId, seat, { lockUntil: e.lock[seat] });
       this.emit(); return;
     }
     const m = d.mash[seat];
@@ -1134,6 +1138,7 @@ class GameRoom {
     if (m[unitId] < need) { this._dEv("step", unitId, seat, { steps: m[unitId], need }); this.emit(); return; }
     delete m[unitId];
     d.doors[unitId] = { seat, invId: inv.id, start: e.openedAt, taps: 0, mode: "mash" };
+    if (!e.lock) e.lock = { "1": 0, "2": 0 };
     this._completeDoor(unitId);
     const o = seat === "1" ? "2" : "1";
     if (d.mash[o]) delete d.mash[o][unitId]; // 같은 집을 두드리던 상대는 끝

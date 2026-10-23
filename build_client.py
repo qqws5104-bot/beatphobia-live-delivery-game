@@ -2280,22 +2280,21 @@ APP_JS_TEMPLATE = r"""
     "NumpadAdd", "NumpadSubtract", "NumpadMultiply", "NumpadDivide", "NumpadDecimal", "NumpadEnter", "Insert", "Delete", "Home", "End"];
   var unitById = {}, unitByKey = {}, unitByKeyB = {};
   WALL.units.forEach(function (u, i) { unitById[u.id] = u; if (WALL.war) return; u.key = WALL_KEYS[i]; u.keyB = BLUE_KEYS[i]; u.keyLabel = KEY_LABEL[u.key] || u.key.replace("Key", ""); unitByKey[u.key] = u; unitByKeyB[u.keyB] = u; });
-  // 2026-10-22 엘리베이터 이동 전쟁 (아파트 한 채): 1인당 버튼 = ↑ ↓ + 호실 8개(지금 엘리베이터가 선 층의 N01~N08).
-  //   빨강: ↑ W / ↓ S / 호실 1~8 = 숫자 1~8 · 파랑: ↑↓ 방향키 / 호실 1~8 = Y U I O H J K L (또는 숫자패드 1~8, 또는 Shift+숫자).
-  //   현장 아케이드 버튼 인코더는 이 키로 연결 (벽버튼_배선표.csv).
+  // 2026-10-23 (사용자 결정): 층마다 호실 4개(N01~N04). 호실 키는 플레이어마다 다르게 -- 빨강 Q E T U / 파랑 W R Y I 가 순서대로 1·2·3·4호.
+  //   (키보드에서 빨강·파랑이 한 칸씩 번갈아: 문마다 빨강·파랑 버튼 한 쌍을 나란히 둔 배치와 같음.)
+  //   엘리베이터 (사용자 결정, 맨 처음 엘리베이터 라운드처럼): 각자 자리(자기 플레이어 화면 기기)에서 자기 ↑ / ↓ 키. 메인 화면에선 엘리베이터를 못 움직임.
+  //   호실 키는 메인 화면에선 두 팀 다, 플레이어 화면에선 자기 팀 키만. 현장 버튼 인코더는 이 키로 연결 (벽버튼_배선표.csv).
   var WAR_KEYS = {
-    "1": { up: ["KeyW"], down: ["KeyS"], slot: ["Digit1", "Digit2", "Digit3", "Digit4", "Digit5", "Digit6", "Digit7", "Digit8"] },
-    "2": { up: ["ArrowUp"], down: ["ArrowDown"], slot: ["KeyY", "KeyU", "KeyI", "KeyO", "KeyH", "KeyJ", "KeyK", "KeyL"], slot2: ["Numpad1", "Numpad2", "Numpad3", "Numpad4", "Numpad5", "Numpad6", "Numpad7", "Numpad8"] },
+    "1": { up: ["ArrowUp"], down: ["ArrowDown"], slot: ["KeyQ", "KeyE", "KeyT", "KeyU"] },
+    "2": { up: ["ArrowUp"], down: ["ArrowDown"], slot: ["KeyW", "KeyR", "KeyY", "KeyI"] },
   };
-  var WAR_KEY_LABEL = { "1": { up: "W", down: "S", slot: ["1", "2", "3", "4", "5", "6", "7", "8"] }, "2": { up: "↑", down: "↓", slot: ["Y", "U", "I", "O", "H", "J", "K", "L"] } };
+  var WAR_KEY_LABEL = { "1": { up: "↑", down: "↓", slot: ["Q", "E", "T", "U"] }, "2": { up: "↑", down: "↓", slot: ["W", "R", "Y", "I"] } };
   function dWar() { return !!(state && state.delivery && state.delivery.elev && state.delivery.elev.war); }
   function warKey(code, shift) {
     for (var s = 1; s <= 2; s++) {
       var k = WAR_KEYS[s], t = String(s);
-      if (k.up.indexOf(code) >= 0) return { team: t, dir: "up" };
-      if (k.down.indexOf(code) >= 0) return { team: t, dir: "down" };
       var i = k.slot.indexOf(code); if (i < 0 && k.slot2) i = k.slot2.indexOf(code);
-      if (i >= 0) return { team: shift && t === "1" ? "2" : t, slot: i + 1 };
+      if (i >= 0) return { team: t, slot: i + 1 };
     }
     return null;
   }
@@ -2408,19 +2407,27 @@ APP_JS_TEMPLATE = r"""
   }
 
   // 2026-10-22 (사용자 결정): 엘리베이터 전쟁 입력은 각자 화면. 이동 단계 = 큰 ▲▼, 배송 단계 = 지금 층 문 8개(내 택배 있는 집만 눌림)
+  // ③ 상대의 다음 행동을 의식하게: 이번 이동에서 서로 누른 수 + 배송 건수 (상대 택배 주소는 안 보임)
+  function warVs(st, seat) {
+    var e = st.delivery.elev, o = seat === "1" ? "2" : "1", m = (e.moves && e.moves[seat]) || { up: 0, down: 0 }, mo = (e.moves && e.moves[o]) || { up: 0, down: 0 };
+    var so = dStats(st, o), sm = dStats(st, seat);
+    var cnt = function (x, t) { return '<span class="wv-c t' + t + '"><i>▲</i>' + x.up + ' <i>▼</i>' + x.down + '</span>'; };
+    return '<div class="wv"><div class="wv-side t' + seat + '"><b>나</b>' + (e.stage === "move" ? cnt(m, seat) : '') + '<small>' + sm.done + '건</small></div>'
+      + '<div class="wv-side t' + o + '"><b>상대</b>' + (e.stage === "move" ? cnt(mo, o) : '') + '<small>' + so.done + '건</small></div></div>';
+  }
   function renderWarPlayer(st, seat) {
     var s = dStats(st, seat), e = st.delivery.elev, w = warRule(st), per = WALL.perFloor || 8, mv = e.stage !== "deliver";
     var ctl;
     if (mv) {
-      ctl = '<div class="wp-move"><button class="wp-arrow up" data-war="up" aria-label="위로">▲</button><div class="wp-floor"><b>' + e.floor + '</b><small>층</small></div><button class="wp-arrow down" data-war="down" aria-label="아래로">▼</button></div>';
+      ctl = '<div class="wp-move"><button class="wp-arrow up" data-war="up" aria-label="위로">▲<kbd>' + esc(WAR_KEY_LABEL[seat].up) + '</kbd></button><div class="wp-floor"><b>' + e.floor + '</b><small>층</small></div><button class="wp-arrow down" data-war="down" aria-label="아래로">▼<kbd>' + esc(WAR_KEY_LABEL[seat].down) + '</kbd></button></div>';
     } else {
-      var doors = '', ms = (st.delivery.mash && st.delivery.mash[seat]) || {}, need = w.deliverTaps || 3;
+      // 2026-10-23 (사용자 결정 "정확히 한 번"): 문 8개 다 눌림, 내 집 표시 없음 -- 송장 호수를 보고 맞는 문을 한 번. 틀리면 1초 잠김.
+      var doors = '', lockAt = (e.lock && e.lock[seat]) || 0;
       for (var n = 1; n <= per; n++) {
-        var u = unitById["a" + e.floor + "0" + n], c = dHeldCat(st, seat, u.id), mine = c >= 0, p = (ms[u.id] || 0) / need;
-        doors += (n === per / 2 + 1 ? '<i class="wp-shaft"></i>' : '') + '<button class="wp-door' + (mine ? ' mine' : '') + '" data-war="slot" data-slot="' + n + '"' + (mine ? '' : ' disabled') + ' style="--p:' + p.toFixed(2) + '">'
-          + '<b>' + esc(u.label.replace("호", "")) + '</b>' + (mine ? medal(c) + '<i class="wp-door-bar"><i></i></i>' : '') + '</button>';
+        var u = unitById["a" + e.floor + "0" + n];
+        doors += (n === per / 2 + 1 ? '<i class="wp-shaft"></i>' : '') + '<button class="wp-door" data-war="slot" data-slot="' + n + '"><b>' + esc(u.label.replace("호", "")) + '</b><kbd>' + esc(WAR_KEY_LABEL[seat].slot[n - 1] || '') + '</kbd></button>';
       }
-      ctl = '<div class="wp-doors">' + doors + '</div>';
+      ctl = '<div style="--half:' + (per / 2) + '" class="wp-doors' + (lockAt > nowMs() ? ' locked' : '') + '" data-lock="' + lockAt + '">' + doors + '<span class="wp-lockmsg">틀렸어요! 잠깐 멈춤</span></div>';
     }
     var slips = s.pending.slice().sort(function (a, b) { var ua = unitById[a.unit], ub = unitById[b.unit]; return (ub ? ub.floor : 0) - (ua ? ua.floor : 0); }).map(function (v) {
       var u = unitById[v.unit], other = seat === "1" ? "2" : "1", vsx = u && dHeld(st, other, v.unit), here = u && u.floor === e.floor;
@@ -2429,7 +2436,7 @@ APP_JS_TEMPLATE = r"""
     return '<main class="stage stage--dlv">' + cartOpen('cart--dlv') + '<div class="dlv wp t' + seat + '">'
       + '<div class="dlv-top"><span class="dlv-team t' + seat + '">' + TEAM[seat] + '</span>' + dClock(st)
       + '<span class="dlv-earn">' + dCount("p" + seat, s.live) + '<small>' + s.done + '건</small></span></div>'
-      + dTug(st) + warStage(st, true) + ctl
+      + dTug(st) + warStage(st, true) + warVs(st, seat) + ctl
       + '<div class="wp-slips">' + (slips || '<div class="wp-clear">다 배송했어요!</div>') + '</div>'
       + '</div>' + cartClose() + '</main>';
   }
@@ -2511,25 +2518,25 @@ APP_JS_TEMPLATE = r"""
       + (h1 && h2 ? '<span class="wu-vs">⚔</span>' : '') + bars + '</div>';
   }
   function warBuilding(st) {
-    var e = st.delivery.elev, per = WALL.perFloor || 8, half = per / 2, h = '';
-    for (var f = 7; f >= 1; f--) {
-      var row = 8 - f;
+    var e = st.delivery.elev, per = WALL.perFloor || 8, half = per / 2, h = '', TOP = WALL.floors || 7;
+    for (var f = TOP; f >= 1; f--) {
+      var row = TOP + 1 - f;
       h += '<div class="wfl' + (e.floor === f ? ' here' : '') + '" style="grid-row:' + row + '"><b>' + f + 'F</b></div>';
       for (var n = 1; n <= per; n++) {
         var col = n <= half ? n + 1 : n + 2;
         h += '<div class="wcell" style="grid-row:' + row + ';grid-column:' + col + '">' + warUnit(st, unitById["a" + f + "0" + n], e) + '</div>';
       }
     }
-    var top = ((7 - e.floor) / 7 * 100).toFixed(3);
-    h += '<div class="wshaft" style="grid-row:1 / span 7;grid-column:' + (half + 2) + '"><div class="wcar' + (e.open ? ' open' : '') + '" style="top:' + top + '%"><i></i><i></i><b>' + e.floor + '</b></div></div>';
-    return '<div class="wbld" style="--half:' + half + '">' + h + '</div>';
+    var top = ((TOP - e.floor) / TOP * 100).toFixed(3);
+    h += '<div class="wshaft" style="grid-row:1 / span ' + TOP + ';grid-column:' + (half + 2) + '"><div class="wcar' + (e.open ? ' open' : '') + '" style="top:' + top + '%"><i></i><i></i><b>' + e.floor + '</b></div></div>';
+    return '<div class="wbld" style="--half:' + half + ';--floors:' + TOP + '">' + h + '</div>';
   }
   // 2026-10-22 (사용자 결정 2차): 이동 5초(누를 때마다 한 층) -> 택배 있는 층이면 배송 5초. 입력은 각자 플레이어 화면.
   function warStage(st, big) {
     var e = st.delivery.elev, w = warRule(st), mv = e.stage !== "deliver";
     var ends = mv ? e.stageEndsAt : e.openUntil, ms = mv ? (w.moveMs || 5000) : (w.openMs || 5000);
     return '<div class="wst ' + (mv ? 'war' : 'open') + (big ? ' big' : '') + '" data-wend="' + ends + '" data-wms="' + ms + '"><b>' + (mv ? '이동' : '배송') + ' <span class="wst-sec" data-wsec="' + ends + '">' + Math.max(0, Math.ceil((ends - nowMs()) / 1000)) + '</span></b>'
-      + '<span>' + (mv ? '▲▼ 누른 만큼 움직여요' : e.floor + '층 내 집을 ' + (w.deliverTaps || 3) + '번씩!') + '</span><i class="wst-bar"><i></i></i></div>';
+      + '<span>' + (mv ? '▲▼ 누른 만큼 움직여요' : '송장 보고 맞는 문을 한 번!') + '</span><i class="wst-bar"><i></i></i></div>';
   }
   function warTeamFloors(st, s) {
     var e = st.delivery.elev, fl = {}, fk, mv = e.moves && e.moves[s];
@@ -2551,7 +2558,7 @@ APP_JS_TEMPLATE = r"""
       + '<div class="d-bar">' + teamCard(st, "1", false) + '<div class="d-bar-mid">' + dClock(st) + '</div>' + teamCard(st, "2", false) + '</div>'
       + dTug(st)
       + '<div class="wwrap">' + warBuilding(st) + warPanel(st) + '</div>'
-      + '<div class="d-keys1"><b>이동 5초</b> ▲▼ 누른 만큼 · <b>배송 5초</b> 그 층 내 집 ' + (w.deliverTaps || 3) + '번씩 · ⚔ 먼저 채운 사람만</div></div>';
+      + '<div class="d-keys1">각자 자리에서 <b>↑↓</b> 엘리베이터 · <span class="t1"><b>빨강</b> 호실 ' + L1.slot.join(' ') + '</span><span class="t2"><b>파랑</b> 호실 ' + L2.slot.join(' ') + '</span> · <b>이동 5초</b> 누른 만큼 · <b>배송 5초</b> 맞는 문 한 번</div></div>';
   }
   function renderMainDelivery(st, head, halfName) {
     if (st.delivery && st.delivery.elev && st.delivery.elev.war) return renderWarMain(st, head, halfName);
@@ -2617,6 +2624,9 @@ APP_JS_TEMPLATE = r"""
       if (e.k === "open") { DSND.open(); if (e.forced && MAIN) { dSay("버티기 끝!"); dPop("warn", "버티다가 " + e.floor + "층에서 문이 열렸어요", "", null); } return; }
       if (e.k === "close" || e.k === "elevend") return;
       if (e.k === "empty") { DSND.soft(); return; }
+      if (dWar() && e.k === "wrong") { if (me && mine) { DSND.err(); dPop("bad", "틀렸어요! 1초 멈춤", addr + "엔 내 택배가 없어요", e.seat); } else if (mine) DSND.err(); return; }
+      if (e.k === "locked") { if (me && mine) DSND.soft(); return; }
+      if (dWar() && e.k === "done" && me && e.seat !== me && !e.snatched) { DSND.soft(); dPop("warn", "상대 배송! +" + dWon(e.reward || 0), "", e.seat); return; }
       if (e.k === "shut") { if (mine) { DSND.err(); dPop("warn", (me ? "" : who + " · ") + "문이 닫혔어요", addr + " · 연타 " + (e.taps || 0) + "번은 처음부터", e.seat); } return; }
       if (e.k === "closed" || (e.k === "noelev" && dWar())) { if (me && mine) { DSND.soft(); dPop("warn", e.k === "closed" ? "문이 닫혀 있어요" : "엘리베이터가 " + (e.floor || "?") + "층이에요", "멈추고 문이 열려야 배송돼요", e.seat); } else if (mine) DSND.soft(); return; }
       if (e.k === "start") { if (mine || !me) DSND.start(); return; }
@@ -2708,6 +2718,7 @@ APP_JS_TEMPLATE = r"""
       var p = Math.max(0, Math.min(1, (parseInt(el.getAttribute("data-wend"), 10) - n) / parseInt(el.getAttribute("data-wms"), 10)));
       el.style.setProperty("--p", p.toFixed(3));
     });
+    Array.prototype.forEach.call(document.querySelectorAll("[data-lock]"), function (el) { el.classList.toggle("locked", parseInt(el.getAttribute("data-lock"), 10) > n); });
     Array.prototype.forEach.call(document.querySelectorAll("[data-wsec]"), function (el) { el.textContent = Math.max(0, Math.ceil((parseInt(el.getAttribute("data-wsec"), 10) - n) / 1000)); });
     Array.prototype.forEach.call(document.querySelectorAll(".d-elev[data-moving]"), function (el) { el.classList.toggle("moving", parseInt(el.getAttribute("data-moving"), 10) > n); });
     Array.prototype.forEach.call(document.querySelectorAll(".d-cnt[data-ck]"), function (el) {
@@ -2755,12 +2766,11 @@ APP_JS_TEMPLATE = r"""
   function dKeyDown(e) {
     if (!state || state.phase !== "delivery") return false;
     if (dWar() && !MAIN && !RAIL && mySeat()) {
-      // 플레이어 기기 키보드 (시험용 / 아케이드 버튼 인코더): ↑ W = 위, ↓ S = 아래, 숫자 1~8 = 지금 층 N0n호
-      var c = e.code, dir = (c === "ArrowUp" || c === "KeyW") ? "up" : (c === "ArrowDown" || c === "KeyS") ? "down" : null;
-      var sl = /^(Digit|Numpad)([1-8])$/.exec(c);
-      if (!dir && !sl) return false;
+      // 플레이어 기기 키보드 / 버튼: ↑↓ 엘리베이터 + 자기 팀 호실 키 (빨강 Q E T U / 파랑 W R Y I)
+      var wk2 = e.code === "ArrowUp" ? { dir: "up" } : e.code === "ArrowDown" ? { dir: "down" } : warKey(e.code); // ↑↓ = 이 자리 사람의 엘리베이터
+      if (!wk2 || (wk2.team && wk2.team !== mySeat())) return false;
       e.preventDefault();
-      if (!e.repeat) warSend(mySeat(), dir || "slot", sl ? parseInt(sl[2], 10) : 0);
+      if (!e.repeat) warSend(mySeat(), wk2.dir || "slot", wk2.slot || 0);
       return true;
     }
     var team = dTeamOf(e);
@@ -3737,7 +3747,7 @@ APP_JS_TEMPLATE = r"""
 """
 
 import subprocess as _sp
-WALL_JSON = _sp.check_output(["node", "-e", "const d=require(" + json.dumps(GAME_DATA_JS) + ");process.stdout.write(JSON.stringify({units:d.UNITS,buildings:d.BUILDINGS,war:!!d.APT_WAR,perFloor:d.APT_UNITS_PER_FLOOR}))"]).decode("utf-8")
+WALL_JSON = _sp.check_output(["node", "-e", "const d=require(" + json.dumps(GAME_DATA_JS) + ");process.stdout.write(JSON.stringify({units:d.UNITS,buildings:d.BUILDINGS,war:!!d.APT_WAR,perFloor:d.APT_UNITS_PER_FLOOR,floors:d.APT_FLOORS}))"]).decode("utf-8")
 APP_JS = (APP_JS_TEMPLATE
           .replace("@@WALL_JSON@@", WALL_JSON)
           .replace("@@TYPES_JSON@@", TYPES_JSON)

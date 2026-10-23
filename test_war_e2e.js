@@ -57,7 +57,7 @@ const OUT = "/tmp/war_e2e_";
   assert(await s.locator(".d-war").count(), "메인 = 엘리베이터 전쟁 화면");
   await s.waitForTimeout(300);
   await s.screenshot({ path: OUT + "main.png" }); await p1.screenshot({ path: OUT + "p1.png" }); await rail.screenshot({ path: OUT + "rail.png" });
-  assert.strictEqual(await s.locator(".wbld .wu").count(), 56, "7층 x 8호");
+  assert.strictEqual(await s.locator(".wbld .wu").count(), 32, "8층 x 4호");
   // 2026-10-22 2차: 입력은 각자 플레이어 화면. 송장 = 색 상자 + 호수 (글자 없음)
   await p1.waitForSelector(".wp");
   const slips = await p1.evaluate(() => [...document.querySelectorAll(".wp-slip b")].map(e => e.textContent));
@@ -72,10 +72,14 @@ const OUT = "/tmp/war_e2e_";
   let delivered = false;
   for (let tries = 0; tries < 6 && !delivered; tries++) {
     await p1.waitForSelector(".wp-move", { timeout: 12000 });
+    if (tries === 0) { // 파랑 자리에서 파랑 ↑ -> 파랑이 누른 수로 셈 (각자 자리, 각자 ↑↓)
+      await p2.keyboard.press("ArrowUp"); await p2.waitForTimeout(200);
+      if (await p1.locator(".wp-move").count()) assert((await p1.locator(".wv-side.t2 .wv-c").textContent()).includes("▲1"), "파랑 ↑ = 파랑 몫");
+    }
     let k = 0;
     while (k++ < 20 && (await p1.locator(".wp-move").count())) {
       const cur = await floor(); if (cur === F) break;
-      await p1.click(cur < F ? ".wp-arrow.up" : ".wp-arrow.down"); await p1.waitForTimeout(80);
+      if (k % 2) await p1.click(cur < F ? ".wp-arrow.up" : ".wp-arrow.down"); else await p1.keyboard.press(cur < F ? "ArrowUp" : "ArrowDown"); await p1.waitForTimeout(80);
     }
     if (tries === 0) { await p1.screenshot({ path: OUT + "p1_move.png" }); await s.screenshot({ path: OUT + "main_move.png" }); }
     await p1.waitForSelector(".wp-doors, .wp-move", { timeout: 8000 });
@@ -85,8 +89,17 @@ const OUT = "/tmp/war_e2e_";
     const doorF = +(await p1.locator(".wp-door b").first().textContent())[0];
     if (doorF !== F) { await p1.waitForSelector(".wp-move", { timeout: 8000 }); continue; }
     await p1.screenshot({ path: OUT + "p1_open.png" }); await s.screenshot({ path: OUT + "main_open.png" });
-    for (let i = 0; i < 3; i++) { await p1.click('.wp-door[data-slot="' + N + '"]'); await p1.waitForTimeout(60); }
-    await p1.waitForTimeout(300);
+    // 틀린 문 먼저 -> 1초 잠김, 그다음 맞는 문 한 번
+    const W = [1, 2, 3, 4].find((x) => !slips.includes(F + "0" + x)); // 내 택배 없는 문
+    await p1.click('.wp-door[data-slot="' + W + '"]'); await p1.waitForTimeout(250);
+    assert.strictEqual(await p1.locator(".wp-doors.locked").count(), 1, "틀리면 잠김");
+    await p1.screenshot({ path: OUT + "p1_wrong.png" });
+    await p1.waitForTimeout(900);
+    assert.strictEqual(await p1.locator(".wp-doors.locked").count(), 0, "1초 뒤 풀림");
+    assert.strictEqual(await p1.locator(".wp-door").count(), 4, "문 4개");
+    await p1.keyboard.press("KeyW"); await p1.waitForTimeout(150); // 파랑 키 -> 빨강 화면은 무시
+    await p1.keyboard.press(["KeyQ", "KeyE", "KeyT", "KeyU"][N - 1]); // 빨강 Q E T U = 1·2·3·4호
+    await p1.waitForTimeout(250);
     const pt = await p1.locator("#dpop").textContent(); console.log("pop", pt);
     assert(pt.includes("배송 완료") || pt.includes("선점") || pt.includes("콤보"), "배송 완료: " + pt);
     delivered = true;
